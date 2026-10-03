@@ -19,18 +19,52 @@
 ```powershell
 $flutterExe = 'C:/실제경로/flutter/bin/flutter.bat'
 $previewHost = Join-Path $env:LOCALAPPDATA 'SafeHub/windows-preview'
+$audioPatch = (Resolve-Path SW/windows_preview/patch_windows_audio.py).Path
 python SW/windows_preview/prepare_windows_preview.py --flutter-path $flutterExe --output-dir $previewHost --check-only
 python SW/windows_preview/prepare_windows_preview.py --flutter-path $flutterExe --output-dir $previewHost
 Set-Location $previewHost
+& $flutterExe pub get
+python $audioPatch --host-dir $previewHost
 & $flutterExe pub get
 & $flutterExe build windows --release --dart-define=APP_LOCAL_PREVIEW=true
 ```
 
 준비 스크립트는 `flutter create --platforms=windows --no-pub`로 호스트를 생성하고, 실제 `lib`/`assets`를 복사한 뒤 호스트의 pubspec에서 `audioplayers_atlas`와 `record_atlas`만 제외합니다. Windows용 오디오·녹음 플러그인은 유지됩니다. 표준 라이브러리만 사용하며 기존 출력 폴더는 덮어쓰지 않습니다. 준비 실패 시 남은 폴더를 자동 삭제하지 않습니다.
 
-처음부터 준비와 빌드까지 연속 실행하려면 두 번째 명령에 `--build`를 추가합니다. 기본 실행은 소스 준비만 하며, `--check-only`는 경로·입력 파일·pubspec만 검사합니다. 사전 검사 성공은 의존성 설치나 컴파일 성공을 뜻하지 않습니다.
+처음부터 준비와 빌드까지 연속 실행하려면 두 번째 명령에 `--build`를 추가합니다. `--build`는 최초 `pub get` → 아래 Windows 오디오 소유권 패치 → `pub get` → 빌드를 실행합니다. 기본 실행은 소스 준비만 하며, `--check-only`는 경로·입력 파일·pubspec만 검사합니다. 사전 검사 성공은 의존성 설치나 컴파일 성공을 뜻하지 않습니다.
 
 일반적인 빌드 결과는 호스트의 `build/windows/x64/runner/Release`입니다. Flutter 버전에 따라 위치가 달라지면 빌드 완료 메시지를 따릅니다. 실행파일 하나만 복사하지 말고 **Release 폴더 전체**를 배포 폴더의 `app`으로 복사해야 합니다. DLL과 `data` 폴더가 함께 있어야 실행됩니다.
+
+### Windows 오디오 종료 오류 패치
+
+`audioplayers_windows 4.3.0`의 전역 이벤트 처리기는 static `unique_ptr`와 Flutter messenger의 handler가 동일 객체의 소유권을 동시에 갖고 있었다. 엔진이 처리기를 삭제한 후 DLL의 정적 소멸자가 다시 삭제하면 access violation이 발생할 수 있다. [소유권 패치](audioplayers_windows-4.3.0-ownership.patch)는 전역 참조를 비소유 포인터로 두고 Flutter handler에만 소유권을 이전한다. 오디오 API·메시지·플러그인 버전·ATLAS 소스는 바꾸지 않는다.
+
+`patch_windows_audio.py`는 최초 `pub get`의 `.dart_tool/package_config.json`에서 원본 패키지를 찾는다. 호스트의 `vendor/audioplayers_windows`로 복사하고, 그 복사본에만 패치를 적용한다. 독립 path 패키지로 사용하도록 복사본의 `resolution: workspace` 메타데이터를 제거한다. 호스트 `pubspec_overrides.yaml`은 이 경로만 참조한다. Pub 캐시 원본은 수정하지 않는다. 기존 사용자 overrides나 변경된 vendor 파일이 있으면 덮어쓰지 않고 중단한다. 복사본의 `SAFEHUB_PATCH.json`에 파일 해시와 패치 정보를 남긴다. 다른 버전은 검토되지 않았으므로 자동 패치하지 않는다.
+
+```powershell
+# 기존 Windows 호스트에 적용할 때; 현재 실행 중인 앱에는 영향을 주지 않습니다.
+python SW/windows_preview/patch_windows_audio.py --host-dir $previewHost --check-only
+python SW/windows_preview/patch_windows_audio.py --host-dir $previewHost
+Set-Location $previewHost
+& $flutterExe pub get
+# 이후 일반 빌드 또는 아래 VS 2026 수동 빌드를 다시 실행합니다.
+```
+
+기존 호스트가 junction으로 플러그인을 연결했다면, `pub get` 후 `.flutter-plugins-dependencies`의 Windows `audioplayers_windows.path`와 `windows/flutter/ephemeral/.plugin_symlinks/audioplayers_windows`의 실제 대상이 모두 이 호스트의 `vendor/audioplayers_windows`인지 확인한다. 이전 Pub 캐시를 가리키는 junction이 남아 있으면 패치가 빌드되지 않으므로, 호스트 내부 연결을 확인하기 전에는 배포하지 않는다. 패치 스크립트는 기존 junction을 삭제하거나 교체하지 않는다.
+
+원본 패키지는 Blue Fire의 MIT 라이선스이며 원본 고지와 `LICENSE`를 vendor 복사본에 유지한다. [라이선스](licenses/audioplayers_windows-MIT.txt)를 Windows 배포본에도 포함한다. 줄바꿈을 LF로 정규화한 `windows/audioplayers_windows_plugin.cpp` SHA256은 다음과 같다.
+
+| 파일 | SHA256 |
+|---|---|
+| 원본 4.3.0 | `7d30e6359d6275a64323718d85eb55c1c79cc07da85511ef03f5439f08cc34d2` |
+| 패치 결과 | `0b6020adeed64d1d7fe4aa0de3407c957d433fd86018c9a4cad99e845ede204c` |
+| 원본 MIT LICENSE | `d6c0bdbc83e6bb5f02eed5caf25e6edf174cb56d0ecd6fe19a2cd05b62bbda41` |
+
+2026-10-04 Windows Application Error/WER에서 이전 체험 앱과 실제 앱 모두 `audioplayers_windows_plugin.dll`, 예외 `0xc0000005`를 기록했다. 실제 앱 기록은 01:15:59, PID 56768, 오프셋 `0x6da8`이다. 해당 DLL과 Release OBJ의 역어셈블리를 비교하면 `EventStreamHandler<EncodableValue>`의 deleting destructor `+0x18`에 해당한다. 체험 앱의 `0x1d38c`는 `globalEvents`의 `atexit` 소멸자 `+0x0c`와 명령 바이트가 일치한다. PDB와 보존된 crash dump는 없어 호출 스택 전체는 확인하지 못했다. 패치 전 새 실행 1회는 정상 종료했으므로 모든 종료에 발생하는 오류나 60초 실행 타이머로 단정하지 않는다. 증거는 비결정적인 종료 시 이중 삭제와 일치한다.
+
+전역 비소유 참조는 등록된 동기 method handler의 `OnGlobalLog`/`emitError`에서만 사용한다. 개별 재생 스레드는 이 전역 참조를 사용하지 않는다. messenger가 handler를 해제한 뒤 새 호출을 받는 경로는 현재 단일 엔진 Windows 호스트에 없으며, 재등록 시 참조는 새 handler로 교체된다. 다중 엔진 지원이나 다른 native 오디오 수명 문제까지 검증한 패치는 아니다. `AudioService`를 지연 생성하는 것만으로는 플러그인 등록 단계의 이중 소유권이 없어지지 않는다.
+
+스크립트의 원본 보존·해시 검사·재실행·사용자 수정 거부 검사는 `python SW/windows_preview/test_patch_windows_audio.py`로 실행한다. GUI의 반복 열기/닫기와 음성 재생 검증은 별도로 필요하다.
 
 ### Flutter 3.29.3과 VS 2026을 함께 쓰는 경우
 

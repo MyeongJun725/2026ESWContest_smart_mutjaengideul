@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import sys
 
+from patch_windows_audio import apply_patch as prepare_windows_audio
+
 
 SOURCE = Path(__file__).resolve().parents[1] / "safehub_app"
 ATLAS_PACKAGES = {"audioplayers_atlas", "record_atlas"}
@@ -72,6 +74,9 @@ def prepare(flutter_path, output_dir, pubspec, build=False, real=False):
     runner.write_text(text, encoding="utf-8")
 
     if build:
+        subprocess.run([str(flutter_path), "pub", "get"], cwd=output_dir, check=True)
+        prepare_windows_audio(output_dir)
+        subprocess.run([str(flutter_path), "pub", "get"], cwd=output_dir, check=True)
         subprocess.run(
             [str(flutter_path), "build", "windows", "--release",
              f"--dart-define=APP_LOCAL_PREVIEW={'false' if real else 'true'}"],
@@ -109,7 +114,9 @@ def main(argv=None):
     print("The canonical ATLAS project has not been changed.")
     if not args.build:
         mode = 'false' if args.real else 'true'
-        print("Run flutter pub get, then flutter build windows --release "
+        print("Run flutter pub get, patch_windows_audio.py --host-dir <this host>, "
+              "then flutter pub get again before building.")
+        print("Build with flutter build windows --release "
               f"--dart-define=APP_LOCAL_PREVIEW={mode} from this host folder.")
     return 0
 
