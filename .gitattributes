@@ -8,3 +8,6 @@
 *.png binary
 *.avi binary
 *.mp4 binary
+
+# Preserve the bytes and existing whitespace of the pinned CSI runtime.
+SW/wifi_sensing/runtime/** -text whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
