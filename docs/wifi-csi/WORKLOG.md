@@ -2,6 +2,16 @@
 
 Notion 개발 문서: [CSI](https://app.notion.com/p/CSI-a080797e801c4a31a3fe03d9efd5e3b5)
 
+## 2026-10-04 · SafeHub UI 통합
+
+기존 수어 홈에 와이파이 센싱 화면을 추가했다. 최신 52채널/PCA 1성분 엔진으로 실시간 파형, 행동 기록, 선택 학습, 현재 행동 판단을 연결했다. Windows에서는 장비 없이 모의 신호로 흐름을 확인할 수 있는 체험 실행기를 만들었다.
+
+Python 통합 검사 10개, Flutter 센싱 검사 5개, 체험 모드 검사 2개가 통과했다. Windows Release 실행과 로컬 서비스 연결을 확인했다. Pi·카메라·터치디스플레이·스피커 동시 운전과 MQTT 안전 경보 연결은 장비 연결 후 확인한다.
+
+제출: 개인 fork의 `feature/wifi-sensing-ui`에서 팀 `develop` 대상 Draft PR. 기반인 `feature/SW`가 아직 develop에 없으므로, 기존 SW 변경과 이번 CSI 추가를 구분해 검토한다. 자세한 범위는 [통합 검증 기록](UI_INTEGRATION_VALIDATION.md)을 참고한다. Notion에는 아직 반영하지 않았다.
+
+아래는 2026-09-15 독립 CSI 모듈 제출 당시 기록이다.
+
 ## 변경 범위
 
 - WiFi-CSI-Sensing을 팀 프로젝트 안의 독립 모듈로 배치

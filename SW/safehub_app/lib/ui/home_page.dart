@@ -17,15 +17,13 @@ import '../services/sign_speech_policy.dart';
 import '../services/stt_service.dart';
 import '../services/tts_service.dart';
 import '../services/voice_recorder_service.dart';
+import '../services/wifi_sensing_service.dart';
 import 'utils/disaster_display.dart';
 import 'widgets/disaster_overlay.dart';
 import 'widgets/appliance_panel.dart';
+import 'widgets/wifi_sensing_panel.dart';
 
-enum _SafeHubPage {
-  home,
-  signTranslation,
-  appliances,
-}
+enum _SafeHubPage { home, signTranslation, appliances, wifiSensing }
 
 class SafeHubHomePage extends StatefulWidget {
   const SafeHubHomePage({super.key});
@@ -49,6 +47,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   late final SttService _sttService;
   final VoiceRecorderService _voiceRecorderService = VoiceRecorderService();
   final CameraStreamService _cameraStreamService = CameraStreamService();
+  final WifiSensingService _wifiSensingService = WifiSensingService(
+    baseUrl: AppConfig.csiServiceUrl,
+  );
 
   Timer? _disasterTimer;
   Timer? _signOverlayTimer;
@@ -88,13 +89,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       duration: const Duration(milliseconds: 1200),
     );
 
-    _ttsService = TtsService(
-      baseUrl: AppConfig.ttsServerUrl,
-    );
+    _ttsService = TtsService(baseUrl: AppConfig.ttsServerUrl);
 
-    _sttService = SttService(
-      baseUrl: AppConfig.sttServerUrl,
-    );
+    _sttService = SttService(baseUrl: AppConfig.sttServerUrl);
 
     _mqttReceiver = MqttReceiver(
       broker: AppConfig.mqttBroker,
@@ -108,9 +105,13 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       onConnectionChanged: _handleConnectionChanged,
     );
 
-    _connectMqtt();
-    _connectCamera();
-    _startDisasterPolling();
+    if (AppConfig.localPreview) {
+      _connectionStatus = '체험 모드';
+    } else {
+      _connectMqtt();
+      _connectCamera();
+      _startDisasterPolling();
+    }
   }
 
   void _connectCamera() {
@@ -180,12 +181,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   void _startDisasterPolling() {
     _fetchLatestDisaster();
 
-    _disasterTimer = Timer.periodic(
-      const Duration(minutes: 2),
-      (_) {
-        _fetchLatestDisaster();
-      },
-    );
+    _disasterTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      _fetchLatestDisaster();
+    });
   }
 
   Future<void> _fetchLatestDisaster() async {
@@ -206,10 +204,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       final currentDisaster = _latestDisaster;
 
       if (currentDisaster != null &&
-          !DisasterService.isNewerThan(
-            disasterData,
-            currentDisaster,
-          )) {
+          !DisasterService.isNewerThan(disasterData, currentDisaster)) {
         debugPrint(
           '[재난 API] 이전 데이터 무시: '
           'current=${currentDisaster['CRT_DT']} '
@@ -308,7 +303,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
     final ttsConfigured = AppConfig.ttsServerUrl.trim().isNotEmpty;
     final alertActive = _alertCoordinator.hasActiveAlert;
-    final shouldSpeak = ttsConfigured &&
+    final shouldSpeak =
+        ttsConfigured &&
         !alertActive &&
         _signSpeechPolicy.shouldSpeak(cleanText);
 
@@ -349,18 +345,10 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     final generation = ++_speechGeneration;
     final speechText = _signSpeechPolicy.phraseFor(cleanText);
 
-    unawaited(
-      _speakTranslation(
-        speechText,
-        generation,
-      ),
-    );
+    unawaited(_speakTranslation(speechText, generation));
   }
 
-  Future<void> _speakTranslation(
-    String text,
-    int generation,
-  ) async {
+  Future<void> _speakTranslation(String text, int generation) async {
     if (AppConfig.ttsServerUrl.trim().isEmpty) {
       return;
     }
@@ -527,25 +515,16 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       final priority = _getEventPriority(eventData);
 
       activated = _alertCoordinator.submit(
-        SafeHubAlert(
-          kind: AlertKind.fall,
-          priority: priority,
-          data: eventData,
-        ),
+        SafeHubAlert(kind: AlertKind.fall, priority: priority, data: eventData),
       );
 
-      print(
-        '[ALERT] fall submitted activated=$activated priority=$priority',
-      );
+      print('[ALERT] fall submitted activated=$activated priority=$priority');
     } else {
       print('[ALERT] non-emergency event added to recent events only');
     }
 
     setState(() {
-      _recentEvents.insert(
-        0,
-        eventData,
-      );
+      _recentEvents.insert(0, eventData);
 
       if (_recentEvents.length > 5) {
         _recentEvents.removeLast();
@@ -635,6 +614,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
   @override
   void dispose() {
+    _wifiSensingService.close();
     _disasterTimer?.cancel();
     _signOverlayTimer?.cancel();
     _speechGeneration++;
@@ -646,7 +626,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _cameraImage?.dispose();
     _cameraImage = null;
     _alertPulseController.dispose();
-    _mqttReceiver.disconnect();
+    // The MQTT client is initialized by connect(), which preview never calls.
+    if (!AppConfig.localPreview) _mqttReceiver.disconnect();
     super.dispose();
   }
 
@@ -660,614 +641,858 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   String? _detailTitle;
   String _detailBody = '';
 
-  Text _text(String value,
-          {double size = 18,
-          Color color = _ink,
-          FontWeight weight = FontWeight.w500,
-          int lines = 1}) =>
-      Text(value,
-          maxLines: lines,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-              fontSize: size,
-              color: color,
-              fontWeight: weight,
-              height: 1.3,
-              letterSpacing: -0.3));
+  Text _text(
+    String value, {
+    double size = 18,
+    Color color = _ink,
+    FontWeight weight = FontWeight.w500,
+    int lines = 1,
+  }) => Text(
+    value,
+    maxLines: lines,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(
+      fontSize: size,
+      color: color,
+      fontWeight: weight,
+      height: 1.3,
+      letterSpacing: -0.3,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final activeAlert = _alertCoordinator.activeAlert;
     return Scaffold(
       backgroundColor: const Color(0xFF24221F),
-      body: Stack(children: [
-        Positioned.fill(
-            child: Image.asset(
-          'assets/images/safehub_living_room.png',
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) =>
-              const ColoredBox(color: Color(0xFF393731)),
-        )),
-        const Positioned.fill(
-            child: DecoratedBox(
-                decoration: BoxDecoration(
-          gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0x66201D19),
-                Color(0x33201D19),
-                Color(0x88201D19),
-              ]),
-        ))),
-        SafeArea(
-            child: Padding(
-          padding: const EdgeInsets.fromLTRB(34, 22, 34, 30),
-          child: Column(children: [
-            _glassHeader(),
-            const SizedBox(height: 24),
-            Expanded(
-                child: _currentPage == _SafeHubPage.home
-                    ? _glassDashboard(activeAlert)
-                    : _currentPage == _SafeHubPage.appliances
-                        ? AppliancePanel(
-                            controls: _appliances,
-                            connected: _mqttConnected,
-                            latestSign: _signText,
-                            publishShortcutCommand:
-                                _mqttReceiver.publishShortcutCommand,
-                          )
-                        : _glassTranslation()),
-          ]),
-        )),
-        if (_detailTitle != null)
+      body: Stack(
+        children: [
           Positioned.fill(
+            child: Image.asset(
+              'assets/images/safehub_living_room.png',
+              fit: BoxFit.cover,
+              errorBuilder:
+                  (context, error, stackTrace) =>
+                      const ColoredBox(color: Color(0xFF393731)),
+            ),
+          ),
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0x66201D19),
+                    Color(0x33201D19),
+                    Color(0x88201D19),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(34, 22, 34, 30),
+              child: Column(
+                children: [
+                  _glassHeader(),
+                  if (AppConfig.localPreview) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xEE273744),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0x778CABD0)),
+                      ),
+                      child: const Text(
+                        '장비 연결 전 체험 · 실제 수어·안전 감지는 동작하지 않습니다. '
+                        '와이파이 센싱에서 모의 신호를 시작해 수집·학습을 체험하세요.',
+                        style: TextStyle(
+                          color: _ink,
+                          fontSize: 14,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child:
+                        _currentPage == _SafeHubPage.home
+                            ? AppConfig.localPreview
+                                ? LayoutBuilder(
+                                  builder:
+                                      (context, constraints) =>
+                                          SingleChildScrollView(
+                                            child: SizedBox(
+                                              height: math.max(
+                                                840,
+                                                constraints.maxHeight,
+                                              ),
+                                              child: _glassDashboard(
+                                                activeAlert,
+                                              ),
+                                            ),
+                                          ),
+                                )
+                                : _glassDashboard(activeAlert)
+                            : _currentPage == _SafeHubPage.wifiSensing
+                            ? WifiSensingPanel(service: _wifiSensingService)
+                            : _currentPage == _SafeHubPage.appliances
+                            ? AppliancePanel(
+                              controls: _appliances,
+                              connected: _mqttConnected,
+                              latestSign: _signText,
+                              publishShortcutCommand:
+                                  _mqttReceiver.publishShortcutCommand,
+                            )
+                            : _glassTranslation(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_detailTitle != null)
+            Positioned.fill(
               child: ColoredBox(
-            color: const Color(0x99000000),
-            child: Center(
-                child: Container(
-              constraints: BoxConstraints(
-                  maxWidth:
-                      math.min(680, MediaQuery.sizeOf(context).width - 32),
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.8),
-              child: _glass(
-                  child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                    _text(_detailTitle!, size: 24, weight: FontWeight.w600),
-                    const SizedBox(height: 20),
-                    Flexible(
-                        child: SingleChildScrollView(
-                            child: Text(_detailBody,
+                color: const Color(0x99000000),
+                child: Center(
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxWidth: math.min(
+                        680,
+                        MediaQuery.sizeOf(context).width - 32,
+                      ),
+                      maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+                    ),
+                    child: _glass(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _text(
+                            _detailTitle!,
+                            size: 24,
+                            weight: FontWeight.w600,
+                          ),
+                          const SizedBox(height: 20),
+                          Flexible(
+                            child: SingleChildScrollView(
+                              child: Text(
+                                _detailBody,
                                 style: const TextStyle(
-                                    color: _ink, fontSize: 20, height: 1.5)))),
-                    const SizedBox(height: 20),
-                    _action('닫기', Icons.close,
-                        () => setState(() => _detailTitle = null)),
-                  ])),
-            )),
-          )),
-        _buildSignOverlay(
-          visible:
-              _showSignOverlay && activeAlert == null && _detailTitle == null,
-        ),
-        if (activeAlert != null && activeAlert.kind == AlertKind.fall)
-          _buildFallOverlay(activeAlert.data),
-        if (activeAlert != null && activeAlert.kind == AlertKind.disaster)
-          DisasterOverlay(
+                                  color: _ink,
+                                  fontSize: 20,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          _action(
+                            '닫기',
+                            Icons.close,
+                            () => setState(() => _detailTitle = null),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          _buildSignOverlay(
+            visible:
+                _showSignOverlay && activeAlert == null && _detailTitle == null,
+          ),
+          if (activeAlert != null && activeAlert.kind == AlertKind.fall)
+            _buildFallOverlay(activeAlert.data),
+          if (activeAlert != null && activeAlert.kind == AlertKind.disaster)
+            DisasterOverlay(
               disaster: activeAlert.data,
               pulseAnimation: _alertPulseController,
-              onAcknowledge: _acknowledgeActiveAlert),
-      ]),
+              onAcknowledge: _acknowledgeActiveAlert,
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _glass(
-          {required Widget child,
-          bool inset = false,
-          EdgeInsets padding = const EdgeInsets.all(24)}) =>
+  Widget _glass({
+    required Widget child,
+    bool inset = false,
+    EdgeInsets padding = const EdgeInsets.all(24),
+  }) => Container(
+    padding: padding,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors:
+            inset
+                ? const [Color(0xFF303C44), Color(0xFF2B353D)]
+                : const [Color(0xF2253038), Color(0xF21C252D)],
+      ),
+      borderRadius: BorderRadius.circular(inset ? 15 : 20),
+      border: Border.all(
+        color: inset ? const Color(0x24FFFFFF) : const Color(0x40FFFFFF),
+      ),
+      boxShadow:
+          inset
+              ? null
+              : const [
+                BoxShadow(
+                  color: Color(0x26000000),
+                  blurRadius: 20,
+                  offset: Offset(0, 8),
+                ),
+              ],
+    ),
+    child: child,
+  );
+
+  Widget _heading(IconData icon, String title, {Widget? trailing}) => Row(
+    children: [
+      Icon(icon, color: _ink, size: 25),
+      const SizedBox(width: 12),
+      Expanded(child: _text(title, size: 22, weight: FontWeight.w600)),
+      if (trailing != null) trailing,
+    ],
+  );
+
+  Widget _dot(String label, Color color) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
       Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: inset
-                    ? const [Color(0xFF303C44), Color(0xFF2B353D)]
-                    : const [Color(0xF2253038), Color(0xF21C252D)]),
-            borderRadius: BorderRadius.circular(inset ? 15 : 20),
-            border: Border.all(
-                color:
-                    inset ? const Color(0x24FFFFFF) : const Color(0x40FFFFFF)),
-            boxShadow: inset
-                ? null
-                : const [
-                    BoxShadow(
-                        color: Color(0x26000000),
-                        blurRadius: 20,
-                        offset: Offset(0, 8)),
-                  ],
-          ),
-          child: child);
-
-  Widget _heading(IconData icon, String title, {Widget? trailing}) =>
-      Row(children: [
-        Icon(icon, color: _ink, size: 25),
-        const SizedBox(width: 12),
-        Expanded(child: _text(title, size: 22, weight: FontWeight.w600)),
-        if (trailing != null) trailing,
-      ]);
-
-  Widget _dot(String label, Color color) =>
-      Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color,
-                boxShadow: [
-                  BoxShadow(color: color.withAlpha(55), blurRadius: 8)
-                ])),
-        const SizedBox(width: 8),
-        _text(label, color: color, size: 16),
-      ]);
+        width: 9,
+        height: 9,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+          boxShadow: [BoxShadow(color: color.withAlpha(55), blurRadius: 8)],
+        ),
+      ),
+      const SizedBox(width: 8),
+      _text(label, color: color, size: 16),
+    ],
+  );
 
   Widget _glassHeader() => SizedBox(
-      height: 70,
-      child: Row(children: [
+    height: 70,
+    child: Row(
+      children: [
         const Icon(Icons.home_rounded, color: _blue, size: 48),
         const SizedBox(width: 12),
         Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _text('SafeHub', size: 31, color: _blue, weight: FontWeight.w700),
-              _text('배리어프리 스마트홈', size: 15, color: _muted),
-            ]),
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _text('SafeHub', size: 31, color: _blue, weight: FontWeight.w700),
+            _text('배리어프리 스마트홈', size: 15, color: _muted),
+          ],
+        ),
         const Spacer(),
         if (_currentPage == _SafeHubPage.home)
           _glass(
-              padding: const EdgeInsets.all(5),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
+            padding: const EdgeInsets.all(5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 _roomTab('all', '전체', Icons.grid_view_rounded),
                 _roomTab('livingroom', '거실', Icons.weekend_outlined),
                 _roomTab('bedroom', '침실', Icons.bed_outlined),
                 _roomTab('bathroom', '화장실', Icons.bathroom_outlined),
-              ]))
+              ],
+            ),
+          )
         else
           _action('홈으로', Icons.home_outlined, _returnHome),
         const Spacer(),
         StreamBuilder<DateTime>(
-            stream: Stream<DateTime>.periodic(
-                const Duration(seconds: 1), (_) => DateTime.now()),
-            initialData: DateTime.now(),
-            builder: (context, snapshot) {
-              final now = snapshot.data!;
-              final hh = now.hour.toString().padLeft(2, '0');
-              final mm = now.minute.toString().padLeft(2, '0');
-              final date = now.year.toString() +
-                  '.' +
-                  now.month.toString().padLeft(2, '0') +
-                  '.' +
-                  now.day.toString().padLeft(2, '0');
-              return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _text(date, size: 14, color: _muted),
-                    _text('$hh:$mm', size: 30, weight: FontWeight.w600),
-                  ]);
-            }),
+          stream: Stream<DateTime>.periodic(
+            const Duration(seconds: 1),
+            (_) => DateTime.now(),
+          ),
+          initialData: DateTime.now(),
+          builder: (context, snapshot) {
+            final now = snapshot.data!;
+            final hh = now.hour.toString().padLeft(2, '0');
+            final mm = now.minute.toString().padLeft(2, '0');
+            final date =
+                now.year.toString() +
+                '.' +
+                now.month.toString().padLeft(2, '0') +
+                '.' +
+                now.day.toString().padLeft(2, '0');
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _text(date, size: 14, color: _muted),
+                _text('$hh:$mm', size: 30, weight: FontWeight.w600),
+              ],
+            );
+          },
+        ),
         const SizedBox(width: 30),
-        Icon(_mqttConnected ? Icons.wifi : Icons.wifi_off,
-            color: _mqttConnected ? _blue : _amber, size: 30),
+        Icon(
+          _mqttConnected ? Icons.wifi : Icons.wifi_off,
+          color: _mqttConnected ? _blue : _amber,
+          size: 30,
+        ),
         const SizedBox(width: 12),
         Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _text('MQTT', size: 14, color: _muted),
-              const SizedBox(height: 4),
-              _dot(_connectionStatus, _mqttConnected ? _green : _amber),
-            ]),
-      ]));
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _text('MQTT', size: 14, color: _muted),
+            const SizedBox(height: 4),
+            _dot(_connectionStatus, _mqttConnected ? _green : _amber),
+          ],
+        ),
+      ],
+    ),
+  );
 
   Widget _roomTab(String id, String label, IconData icon) {
     final selected = _selectedRoom == id;
     return Semantics(
-        selected: selected,
-        button: true,
-        child: InkWell(
-          onTap: () => setState(() => _selectedRoom = id),
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-            decoration: BoxDecoration(
-                color: selected ? const Color(0x556F8FAE) : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: selected
-                        ? const Color(0xFF9EBDE7)
-                        : Colors.transparent)),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: () => setState(() => _selectedRoom = id),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0x556F8FAE) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? const Color(0xFF9EBDE7) : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Icon(icon, size: 19, color: selected ? _blue : _muted),
               const SizedBox(width: 8),
               _text(label, size: 16, color: selected ? _ink : _muted),
-            ]),
+            ],
           ),
-        ));
+        ),
+      ),
+    );
   }
 
-  Widget _glassDashboard(SafeHubAlert? alert) =>
-      Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Expanded(flex: 34, child: _signPanel()),
-        const SizedBox(width: 20),
-        Expanded(
-            flex: 35,
-            child: Column(children: [
-              Expanded(flex: 6, child: _spacePanel(alert)),
-              const SizedBox(height: 20),
-              Expanded(flex: 4, child: _disasterPanel()),
-            ])),
-        const SizedBox(width: 20),
-        Expanded(
-            flex: 31,
-            child: Column(children: [
-              Expanded(flex: 6, child: _alarmPanel(alert)),
-              const SizedBox(height: 20),
-              Expanded(flex: 4, child: _eventsPanel()),
-            ])),
-      ]);
+  Widget _glassDashboard(SafeHubAlert? alert) => Row(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(flex: 34, child: _signPanel()),
+      const SizedBox(width: 20),
+      Expanded(
+        flex: 35,
+        child: Column(
+          children: [
+            Expanded(flex: 6, child: _spacePanel(alert)),
+            const SizedBox(height: 20),
+            Expanded(flex: 4, child: _disasterPanel()),
+          ],
+        ),
+      ),
+      const SizedBox(width: 20),
+      Expanded(
+        flex: 31,
+        child: Column(
+          children: [
+            Expanded(flex: 6, child: _alarmPanel(alert)),
+            const SizedBox(height: 20),
+            Expanded(flex: 4, child: _eventsPanel()),
+          ],
+        ),
+      ),
+    ],
+  );
 
   Widget _signPanel() => _glass(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         _heading(Icons.sign_language_outlined, '수어 · 의사소통'),
         const SizedBox(height: 16),
         Expanded(flex: 4, child: _cameraPlaceholder()),
         const SizedBox(height: 16),
         Expanded(flex: 4, child: _signResultCard()),
         const SizedBox(height: 16),
-        _action('의사소통 화면 열기', Icons.arrow_forward_rounded, _openSignTranslation,
-            primary: true),
-      ]));
+        _action(
+          '의사소통 화면 열기',
+          Icons.arrow_forward_rounded,
+          _openSignTranslation,
+          primary: true,
+        ),
+      ],
+    ),
+  );
 
   Widget _cameraPlaceholder() => Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: const Color(0x88202020),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: const Color(0x24FFFFFF)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: _cameraImage == null
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: const Color(0x88202020),
+      borderRadius: BorderRadius.circular(15),
+      border: Border.all(color: const Color(0x24FFFFFF)),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child:
+        _cameraImage == null
             ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.videocam_outlined,
-                    size: 66,
-                    color: _blue,
-                  ),
-                  const SizedBox(height: 14),
-                  _text(
-                    '수어 카메라',
-                    size: 23,
-                    weight: FontWeight.w600,
-                  ),
-                  const SizedBox(height: 8),
-                  _text(
-                    _cameraConnected ? '카메라 영상 수신 대기 중' : 'RPi4 카메라 연결 대기 중',
-                    size: 15,
-                    color: _muted,
-                  ),
-                ],
-              )
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.videocam_outlined, size: 66, color: _blue),
+                const SizedBox(height: 14),
+                _text('수어 카메라', size: 23, weight: FontWeight.w600),
+                const SizedBox(height: 8),
+                _text(
+                  AppConfig.localPreview
+                      ? '장비 연결 후 수어 인식을 사용할 수 있어요'
+                      : _cameraConnected
+                      ? '카메라 영상 수신 대기 중'
+                      : 'RPi4 카메라 연결 대기 중',
+                  size: 15,
+                  color: _muted,
+                ),
+              ],
+            )
             : Stack(
-                fit: StackFit.expand,
-                children: [
-                  RawImage(
-                    image: _cameraImage,
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.low,
-                  ),
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xAA111111),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.circle,
-                            size: 9,
-                            color: _cameraConnected ? _green : _amber,
-                          ),
-                          const SizedBox(width: 7),
-                          _text(
-                            _cameraConnected ? 'LIVE' : '연결 확인',
-                            size: 13,
-                            color: _ink,
-                            weight: FontWeight.w600,
-                          ),
-                        ],
-                      ),
+              fit: StackFit.expand,
+              children: [
+                RawImage(
+                  image: _cameraImage,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.low,
+                ),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xAA111111),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          size: 9,
+                          color: _cameraConnected ? _green : _amber,
+                        ),
+                        const SizedBox(width: 7),
+                        _text(
+                          _cameraConnected ? 'LIVE' : '연결 확인',
+                          size: 13,
+                          color: _ink,
+                          weight: FontWeight.w600,
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-      );
+                ),
+              ],
+            ),
+  );
 
-  Widget _action(String label, IconData icon, VoidCallback onTap,
-          {bool primary = false}) =>
-      SizedBox(
-          height: 55,
-          child: TextButton(
-            onPressed: onTap,
-            style: TextButton.styleFrom(
-                foregroundColor: primary ? const Color(0xFF202D3E) : _ink,
-                backgroundColor: primary ? _blue : const Color(0x22FFFFFF),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 20)),
-            child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(label,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 12),
-                  Icon(icon, size: 22),
-                ]),
-          ));
+  Widget _action(
+    String label,
+    IconData icon,
+    VoidCallback onTap, {
+    bool primary = false,
+  }) => SizedBox(
+    height: 55,
+    child: TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: primary ? const Color(0xFF202D3E) : _ink,
+        backgroundColor: primary ? _blue : const Color(0x22FFFFFF),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          Icon(icon, size: 22),
+        ],
+      ),
+    ),
+  );
 
   Widget _spacePanel(SafeHubAlert? alert) {
-    final rooms = <(String, String, IconData)>[
-      ('bedroom', '침실', Icons.bed_outlined),
-      ('bathroom', '화장실', Icons.bathroom_outlined),
-      ('livingroom', '거실', Icons.weekend_outlined),
-    ]
-        .where((room) => _selectedRoom == 'all' || _selectedRoom == room.$1)
-        .toList();
+    final rooms =
+        <(String, String, IconData)>[
+              ('bedroom', '침실', Icons.bed_outlined),
+              ('bathroom', '화장실', Icons.bathroom_outlined),
+              ('livingroom', '거실', Icons.weekend_outlined),
+            ]
+            .where((room) => _selectedRoom == 'all' || _selectedRoom == room.$1)
+            .toList();
     return _glass(
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading(Icons.sensors_outlined, '공간별 상태'),
-      const SizedBox(height: 18),
-      for (var i = 0; i < rooms.length; i++) ...[
-        Expanded(
-            child: _spaceRow(rooms[i].$1, rooms[i].$2, rooms[i].$3, alert)),
-        if (i < rooms.length - 1) const SizedBox(height: 10),
-      ],
-      if (_selectedRoom == 'all' || _selectedRoom == 'livingroom') ...[
-        const SizedBox(height: 10),
-        _action('가전 · 수어 단축키', Icons.tune_rounded,
-            () => setState(() => _currentPage = _SafeHubPage.appliances),
-            primary: true),
-      ],
-    ]));
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _heading(Icons.sensors_outlined, '공간별 상태'),
+          const SizedBox(height: 10),
+          _action(
+            '와이파이 센싱',
+            Icons.sensors_rounded,
+            () => setState(() => _currentPage = _SafeHubPage.wifiSensing),
+          ),
+          const SizedBox(height: 18),
+          for (var i = 0; i < rooms.length; i++) ...[
+            Expanded(
+              child: _spaceRow(rooms[i].$1, rooms[i].$2, rooms[i].$3, alert),
+            ),
+            if (i < rooms.length - 1) const SizedBox(height: 10),
+          ],
+          if (_selectedRoom == 'all' || _selectedRoom == 'livingroom') ...[
+            const SizedBox(height: 10),
+            _action(
+              '가전 · 수어 단축키',
+              Icons.tune_rounded,
+              () => setState(() => _currentPage = _SafeHubPage.appliances),
+              primary: true,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _spaceRow(String id, String name, IconData icon, SafeHubAlert? alert) {
-    final fall = alert != null &&
+    final fall =
+        alert != null &&
         alert.kind == AlertKind.fall &&
         alert.data['location'] == id;
     final living = id == 'livingroom';
-    final status = fall
-        ? '낙상 감지'
-        : !_mqttConnected
+    final status =
+        AppConfig.localPreview
+            ? '장비 미연결'
+            : fall
+            ? '낙상 감지'
+            : !_mqttConnected
             ? '연결 확인'
             : living
-                ? '수어 번역'
-                : '이벤트 대기';
-    final subtitle = fall
-        ? '즉시 확인이 필요합니다'
-        : !_mqttConnected
+            ? '수어 번역'
+            : '이벤트 대기';
+    final subtitle =
+        AppConfig.localPreview
+            ? '장비 연결 후 사용 가능'
+            : fall
+            ? '즉시 확인이 필요합니다'
+            : !_mqttConnected
             ? 'MQTT 연결 끊김'
             : living
-                ? '번역 결과 수신 영역'
-                : 'Wi-Fi CSI · 센서 상태 미확인';
-    final color = fall
-        ? const Color(0xFFFF9A93)
-        : !_mqttConnected
+            ? '번역 결과 수신 영역'
+            : 'Wi-Fi CSI · 센서 상태 미확인';
+    final color =
+        fall
+            ? const Color(0xFFFF9A93)
+            : !_mqttConnected
             ? _amber
             : living
-                ? _blue
-                : _muted;
+            ? _blue
+            : _muted;
     return _glass(
-        inset: true,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(children: [
+      inset: true,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
           Icon(icon, size: 29, color: _muted),
           const SizedBox(width: 14),
           _text(name, size: 20, weight: FontWeight.w600),
           const SizedBox(width: 20),
           Expanded(
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 _text(status, size: 20, color: color, weight: FontWeight.w600),
                 const SizedBox(height: 4),
                 _text(subtitle, size: 14, color: _muted),
-              ])),
-        ]));
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _alarmPanel(SafeHubAlert? alert) {
     final active = alert != null;
     return _glass(
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading(Icons.shield_outlined, '경보 시스템'),
-      const SizedBox(height: 18),
-      Expanded(
-          child: _systemRow(Icons.warning_amber_rounded, '화면 경보',
-              active ? '알림 발생' : '대기 중', active ? _amber : _green)),
-      const Divider(color: Color(0x22FFFFFF), height: 1),
-      Expanded(
-          child: _systemRow(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _heading(Icons.shield_outlined, '경보 시스템'),
+          const SizedBox(height: 18),
+          Expanded(
+            child: _systemRow(
+              Icons.warning_amber_rounded,
+              '화면 경보',
+              AppConfig.localPreview
+                  ? '장비 미연결'
+                  : active
+                  ? '알림 발생'
+                  : '대기 중',
+              AppConfig.localPreview
+                  ? _muted
+                  : active
+                  ? _amber
+                  : _green,
+            ),
+          ),
+          const Divider(color: Color(0x22FFFFFF), height: 1),
+          Expanded(
+            child: _systemRow(
               Icons.volume_up_outlined,
               '음성 안내',
               AppConfig.ttsServerUrl.trim().isEmpty ? '미설정' : _ttsStatus,
-              _muted)),
-      const Divider(color: Color(0x22FFFFFF), height: 1),
-      Expanded(
-          child:
-              _systemRow(Icons.sensors_outlined, '외부 경보 장치', '상태 미연동', _muted)),
-      const Divider(color: Color(0x33FFFFFF), height: 1),
-      const SizedBox(height: 14),
-      Row(children: [
-        const Icon(Icons.wifi, color: _blue, size: 25),
-        const SizedBox(width: 12),
-        Expanded(child: _text('MQTT 브로커', size: 17)),
-        _dot(
-            _mqttConnected ? '연결됨' : '연결 확인', _mqttConnected ? _green : _amber),
-      ]),
-      const SizedBox(height: 6),
-      _text(AppConfig.mqttBroker + ':' + AppConfig.mqttPort.toString(),
-          size: 14, color: _muted),
-    ]));
+              _muted,
+            ),
+          ),
+          const Divider(color: Color(0x22FFFFFF), height: 1),
+          Expanded(
+            child: _systemRow(
+              Icons.sensors_outlined,
+              '외부 경보 장치',
+              '상태 미연동',
+              _muted,
+            ),
+          ),
+          const Divider(color: Color(0x33FFFFFF), height: 1),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Icon(Icons.wifi, color: _blue, size: 25),
+              const SizedBox(width: 12),
+              Expanded(child: _text('MQTT 브로커', size: 17)),
+              _dot(
+                AppConfig.localPreview
+                    ? '체험 모드'
+                    : _mqttConnected
+                    ? '연결됨'
+                    : '연결 확인',
+                _mqttConnected ? _green : _amber,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _text(
+            AppConfig.localPreview
+                ? '장비 연결 전에는 메시지를 주고받지 않습니다'
+                : AppConfig.mqttBroker + ':' + AppConfig.mqttPort.toString(),
+            size: 14,
+            color: _muted,
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _systemRow(IconData icon, String label, String value, Color color) =>
-      Row(children: [
-        Icon(icon, size: 24, color: color),
-        const SizedBox(width: 12),
-        Expanded(child: _text(label, size: 17)),
-        const SizedBox(width: 8),
-        Flexible(child: _text(value, color: color, size: 15, lines: 2)),
-      ]);
+      Row(
+        children: [
+          Icon(icon, size: 24, color: color),
+          const SizedBox(width: 12),
+          Expanded(child: _text(label, size: 17)),
+          const SizedBox(width: 8),
+          Flexible(child: _text(value, color: color, size: 15, lines: 2)),
+        ],
+      );
 
   Widget _disasterPanel() {
     final disaster = _latestDisaster;
     return _glass(
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading(Icons.campaign_outlined, '재난 정보',
-          trailing: disaster == null
-              ? null
-              : _more(() => _showDisasterDetails(disaster))),
-      const SizedBox(height: 16),
-      Expanded(
-          child: _glass(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _heading(
+            Icons.campaign_outlined,
+            '재난 정보',
+            trailing:
+                disaster == null
+                    ? null
+                    : _more(() => _showDisasterDetails(disaster)),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _glass(
               inset: true,
               padding: const EdgeInsets.all(18),
-              child: Row(children: [
-                Icon(
+              child: Row(
+                children: [
+                  Icon(
                     disaster == null
                         ? Icons.info_outline
                         : _disasterIcon(disaster['DST_SE_NM']?.toString()),
                     size: 34,
-                    color: disaster == null
-                        ? _muted
-                        : _disasterAccent(getDisasterSeverity(disaster))),
-                const SizedBox(width: 14),
-                Expanded(
+                    color:
+                        disaster == null
+                            ? _muted
+                            : _disasterAccent(getDisasterSeverity(disaster)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
                     child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      _text(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _text(
                           disaster == null
                               ? '수신된 정보가 없습니다'
                               : disaster['DST_SE_NM']?.toString() ?? '재난 안내',
                           size: 20,
                           weight: FontWeight.w600,
-                          lines: 2),
-                      const SizedBox(height: 8),
-                      _text(
+                          lines: 2,
+                        ),
+                        const SizedBox(height: 8),
+                        _text(
                           disaster == null
-                              ? '재난 API 연결 확인 필요'
+                              ? AppConfig.localPreview
+                                  ? '체험 모드에서는 실시간 재난 정보를 받지 않습니다'
+                                  : '재난 API 연결 확인 필요'
                               : disaster['MSG_CN']?.toString() ??
                                   '상세 정보를 확인해 주세요',
                           size: 15,
                           color: _muted,
-                          lines: 3),
-                    ])),
-              ]))),
-    ]));
+                          lines: 3,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _more(VoidCallback onTap) => TextButton(
-      onPressed: onTap,
-      style: TextButton.styleFrom(
-          foregroundColor: _muted, minimumSize: const Size(60, 44)),
-      child: const Text('더보기 ›', style: TextStyle(fontSize: 15)));
+    onPressed: onTap,
+    style: TextButton.styleFrom(
+      foregroundColor: _muted,
+      minimumSize: const Size(60, 44),
+    ),
+    child: const Text('더보기 ›', style: TextStyle(fontSize: 15)),
+  );
 
-  List<Map<String, dynamic>> get _visibleEvents => _recentEvents
-      .where((event) =>
-          _selectedRoom == 'all' || event['location'] == _selectedRoom)
-      .toList();
+  List<Map<String, dynamic>> get _visibleEvents =>
+      _recentEvents
+          .where(
+            (event) =>
+                _selectedRoom == 'all' || event['location'] == _selectedRoom,
+          )
+          .toList();
 
   Widget _eventsPanel() {
     final events = _visibleEvents;
     return _glass(
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading(Icons.receipt_long_outlined, '최근 이벤트',
-          trailing: events.isEmpty ? null : _more(_showEventDetails)),
-      const SizedBox(height: 12),
-      Expanded(
-          child: events.isEmpty
-              ? Center(
-                  child: _text('아직 수신된 이벤트가 없습니다',
-                      size: 17, color: _muted, lines: 2))
-              : Column(children: [
-                  for (final event in events.take(3))
-                    Expanded(child: _eventLine(event)),
-                ])),
-    ]));
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _heading(
+            Icons.receipt_long_outlined,
+            '최근 이벤트',
+            trailing: events.isEmpty ? null : _more(_showEventDetails),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child:
+                events.isEmpty
+                    ? Center(
+                      child: _text(
+                        '아직 수신된 이벤트가 없습니다',
+                        size: 17,
+                        color: _muted,
+                        lines: 2,
+                      ),
+                    )
+                    : Column(
+                      children: [
+                        for (final event in events.take(3))
+                          Expanded(child: _eventLine(event)),
+                      ],
+                    ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _eventLine(Map<String, dynamic> event) => Row(children: [
-        Icon(Icons.circle,
-            size: 8,
-            color: _isEmergencyEvent(event) ? const Color(0xFFFF9A93) : _blue),
-        const SizedBox(width: 10),
-        Expanded(
-            child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-              _text(_getLocationName(event) + ' · ' + _getEventName(event),
-                  size: 17),
-              const SizedBox(height: 3),
-              _text(_formatEventDateTime(event), size: 14, color: _muted),
-            ])),
-      ]);
+  Widget _eventLine(Map<String, dynamic> event) => Row(
+    children: [
+      Icon(
+        Icons.circle,
+        size: 8,
+        color: _isEmergencyEvent(event) ? const Color(0xFFFF9A93) : _blue,
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _text(
+              _getLocationName(event) + ' · ' + _getEventName(event),
+              size: 17,
+            ),
+            const SizedBox(height: 3),
+            _text(_formatEventDateTime(event), size: 14, color: _muted),
+          ],
+        ),
+      ),
+    ],
+  );
 
   void _showDisasterDetails(Map<String, dynamic> disaster) => _showDetails(
-      '재난 정보',
-      [
-        disaster['DST_SE_NM']?.toString() ?? '재난 안내',
-        disaster['RCPTN_RGN_NM']?.toString() ?? '',
-        disaster['CRT_DT']?.toString() ?? '',
-        disaster['MSG_CN']?.toString() ?? '내용 없음',
-      ].where((s) => s.isNotEmpty).join('\n\n'));
+    '재난 정보',
+    [
+      disaster['DST_SE_NM']?.toString() ?? '재난 안내',
+      disaster['RCPTN_RGN_NM']?.toString() ?? '',
+      disaster['CRT_DT']?.toString() ?? '',
+      disaster['MSG_CN']?.toString() ?? '내용 없음',
+    ].where((s) => s.isNotEmpty).join('\n\n'),
+  );
 
   void _showEventDetails() => _showDetails(
-      '최근 이벤트',
-      _visibleEvents
-          .map((e) =>
+    '최근 이벤트',
+    _visibleEvents
+        .map(
+          (e) =>
               _getLocationName(e) +
               ' · ' +
               _getEventName(e) +
               '\n' +
-              _formatEventDateTime(e))
-          .join('\n\n'));
+              _formatEventDateTime(e),
+        )
+        .join('\n\n'),
+  );
 
   void _showDetails(String title, String body) {
     setState(() {
@@ -1287,87 +1512,91 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 260),
             reverseDuration: const Duration(milliseconds: 180),
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.94, end: 1).animate(
-                  CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
+            transitionBuilder:
+                (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: 0.94, end: 1).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    ),
+                    child: child,
                   ),
                 ),
-                child: child,
-              ),
-            ),
-            child: visible
-                ? Container(
-                    key: ValueKey(_signText),
-                    constraints: const BoxConstraints(maxWidth: 440),
-                    margin: const EdgeInsets.symmetric(horizontal: 28),
-                    padding: const EdgeInsets.fromLTRB(26, 20, 30, 22),
-                    decoration: BoxDecoration(
-                      color: const Color(0xF523272E),
-                      border: Border.all(color: accent.withOpacity(0.72)),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x66000000),
-                          blurRadius: 24,
-                          offset: Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Semantics(
-                      liveRegion: true,
-                      label: '수어 인식 결과 $_signText',
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 54,
-                            height: 54,
-                            decoration: BoxDecoration(
-                              color: accent.withOpacity(0.14),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Icon(
-                              Icons.sign_language_rounded,
-                              color: accent,
-                              size: 29,
-                            ),
-                          ),
-                          const SizedBox(width: 18),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '수어가 인식되었습니다',
-                                  style: TextStyle(
-                                    color: accent,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  _signText,
-                                  style: const TextStyle(
-                                    color: Color(0xFFFFFFFF),
-                                    fontSize: 34,
-                                    height: 1.1,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.6,
-                                  ),
-                                ),
-                              ],
-                            ),
+            child:
+                visible
+                    ? Container(
+                      key: ValueKey(_signText),
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      margin: const EdgeInsets.symmetric(horizontal: 28),
+                      padding: const EdgeInsets.fromLTRB(26, 20, 30, 22),
+                      decoration: BoxDecoration(
+                        color: const Color(0xF523272E),
+                        border: Border.all(color: accent.withOpacity(0.72)),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x66000000),
+                            blurRadius: 24,
+                            offset: Offset(0, 10),
                           ),
                         ],
                       ),
+                      child: Semantics(
+                        liveRegion: true,
+                        label: '수어 인식 결과 $_signText',
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 54,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                color: accent.withOpacity(0.14),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                Icons.sign_language_rounded,
+                                color: accent,
+                                size: 29,
+                              ),
+                            ),
+                            const SizedBox(width: 18),
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '수어가 인식되었습니다',
+                                    style: TextStyle(
+                                      color: accent,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    _signText,
+                                    style: const TextStyle(
+                                      color: Color(0xFFFFFFFF),
+                                      fontSize: 34,
+                                      height: 1.1,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.6,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    : const SizedBox.shrink(
+                      key: ValueKey('sign-overlay-hidden'),
                     ),
-                  )
-                : const SizedBox.shrink(key: ValueKey('sign-overlay-hidden')),
           ),
         ),
       ),
@@ -1389,10 +1618,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xEB30343B),
-            Color(0xF224282E),
-          ],
+          colors: [Color(0xEB30343B), Color(0xF224282E)],
         ),
         border: Border.all(
           color: isUrgent ? const Color(0x80FF9B91) : const Color(0x42FFFFFF),
@@ -1412,11 +1638,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.sign_language_outlined,
-                color: accent,
-                size: 25,
-              ),
+              Icon(Icons.sign_language_outlined, color: accent, size: 25),
               const SizedBox(width: 10),
               const Text(
                 '수어 인식 결과',
@@ -1472,24 +1694,20 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
           Align(
             alignment: Alignment.center,
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 9,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
               decoration: BoxDecoration(
                 color: accent.withOpacity(0.11),
-                border: Border.all(
-                  color: accent.withOpacity(0.28),
-                ),
+                border: Border.all(color: accent.withOpacity(0.28)),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
                 _ttsStatus,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: isUrgent
-                      ? const Color(0xFFFFC0BA)
-                      : const Color(0xFFD7E8F7),
+                  color:
+                      isUrgent
+                          ? const Color(0xFFFFC0BA)
+                          : const Color(0xFFD7E8F7),
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1501,96 +1719,125 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     );
   }
 
-  Widget _glassTranslation() => LayoutBuilder(builder: (context, bounds) {
-        final camera = _glass(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-              _heading(Icons.videocam_outlined, '수어 카메라'),
-              const SizedBox(height: 16),
-              Expanded(child: _cameraPlaceholder()),
-              const SizedBox(height: 16),
-              _text('카메라를 보며 수어를 표현하세요', size: 16, color: _muted),
-            ]));
-        if (bounds.maxWidth < 1000 || bounds.maxHeight < 480) {
-          return ListView(children: [
+  Widget _glassTranslation() => LayoutBuilder(
+    builder: (context, bounds) {
+      final camera = _glass(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _heading(Icons.videocam_outlined, '수어 카메라'),
+            const SizedBox(height: 16),
+            Expanded(child: _cameraPlaceholder()),
+            const SizedBox(height: 16),
+            _text('카메라를 보며 수어를 표현하세요', size: 16, color: _muted),
+          ],
+        ),
+      );
+      if (bounds.maxWidth < 1000 || bounds.maxHeight < 480) {
+        return ListView(
+          children: [
             SizedBox(height: 280, child: camera),
             const SizedBox(height: 16),
             SizedBox(height: 260, child: _signResultCard()),
             const SizedBox(height: 16),
             SizedBox(height: 320, child: _sttPanel()),
-          ]);
-        }
-        return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          ],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Expanded(flex: 4, child: camera),
           const SizedBox(width: 20),
           Expanded(
-              flex: 6,
-              child: Column(children: [
+            flex: 6,
+            child: Column(
+              children: [
                 Expanded(flex: 5, child: _signResultCard()),
                 const SizedBox(height: 20),
                 Expanded(flex: 5, child: _sttPanel()),
-              ])),
-        ]);
-      });
+              ],
+            ),
+          ),
+        ],
+      );
+    },
+  );
 
   Widget _sttPanel() {
-    final statusColor = _sttRecording
-        ? const Color(0xFFFF9A93)
-        : _sttBusy
+    final statusColor =
+        _sttRecording
+            ? const Color(0xFFFF9A93)
+            : _sttBusy
             ? _amber
             : _sttStatus == '음성 인식 완료'
-                ? _green
-                : _muted;
+            ? _green
+            : _muted;
 
-    final buttonLabel = _sttBusy
-        ? '음성 변환 중'
-        : _sttRecording
+    final buttonLabel =
+        _sttBusy
+            ? '음성 변환 중'
+            : _sttRecording
             ? '녹음 종료 및 변환'
             : '음성 녹음 시작';
 
-    final buttonIcon = _sttBusy
-        ? Icons.hourglass_top_rounded
-        : _sttRecording
+    final buttonIcon =
+        _sttBusy
+            ? Icons.hourglass_top_rounded
+            : _sttRecording
             ? Icons.stop_circle_outlined
             : Icons.mic_none_rounded;
 
     return _glass(
-        inset: true,
-        padding: const EdgeInsets.all(22),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            Icon(Icons.record_voice_over_outlined,
-                color: statusColor, size: 23),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _text('음성 → 텍스트', size: 18, weight: FontWeight.w600)),
-            const SizedBox(width: 12),
-            Flexible(
-                child:
-                    _text(_sttStatus, size: 14, color: statusColor, lines: 2)),
-          ]),
+      inset: true,
+      padding: const EdgeInsets.all(22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.record_voice_over_outlined,
+                color: statusColor,
+                size: 23,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _text('음성 → 텍스트', size: 18, weight: FontWeight.w600),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: _text(
+                  _sttStatus,
+                  size: 14,
+                  color: statusColor,
+                  lines: 2,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           Expanded(
-              child: Center(
-                  child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: Text(
-              _sttText,
-              key: ValueKey(_sttText),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _sttText == '음성 인식 대기 중' ? _muted : _ink,
-                fontSize: _sttText == '음성 인식 대기 중' ? 22 : 34,
-                height: 1.3,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.5,
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: Text(
+                  _sttText,
+                  key: ValueKey(_sttText),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _sttText == '음성 인식 대기 중' ? _muted : _ink,
+                    fontSize: _sttText == '음성 인식 대기 중' ? 22 : 34,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
               ),
             ),
-          ))),
+          ),
           const SizedBox(height: 12),
           _action(
             buttonLabel,
@@ -1598,7 +1845,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
             _sttBusy ? () {} : () => unawaited(_toggleSttRecording()),
             primary: !_sttBusy,
           ),
-        ]));
+        ],
+      ),
+    );
   }
 
   Widget _buildFallOverlay(Map<String, dynamic> event) {
@@ -1619,8 +1868,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
               Image.asset(
                 'assets/images/safehub_living_room.png',
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const ColoredBox(color: Color(0xFF393731)),
+                errorBuilder:
+                    (context, error, stackTrace) =>
+                        const ColoredBox(color: Color(0xFF393731)),
               ),
               const DecoratedBox(
                 decoration: BoxDecoration(
@@ -1632,193 +1882,236 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                 ),
               ),
               SafeArea(
-                child: LayoutBuilder(builder: (context, constraints) {
-                  final compact =
-                      constraints.maxWidth < 700 || constraints.maxHeight < 650;
-                  final padding = compact ? 20.0 : 40.0;
-                  return SingleChildScrollView(
-                    padding: EdgeInsets.all(padding),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight:
-                            math.max(0.0, constraints.maxHeight - padding * 2),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            spacing: 20,
-                            runSpacing: 12,
-                            children: [
-                              _text('SafeHub',
-                                  size: 26, weight: FontWeight.w600),
-                              _dot('긴급 안전 알림', accent),
-                            ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact =
+                        constraints.maxWidth < 700 ||
+                        constraints.maxHeight < 650;
+                    final padding = compact ? 20.0 : 40.0;
+                    return SingleChildScrollView(
+                      padding: EdgeInsets.all(padding),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: math.max(
+                            0.0,
+                            constraints.maxHeight - padding * 2,
                           ),
-                          Padding(
-                            padding: EdgeInsets.symmetric(
-                                vertical: compact ? 24 : 40),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 1040),
-                                child: AnimatedBuilder(
-                                  animation: _alertPulseController,
-                                  builder: (context, child) {
-                                    final pulse =
-                                        MediaQuery.of(context).disableAnimations
-                                            ? 0.0
-                                            : _alertPulseController.value;
-                                    return Container(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(22),
-                                        border: Border.all(
-                                          width: 2,
-                                          color: Color.lerp(
-                                              const Color(0x667F514A),
-                                              const Color(0xD9E58A7D),
-                                              pulse)!,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Color.fromARGB(
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              spacing: 20,
+                              runSpacing: 12,
+                              children: [
+                                _text(
+                                  'SafeHub',
+                                  size: 26,
+                                  weight: FontWeight.w600,
+                                ),
+                                _dot('긴급 안전 알림', accent),
+                              ],
+                            ),
+                            Padding(
+                              padding: EdgeInsets.symmetric(
+                                vertical: compact ? 24 : 40,
+                              ),
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 1040,
+                                  ),
+                                  child: AnimatedBuilder(
+                                    animation: _alertPulseController,
+                                    builder: (context, child) {
+                                      final pulse =
+                                          MediaQuery.of(
+                                                context,
+                                              ).disableAnimations
+                                              ? 0.0
+                                              : _alertPulseController.value;
+                                      return Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            22,
+                                          ),
+                                          border: Border.all(
+                                            width: 2,
+                                            color:
+                                                Color.lerp(
+                                                  const Color(0x667F514A),
+                                                  const Color(0xD9E58A7D),
+                                                  pulse,
+                                                )!,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Color.fromARGB(
                                                 (18 + 20 * pulse).round(),
                                                 220,
                                                 82,
-                                                64),
-                                            blurRadius: 30,
-                                            spreadRadius: 2,
-                                          ),
-                                        ],
+                                                64,
+                                              ),
+                                              blurRadius: 30,
+                                              spreadRadius: 2,
+                                            ),
+                                          ],
+                                        ),
+                                        child: child,
+                                      );
+                                    },
+                                    child: _glass(
+                                      padding: EdgeInsets.all(
+                                        compact ? 24 : 48,
                                       ),
-                                      child: child,
-                                    );
-                                  },
-                                  child: _glass(
-                                    padding: EdgeInsets.all(compact ? 24 : 48),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        const Icon(Icons.warning_amber_rounded,
-                                            size: 72, color: accent),
-                                        const SizedBox(height: 24),
-                                        Semantics(
-                                          liveRegion: true,
-                                          child: Text(
-                                            eventName == '낙상 감지'
-                                                ? '낙상이 감지되었습니다'
-                                                : eventName,
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              fontFamily: 'Pretendard',
-                                              fontSize: compact ? 32 : 50,
-                                              height: 1.25,
-                                              fontWeight: FontWeight.w600,
-                                              color: _ink,
-                                              letterSpacing: -1,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          const Icon(
+                                            Icons.warning_amber_rounded,
+                                            size: 72,
+                                            color: accent,
+                                          ),
+                                          const SizedBox(height: 24),
+                                          Semantics(
+                                            liveRegion: true,
+                                            child: Text(
+                                              eventName == '낙상 감지'
+                                                  ? '낙상이 감지되었습니다'
+                                                  : eventName,
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontFamily: 'Pretendard',
+                                                fontSize: compact ? 32 : 50,
+                                                height: 1.25,
+                                                fontWeight: FontWeight.w600,
+                                                color: _ink,
+                                                letterSpacing: -1,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        const Text(
-                                          '즉시 주변 상황을 확인해 주세요.',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
+                                          const SizedBox(height: 16),
+                                          const Text(
+                                            '즉시 주변 상황을 확인해 주세요.',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
                                               color: _muted,
                                               fontSize: 22,
-                                              height: 1.4),
-                                        ),
-                                        const SizedBox(height: 30),
-                                        _glass(
-                                          inset: true,
-                                          child: Column(
-                                            children: [
-                                              Text(locationName,
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                      color: _ink,
-                                                      fontSize: 32,
-                                                      fontWeight:
-                                                          FontWeight.w600)),
-                                              const SizedBox(height: 10),
-                                              Text('$detectedAt 감지',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                      color: _muted,
-                                                      fontSize: 18)),
-                                              const SizedBox(height: 10),
-                                              Text('긴급도 $priority / 10',
-                                                  style: const TextStyle(
-                                                      color: accent,
-                                                      fontSize: 18,
-                                                      fontWeight:
-                                                          FontWeight.w600)),
-                                            ],
+                                              height: 1.4,
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(height: 30),
-                                        Center(
-                                          child: ConstrainedBox(
-                                            constraints: const BoxConstraints(
-                                                maxWidth: 400),
-                                            child: SizedBox(
-                                              width: double.infinity,
-                                              child: FilledButton.icon(
-                                                onPressed:
-                                                    _acknowledgeActiveAlert,
-                                                icon: const Icon(
-                                                    Icons.check_rounded),
-                                                label: const Text('경보 확인'),
-                                                style: FilledButton.styleFrom(
-                                                  backgroundColor:
-                                                      const Color(0xFFAD443B),
-                                                  foregroundColor: Colors.white,
-                                                  minimumSize:
-                                                      const Size(0, 64),
-                                                  padding:
-                                                      const EdgeInsets.all(18),
-                                                  textStyle: const TextStyle(
+                                          const SizedBox(height: 30),
+                                          _glass(
+                                            inset: true,
+                                            child: Column(
+                                              children: [
+                                                Text(
+                                                  locationName,
+                                                  textAlign: TextAlign.center,
+                                                  style: const TextStyle(
+                                                    color: _ink,
+                                                    fontSize: 32,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 10),
+                                                Text(
+                                                  '$detectedAt 감지',
+                                                  textAlign: TextAlign.center,
+                                                  style: const TextStyle(
+                                                    color: _muted,
+                                                    fontSize: 18,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 10),
+                                                Text(
+                                                  '긴급도 $priority / 10',
+                                                  style: const TextStyle(
+                                                    color: accent,
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 30),
+                                          Center(
+                                            child: ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                maxWidth: 400,
+                                              ),
+                                              child: SizedBox(
+                                                width: double.infinity,
+                                                child: FilledButton.icon(
+                                                  onPressed:
+                                                      _acknowledgeActiveAlert,
+                                                  icon: const Icon(
+                                                    Icons.check_rounded,
+                                                  ),
+                                                  label: const Text('경보 확인'),
+                                                  style: FilledButton.styleFrom(
+                                                    backgroundColor:
+                                                        const Color(0xFFAD443B),
+                                                    foregroundColor:
+                                                        Colors.white,
+                                                    minimumSize: const Size(
+                                                      0,
+                                                      64,
+                                                    ),
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                          18,
+                                                        ),
+                                                    textStyle: const TextStyle(
                                                       fontFamily: 'Pretendard',
                                                       fontSize: 22,
                                                       fontWeight:
-                                                          FontWeight.w600),
-                                                  shape: RoundedRectangleBorder(
+                                                          FontWeight.w600,
+                                                    ),
+                                                    shape: RoundedRectangleBorder(
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                              14)),
+                                                            14,
+                                                          ),
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(height: 14),
-                                        const Text(
-                                          '경보 확인은 안전 확인 완료를 의미하지 않습니다.',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
+                                          const SizedBox(height: 14),
+                                          const Text(
+                                            '경보 확인은 안전 확인 완료를 의미하지 않습니다.',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
                                               color: _muted,
                                               fontSize: 15,
-                                              height: 1.4),
-                                        ),
-                                      ],
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          const Text('SafeHub · 공간 안전 모니터링',
+                            const Text(
+                              'SafeHub · 공간 안전 모니터링',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: _muted, fontSize: 15)),
-                        ],
+                              style: TextStyle(color: _muted, fontSize: 15),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                }),
+                    );
+                  },
+                ),
               ),
             ],
           ),

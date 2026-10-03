@@ -16,7 +16,7 @@ class SafeHubApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'SafeHub',
+      title: AppConfig.localPreview ? 'SafeHub · 장비 연결 전 체험' : 'SafeHub',
       theme: AppTheme.light,
       home: const SafeHubHomePage(),
     );

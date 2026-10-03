@@ -254,3 +254,22 @@ Thumbs.db
 
 # SafeHub local sign-shortcut user data
 SW/rpi5_hub/sign_shortcut/shortcuts.json
+
+# Local CSI recordings and test evidence; never publish personal model/data.
+SW/wifi_sensing/runtime/data-v2/
+SW/wifi_sensing/local-data/
+SW/wifi_sensing/test-results/
+wifi-panel.png
+
+# Synthetic integration test evidence (no personal CSI or models).
+!docs/wifi-csi/integration-validation/python-tests.log
+!docs/wifi-csi/integration-validation/flutter-tests.log
+
+# Windows preview machine-specific paths and generated distribution.
+SW/windows_preview/config.json
+SW/windows_preview/*.exe
+SW/windows_preview/*.dll
+SW/windows_preview/logs/
+SW/windows_preview/data/
+SW/windows_preview/build/
+.venv-safehub/
