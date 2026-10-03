@@ -18,6 +18,9 @@ class WifiSensingPanel extends StatefulWidget {
 
 class _WifiSensingPanelState extends State<WifiSensingPanel> {
   Timer? _timer;
+  Timer? _portsTimer;
+  Future<void>? _pollTask;
+  bool _refreshQueued = false, _portsPolling = false;
   Map<String, dynamic>? _state;
   List<dynamic> _ports = [];
   final Set<String> _selected = {};
@@ -25,8 +28,8 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
   final _round = TextEditingController(text: '회차 1');
   int _page = 0, _seconds = 8, _channel = 0;
   String? _port;
-  String _label = '정지', _error = '', _notice = '';
-  bool _polling = false, _busy = false;
+  String _label = '정지', _error = '', _notice = '', _portsError = '';
+  bool _busy = false;
   bool _dwt = true, _pca = true, _lowpass = true;
   int _stageGeneration = 0;
 
@@ -39,67 +42,110 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
       const Duration(milliseconds: 500),
       (_) => _refresh(),
     );
+    _portsTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (_page == 0 && _state?['connected'] != true && !_busy) _refreshPorts();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant WifiSensingPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.service != widget.service ||
+        oldWidget.allowDummy != widget.allowDummy) {
+      _stageGeneration++;
+      _state = null;
+      _ports = [];
+      _port = null;
+      _selected.clear();
+      _deleted = [];
+      _notice = _error = _portsError = '';
+      _busy = false;
+      _refresh(immediate: true);
+      _refreshPorts();
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _portsTimer?.cancel();
     _round.dispose();
     super.dispose();
   }
 
-  Future<void> _refresh() async {
-    if (_polling) return;
-    _polling = true;
-    final generation = _stageGeneration;
-    try {
-      final state = await widget.service.state({
-        'denoise': '$_dwt',
-        'normalize': '$_pca',
-        'pca': '$_pca',
-        'lowpass': '$_lowpass',
-        'subcarrier': '$_channel',
-      });
-      if (!mounted || generation != _stageGeneration) return;
-      if (!widget.allowDummy &&
-          (state['dummy_allowed'] != false || state['mode'] == 'dummy')) {
-        setState(() {
-          _state = null;
-          _error = '실제 수신 전용 CSI 서비스를 연결하세요. 연결 설정에서 서비스 주소를 확인해주세요.';
-        });
-        return;
-      }
-      setState(() {
-        _state = state;
-        _error = '';
-        final ids = (state['records'] as List).map((r) => r['id']).toSet();
-        _selected.removeWhere((id) => !ids.contains(id));
-        if (!(state['behaviors'] as List).contains(_label)) _label = '정지';
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _state = null;
-          _error = '센싱 서비스 연결 대기 · 같은 기기에서 CSI 서비스를 실행해주세요.';
-        });
-      }
-    } finally {
-      _polling = false;
+  Future<void> _refresh({bool immediate = false}) {
+    if (!mounted) return Future<void>.value();
+    if (_pollTask != null) {
+      if (immediate) _refreshQueued = true;
+      return _pollTask!;
     }
+    return _pollTask = _pollLoop().whenComplete(() => _pollTask = null);
+  }
+
+  Future<void> _pollLoop() async {
+    do {
+      _refreshQueued = false;
+      final generation = _stageGeneration;
+      final service = widget.service;
+      try {
+        final state = await service.state({
+          'denoise': '$_dwt',
+          'normalize': '$_pca',
+          'pca': '$_pca',
+          'lowpass': '$_lowpass',
+          'subcarrier': '$_channel',
+        });
+        if (!mounted || generation != _stageGeneration) continue;
+        if (!widget.allowDummy &&
+            (state['dummy_allowed'] != false || state['mode'] == 'dummy')) {
+          setState(() {
+            _state = null;
+            _error = '실제 수신 전용 CSI 서비스를 연결하세요. 연결 설정에서 서비스 주소를 확인해주세요.';
+          });
+          continue;
+        }
+        setState(() {
+          _state = state;
+          _error = '';
+          final ids = (state['records'] as List).map((r) => r['id']).toSet();
+          _selected.removeWhere((id) => !ids.contains(id));
+          if (!(state['behaviors'] as List).contains(_label)) _label = '정지';
+        });
+      } catch (error) {
+        if (mounted && generation == _stageGeneration) {
+          setState(() {
+            _state = null;
+            _error =
+                error is FormatException
+                    ? error.message
+                    : '센싱 서비스 연결 대기 · 같은 기기에서 CSI 서비스를 실행해주세요.';
+          });
+        }
+      }
+    } while (mounted && _refreshQueued);
   }
 
   Future<void> _refreshPorts() async {
+    if (!mounted || _portsPolling) return;
+    _portsPolling = true;
+    final service = widget.service;
     try {
-      final ports = await widget.service.ports();
-      if (!mounted) return;
+      final ports = await service.ports();
+      if (!mounted || service != widget.service) return;
       setState(() {
         _ports = ports;
+        _portsError = '';
         if (!ports.any((p) => p['port'] == _port)) {
-          _port = ports.isEmpty ? null : ports.first['port'] as String;
+          _port = ports.length == 1 ? ports.first['port'] as String : null;
         }
       });
     } catch (_) {
-      /* Status polling displays service availability. */
+      if (mounted && service == widget.service)
+        setState(() {
+          _portsError = 'USB 포트 목록을 확인하지 못했습니다. 자동으로 다시 확인합니다.';
+        });
+    } finally {
+      _portsPolling = false;
     }
   }
 
@@ -107,27 +153,35 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
     String action, [
     Map<String, dynamic> data = const {},
   ]) async {
-    if (_busy) return false;
+    if (!mounted || _busy || _state == null) return false;
+    final service = widget.service;
+    _stageGeneration++; // Earlier GETs cannot undo an action's fresh state.
     setState(() {
       _busy = true;
       _notice = '';
     });
     try {
-      final result = await widget.service.command(action, data);
-      if (!mounted) return false;
+      final result = await service.command(action, data);
+      if (!mounted || service != widget.service) return false;
       setState(() {
         _notice = result['path'] == null ? '' : '저장 위치: ${result['path']}';
       });
-      await _refresh();
       return true;
     } catch (error) {
-      if (mounted)
+      if (mounted && service == widget.service)
         setState(() {
-          _notice = '$error'.replaceFirst('Bad state: ', '');
+          _notice =
+              error is TimeoutException
+                  ? '${error.message}'
+                  : '$error'.replaceFirst('Bad state: ', '');
         });
       return false;
     } finally {
-      if (mounted)
+      if (mounted && service == widget.service) {
+        _stageGeneration++;
+        await _refresh(immediate: true);
+      }
+      if (mounted && service == widget.service)
         setState(() {
           _busy = false;
         });
@@ -135,34 +189,10 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
   }
 
   Future<String?> _input(String title, String hint) async {
-    final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text(title),
-            content: SizedBox(
-              width: 460,
-              child: TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: InputDecoration(hintText: hint),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('취소'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text.trim()),
-                child: const Text('확인'),
-              ),
-            ],
-          ),
+      builder: (_) => _TextInputDialog(title: title, hint: hint),
     );
-    // Dialog exit animation still references its controller for one frame.
-    Future<void>.delayed(const Duration(seconds: 1), controller.dispose);
     return result == null || result.isEmpty ? null : result;
   }
 
@@ -193,18 +223,25 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
       _stageGeneration++;
       if (_state != null) _state = {..._state!, 'waveform': null};
     });
-    _refresh();
+    _refresh(immediate: true);
   }
 
-  Widget _button(String label, VoidCallback? action, {bool primary = false}) =>
+  Widget _button(
+    String label,
+    VoidCallback? action, {
+    bool primary = false,
+    bool requiresState = true,
+  }) =>
       primary
           ? FilledButton(
             style: FilledButton.styleFrom(foregroundColor: Colors.white),
-            onPressed: _busy ? null : action,
+            onPressed:
+                _busy || (requiresState && _state == null) ? null : action,
             child: Text(label),
           )
           : OutlinedButton(
-            onPressed: _busy ? null : action,
+            onPressed:
+                _busy || (requiresState && _state == null) ? null : action,
             child: Text(label),
           );
 
@@ -231,6 +268,7 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
   @override
   Widget build(BuildContext context) {
     final dummy = _state?['mode'] == 'dummy';
+    final warnings = List<String>.from(_state?['storage_warnings'] ?? const []);
     return Theme(
       data: ThemeData(
         useMaterial3: true,
@@ -299,6 +337,19 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
                 color: Colors.white,
                 child: SelectableText(_notice),
               ),
+            if (warnings.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
+                color: const Color(0xFFFFE7B2),
+                child: Text(
+                  [
+                    '일부 저장 파일을 읽지 못했습니다. 정상 기록과 실시간 수신은 계속 사용할 수 있습니다.',
+                    ...warnings.take(3),
+                    if (warnings.length > 3) '추가 알림 ${warnings.length - 3}개',
+                  ].join('\n'),
+                ),
+              ),
             Expanded(
               child: ListView(
                 children:
@@ -351,7 +402,7 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
                         }),
               ),
             ),
-            _button('포트 새로고침', _refreshPorts),
+            _button('포트 새로고침', _refreshPorts, requiresState: false),
             _button(
               connected ? '연결 해제' : '실제 신호 연결',
               connected
@@ -369,6 +420,9 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
           ],
         ),
         const SizedBox(height: 10),
+        if (_portsError.isNotEmpty) Text(_portsError),
+        if (_ports.length > 1 && _port == null)
+          const Text('USB 장치가 여러 개입니다. ESP32 수신기의 포트를 선택하세요.'),
         Text(
           _state == null
               ? '서비스 대기'
@@ -575,7 +629,8 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
                   : () async {
                     final ids = _selected.toList();
                     if (await _confirm('선택한 ${ids.length}개 기록을 휴지통으로 옮길까요?')) {
-                      if (await _command('delete_records', {'ids': ids}))
+                      if (await _command('delete_records', {'ids': ids}) &&
+                          mounted)
                         setState(() {
                           _deleted = ids;
                         });
@@ -584,7 +639,8 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
             ),
             if (_deleted.isNotEmpty)
               _button('방금 삭제 복원', () async {
-                if (await _command('restore_records', {'ids': _deleted}))
+                if (await _command('restore_records', {'ids': _deleted}) &&
+                    mounted)
                   setState(() {
                     _deleted = [];
                   });
@@ -684,9 +740,14 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
                     ),
                   )
                   .toList(),
-          onChanged: (v) {
-            if (v != null) _command('select_model', {'id': v});
-          },
+          onChanged:
+              _busy ||
+                      _state == null ||
+                      _state?['training']?['state'] == 'running'
+                  ? null
+                  : (v) {
+                    if (v != null) _command('select_model', {'id': v});
+                  },
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -711,6 +772,10 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
             _button(
               recog?['running'] == true ? '인식 중지' : '새 신호 인식 시작',
               model == null
+                  ? null
+                  : recog?['running'] != true &&
+                      (_state?['fresh'] != true ||
+                          _state?['training']?['state'] == 'running')
                   ? null
                   : () => _command(
                     recog?['running'] == true
@@ -768,6 +833,45 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
       ]),
     ];
   }
+}
+
+class _TextInputDialog extends StatefulWidget {
+  const _TextInputDialog({required this.title, required this.hint});
+  final String title, hint;
+  @override
+  State<_TextInputDialog> createState() => _TextInputDialogState();
+}
+
+class _TextInputDialogState extends State<_TextInputDialog> {
+  final controller = TextEditingController();
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: SizedBox(
+      width: 460,
+      child: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: InputDecoration(hintText: widget.hint),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('취소'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, controller.text.trim()),
+        child: const Text('확인'),
+      ),
+    ],
+  );
 }
 
 class _WavePainter extends CustomPainter {

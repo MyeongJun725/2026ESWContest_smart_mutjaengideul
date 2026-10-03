@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -212,9 +213,76 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('save_connection_settings')));
     await tester.pumpAndSettle();
     expect(find.text('주소만 입력하세요. 프로토콜·포트·계정 정보는 제외하세요.'), findsOneWidget);
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('MQTT_BROKER')))
+          .overlaps(
+            Offset.zero &
+                tester.view.physicalSize / tester.view.devicePixelRatio,
+          ),
+      isTrue,
+      reason:
+          'The invalid field must be visible after saving from the bottom of the form.',
+    );
     expect(File(configPath).existsSync(), isFalse);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'back navigation waits until an in-progress settings save completes',
+    (tester) async {
+      bool? saved;
+      final writeComplete = Completer<void>();
+      Map<String, Object?>? pendingValues;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: FilledButton(
+                  onPressed: () async {
+                    saved = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder:
+                            (_) => ConnectionSettingsPage(
+                              saveSettings: (values) {
+                                pendingValues = values;
+                                return writeComplete.future;
+                              },
+                            ),
+                      ),
+                    );
+                  },
+                  child: const Text('설정 열기'),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.tap(find.text('설정 열기'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('save_connection_settings')),
+      );
+      await tester.tap(find.byKey(const ValueKey('save_connection_settings')));
+      await tester.pump();
+      await tester.pageBack();
+      await tester.pump();
+      final route =
+          ModalRoute.of(tester.element(find.byType(ConnectionSettingsPage)))!;
+      expect(route.isCurrent, isTrue);
+      expect(saved, isNull);
+      await tester.runAsync(() async {
+        await AppConfig.save(pendingValues!);
+      });
+      writeComplete.complete();
+      await tester.pumpAndSettle();
+      expect(saved, isTrue);
+      expect(File(configPath).existsSync(), isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'saving optional empty services returns true to the home screen',
@@ -246,7 +314,9 @@ void main() {
         find.byKey(const ValueKey('save_connection_settings')),
       );
       await tester.runAsync(() async {
-        await tester.tap(find.byKey(const ValueKey('save_connection_settings')));
+        await tester.tap(
+          find.byKey(const ValueKey('save_connection_settings')),
+        );
         for (var count = 0; count < 100 && saved == null; count++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }

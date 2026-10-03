@@ -67,6 +67,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   String _sttStatus = '마이크 대기';
   bool _sttRecording = false;
   bool _sttBusy = false;
+  bool _sttStarting = false;
 
   static const int _cameraWidth = 320;
   static const int _cameraHeight = 240;
@@ -421,8 +422,14 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     }
 
     if (!_sttRecording) {
+      setState(() {
+        _sttBusy = true;
+        _sttStarting = true;
+        _sttStatus = '마이크 준비 중';
+      });
       try {
         await _audioService.stop();
+        if (!mounted || _alertCoordinator.hasActiveAlert) return;
         await _voiceRecorderService.start();
 
         if (!mounted) {
@@ -445,6 +452,12 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
           _sttRecording = false;
           _sttStatus = '마이크 시작 실패: $error';
         });
+      } finally {
+        if (mounted)
+          setState(() {
+            _sttBusy = false;
+            _sttStarting = false;
+          });
       }
 
       return;
@@ -486,11 +499,16 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   }
 
   Future<void> _cancelSttRecording() async {
-    if (!_sttRecording) {
+    if (!_sttRecording && !_sttStarting) {
       return;
     }
 
-    await _voiceRecorderService.cancel();
+    try {
+      await _voiceRecorderService.cancel();
+    } catch (_) {
+      if (mounted) setState(() => _sttStatus = '마이크 중단 상태를 확인하세요');
+      return;
+    }
 
     if (!mounted) {
       return;
@@ -499,6 +517,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     setState(() {
       _sttRecording = false;
       _sttBusy = false;
+      _sttStarting = false;
       _sttStatus = '안전 경보로 녹음 중단';
     });
   }
@@ -564,7 +583,11 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
   void _interruptNormalSpeech() {
     _speechGeneration++;
-    unawaited(_audioService.stop());
+    unawaited(
+      _audioService.stop().catchError((Object error, StackTrace stack) {
+        debugPrint('[음성 안내 중단 실패] $error');
+      }),
+    );
     unawaited(_cancelSttRecording());
 
     if (mounted) {
@@ -635,8 +658,19 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _speechGeneration++;
     _ttsService.dispose();
     _sttService.dispose();
-    unawaited(_voiceRecorderService.dispose());
-    unawaited(_audioService.dispose());
+    unawaited(
+      _voiceRecorderService.dispose().catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        debugPrint('[마이크 종료 실패] $error');
+      }),
+    );
+    unawaited(
+      _audioService.dispose().catchError((Object error, StackTrace stack) {
+        debugPrint('[음성 안내 종료 실패] $error');
+      }),
+    );
     unawaited(_cameraStreamService.dispose());
     _cameraImage?.dispose();
     _cameraImage = null;
@@ -760,17 +794,23 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                     child:
                         _currentPage == _SafeHubPage.home
                             ? LayoutBuilder(
-                              builder:
-                                  (context, constraints) =>
-                                      SingleChildScrollView(
-                                        child: SizedBox(
-                                          height: math.max(
-                                            840,
-                                            constraints.maxHeight,
-                                          ),
-                                          child: _glassDashboard(activeAlert),
-                                        ),
-                                      ),
+                              builder: (context, constraints) {
+                                if (constraints.maxWidth < 1100) {
+                                  return _compactDashboard(
+                                    activeAlert,
+                                    constraints.maxWidth,
+                                  );
+                                }
+                                return SingleChildScrollView(
+                                  child: SizedBox(
+                                    height: math.max(
+                                      840,
+                                      constraints.maxHeight,
+                                    ),
+                                    child: _glassDashboard(activeAlert),
+                                  ),
+                                );
+                              },
                             )
                             : _currentPage == _SafeHubPage.wifiSensing
                             ? WifiSensingPanel(
@@ -917,7 +957,71 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     ],
   );
 
-  Widget _glassHeader() => SizedBox(
+  Widget _glassHeader() => LayoutBuilder(
+    builder: (context, bounds) {
+      if (bounds.maxWidth >= 1100) return _wideHeader();
+      return Column(
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.home_rounded, color: _blue, size: 38),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _text(
+                      'SafeHub',
+                      size: 28,
+                      color: _blue,
+                      weight: FontWeight.w700,
+                    ),
+                    _text('배리어프리 스마트홈', size: 14, color: _muted),
+                  ],
+                ),
+              ),
+              if (bounds.maxWidth >= 500) ...[
+                _headerClock(),
+                const SizedBox(width: 20),
+              ],
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _text('MQTT', size: 14, color: _muted),
+                  const SizedBox(height: 4),
+                  _dot(_connectionStatus, _mqttConnected ? _green : _amber),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_currentPage == _SafeHubPage.home)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _glass(
+                padding: const EdgeInsets.all(5),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _roomTab('all', '전체', Icons.grid_view_rounded),
+                    _roomTab('livingroom', '거실', Icons.weekend_outlined),
+                    _roomTab('bedroom', '침실', Icons.bed_outlined),
+                    _roomTab('bathroom', '화장실', Icons.bathroom_outlined),
+                  ],
+                ),
+              ),
+            )
+          else
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _action('홈으로', Icons.home_outlined, _returnHome),
+            ),
+        ],
+      );
+    },
+  );
+
+  Widget _wideHeader() => SizedBox(
     height: 70,
     child: Row(
       children: [
@@ -948,32 +1052,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
         else
           _action('홈으로', Icons.home_outlined, _returnHome),
         const Spacer(),
-        StreamBuilder<DateTime>(
-          stream: Stream<DateTime>.periodic(
-            const Duration(seconds: 1),
-            (_) => DateTime.now(),
-          ),
-          initialData: DateTime.now(),
-          builder: (context, snapshot) {
-            final now = snapshot.data!;
-            final hh = now.hour.toString().padLeft(2, '0');
-            final mm = now.minute.toString().padLeft(2, '0');
-            final date =
-                now.year.toString() +
-                '.' +
-                now.month.toString().padLeft(2, '0') +
-                '.' +
-                now.day.toString().padLeft(2, '0');
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _text(date, size: 14, color: _muted),
-                _text('$hh:$mm', size: 30, weight: FontWeight.w600),
-              ],
-            );
-          },
-        ),
+        _headerClock(),
         const SizedBox(width: 30),
         Icon(
           _mqttConnected ? Icons.wifi : Icons.wifi_off,
@@ -992,6 +1071,29 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
         ),
       ],
     ),
+  );
+
+  Widget _headerClock() => StreamBuilder<DateTime>(
+    stream: Stream<DateTime>.periodic(
+      const Duration(seconds: 1),
+      (_) => DateTime.now(),
+    ),
+    initialData: DateTime.now(),
+    builder: (context, snapshot) {
+      final now = snapshot.data!;
+      final hh = now.hour.toString().padLeft(2, '0');
+      final mm = now.minute.toString().padLeft(2, '0');
+      final date =
+          '${now.year}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}';
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _text(date, size: 14, color: _muted),
+          _text('$hh:$mm', size: 30, weight: FontWeight.w600),
+        ],
+      );
+    },
   );
 
   Widget _roomTab(String id, String label, IconData icon) {
@@ -1022,6 +1124,42 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _compactDashboard(SafeHubAlert? alert, double width) {
+    final sign = SizedBox(height: 660, child: _signPanel());
+    final space = SizedBox(height: 490, child: _spacePanel(alert));
+    final alarm = SizedBox(height: 490, child: _alarmPanel(alert));
+    final disaster = SizedBox(height: 320, child: _disasterPanel());
+    final events = SizedBox(height: 320, child: _eventsPanel());
+    const gap = SizedBox(height: 20);
+    return SingleChildScrollView(
+      child:
+          width >= 680
+              ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: Column(children: [sign, gap, events])),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(children: [space, gap, alarm, gap, disaster]),
+                  ),
+                ],
+              )
+              : Column(
+                children: [
+                  sign,
+                  gap,
+                  space,
+                  gap,
+                  alarm,
+                  gap,
+                  disaster,
+                  gap,
+                  events,
+                ],
+              ),
     );
   }
 
@@ -1815,7 +1953,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
             : _muted;
 
     final buttonLabel =
-        _sttBusy
+        _sttStarting
+            ? '마이크 준비 중'
+            : _sttBusy
             ? '음성 변환 중'
             : _sttRecording
             ? '녹음 종료 및 변환'

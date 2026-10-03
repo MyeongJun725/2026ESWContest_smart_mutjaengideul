@@ -3,11 +3,28 @@ import 'dart:io';
 import 'dart:typed_data';
 
 class CameraStreamService {
+  CameraStreamService({
+    this.frameByteLength = 320 * 240 * 4,
+    this.watchdogInterval = const Duration(seconds: 2),
+    this.frameTimeout = const Duration(seconds: 6),
+    this.connectionTimeout = const Duration(seconds: 5),
+  }) : assert(frameByteLength > 0 && frameByteLength <= 10 * 1024 * 1024),
+       assert(watchdogInterval > Duration.zero),
+       assert(frameTimeout > Duration.zero),
+       assert(connectionTimeout > Duration.zero);
+
+  final int frameByteLength;
+  final Duration watchdogInterval;
+  final Duration frameTimeout;
+  final Duration connectionTimeout;
   Socket? _socket;
   StreamSubscription<Uint8List>? _subscription;
   Timer? _watchdogTimer;
 
-  final List<int> _buffer = [];
+  final Uint8List _header = Uint8List(4);
+  late Uint8List _frameBuffer = Uint8List(frameByteLength);
+  int _headerBytes = 0;
+  int _frameBytes = 0;
 
   String? _host;
   int? _port;
@@ -20,9 +37,6 @@ class CameraStreamService {
   bool _connected = false;
   DateTime? _lastFrameAt;
 
-  static const Duration _watchdogInterval = Duration(seconds: 2);
-  static const Duration _frameTimeout = Duration(seconds: 6);
-
   Future<void> connect({
     required String host,
     required int port,
@@ -33,6 +47,10 @@ class CameraStreamService {
       return;
     }
 
+    if (_host != host || _port != port) {
+      _resetConnection();
+      _setConnected(false);
+    }
     _host = host;
     _port = port;
     _onFrame = onFrame;
@@ -67,36 +85,32 @@ class CameraStreamService {
       final socket = await Socket.connect(
         host,
         port,
-        timeout: const Duration(seconds: 5),
+        timeout: connectionTimeout,
       );
 
-      if (_disposed) {
+      if (_disposed || _host != host || _port != port) {
         socket.destroy();
         return;
       }
 
       _socket = socket;
-      _buffer.clear();
+      _headerBytes = 0;
+      _frameBytes = 0;
       _lastFrameAt = DateTime.now();
 
       print('[CAMERA] connected $host:$port');
-      _setConnected(true);
-
       _subscription = socket.listen(
         (data) {
-          _lastFrameAt = DateTime.now();
-          _buffer.addAll(data);
-
-          final onFrame = _onFrame;
-          if (onFrame != null) {
-            _consumeFrames(onFrame);
-          }
+          if (_disposed || !identical(_socket, socket)) return;
+          _consumeFrames(data, socket);
         },
         onError: (error) {
+          if (_disposed || !identical(_socket, socket)) return;
           print('[CAMERA] socket error: $error');
           _handleDisconnect();
         },
         onDone: () {
+          if (_disposed || !identical(_socket, socket)) return;
           print('[CAMERA] socket done');
           _handleDisconnect();
         },
@@ -125,31 +139,28 @@ class CameraStreamService {
       return;
     }
 
-    _watchdogTimer = Timer.periodic(
-      _watchdogInterval,
-      (_) {
-        if (_disposed || _connecting) {
-          return;
-        }
+    _watchdogTimer = Timer.periodic(watchdogInterval, (_) {
+      if (_disposed || _connecting) {
+        return;
+      }
 
-        if (_socket == null) {
-          print('[CAMERA] watchdog reconnect');
-          unawaited(_connectNow());
-          return;
-        }
+      if (_socket == null) {
+        print('[CAMERA] watchdog reconnect');
+        unawaited(_connectNow());
+        return;
+      }
 
-        final lastFrameAt = _lastFrameAt;
-        if (lastFrameAt != null &&
-            DateTime.now().difference(lastFrameAt) > _frameTimeout) {
-          print('[CAMERA] frame timeout - reconnecting');
+      final lastFrameAt = _lastFrameAt;
+      if (lastFrameAt != null &&
+          DateTime.now().difference(lastFrameAt) > frameTimeout) {
+        print('[CAMERA] frame timeout - reconnecting');
 
-          _resetConnection();
-          _setConnected(false);
+        _resetConnection();
+        _setConnected(false);
 
-          unawaited(_connectNow());
-        }
-      },
-    );
+        unawaited(_connectNow());
+      }
+    });
   }
 
   void _setConnected(bool connected) {
@@ -161,39 +172,41 @@ class CameraStreamService {
     _onConnectionChanged?.call(connected);
   }
 
-  void _consumeFrames(
-    void Function(Uint8List frame) onFrame,
-  ) {
-    while (true) {
-      if (_buffer.length < 4) {
-        return;
+  void _consumeFrames(Uint8List data, Socket source) {
+    var offset = 0;
+    while (offset < data.length && !_disposed && identical(_socket, source)) {
+      if (_headerBytes < 4) {
+        final count = (4 - _headerBytes).clamp(0, data.length - offset);
+        _header.setRange(_headerBytes, _headerBytes + count, data, offset);
+        _headerBytes += count;
+        offset += count;
+        if (_headerBytes < 4) return;
+
+        // The existing camera protocol sends one fixed-size RGBA frame.
+        final length = ByteData.sublistView(_header).getUint32(0, Endian.big);
+        if (length != frameByteLength) {
+          _handleDisconnect();
+          return;
+        }
       }
 
-      final header = Uint8List.fromList(
-        _buffer.sublist(0, 4),
-      );
-
-      final frameLength = ByteData.sublistView(header).getUint32(0, Endian.big);
-
-      if (frameLength <= 0 || frameLength > 10 * 1024 * 1024) {
-        _buffer.clear();
-        return;
-      }
-
-      if (_buffer.length < 4 + frameLength) {
-        return;
-      }
-
-      final frame = Uint8List.fromList(
-        _buffer.sublist(4, 4 + frameLength),
-      );
-
-      _buffer.removeRange(
+      final count = (frameByteLength - _frameBytes).clamp(
         0,
-        4 + frameLength,
+        data.length - offset,
       );
+      _frameBuffer.setRange(_frameBytes, _frameBytes + count, data, offset);
+      _frameBytes += count;
+      offset += count;
+      if (_frameBytes < frameByteLength) return;
 
-      onFrame(frame);
+      final frame = _frameBuffer;
+      _frameBuffer = Uint8List(frameByteLength);
+      _headerBytes = 0;
+      _frameBytes = 0;
+      // Partial packets do not keep a frozen camera marked as live.
+      _lastFrameAt = DateTime.now();
+      _setConnected(true);
+      if (!_disposed) _onFrame?.call(frame);
     }
   }
 
@@ -205,7 +218,8 @@ class CameraStreamService {
     _socket = null;
 
     _lastFrameAt = null;
-    _buffer.clear();
+    _headerBytes = 0;
+    _frameBytes = 0;
   }
 
   Future<void> dispose() async {
@@ -220,6 +234,8 @@ class CameraStreamService {
     _socket?.destroy();
     _socket = null;
 
-    _buffer.clear();
+    _connected = false;
+    _headerBytes = 0;
+    _frameBytes = 0;
   }
 }

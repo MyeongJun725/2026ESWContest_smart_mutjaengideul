@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../config/app_config.dart';
 
 class ConnectionSettingsPage extends StatefulWidget {
-  const ConnectionSettingsPage({super.key});
+  const ConnectionSettingsPage({super.key, this.saveSettings});
+
+  final Future<void> Function(Map<String, Object?>)? saveSettings;
 
   @override
   State<ConnectionSettingsPage> createState() => _ConnectionSettingsPageState();
@@ -46,7 +48,7 @@ class _ConnectionSettingsPageState extends State<ConnectionSettingsPage> {
       _saveError = null;
     });
     try {
-      await AppConfig.save(_values);
+      await (widget.saveSettings ?? AppConfig.save)(_values);
       if (mounted) Navigator.of(context).pop(true);
     } on FileSystemException {
       if (mounted)
@@ -110,7 +112,10 @@ class _ConnectionSettingsPageState extends State<ConnectionSettingsPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      PopScope(canPop: !_saving, child: _buildForm(context));
+
+  Widget _buildForm(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('장비 · 서버 연결 설정')),
       body: Form(

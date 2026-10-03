@@ -54,7 +54,19 @@ Pi 기록은 체크 후 `선택 기록 내보내기`를 누르고 표시된 ZIP�
 python SW/wifi_sensing/tests/test_bridge.py
 python SW/wifi_sensing/prepare_ui_tests.py /tmp/safehub-wifi-ui-tests
 cd /tmp/safehub-wifi-ui-tests
+flutter pub get
 flutter test --reporter expanded
 ```
 
-별도 UI 테스트 환경은 실제 추가한 Dart 파일을 그대로 복사해 검사합니다. ATLAS 전용 오디오 플러그인이나 전체 수어 앱의 실제 기기 빌드까지 검증하는 것은 아닙니다. 외부 원본의 라이선스와 해시는 runtime/NOTICE.md에 기록합니다.
+기본 구성은 CSI 서비스·화면 소스와 두 테스트 파일을 그대로 복사합니다. 홈·설정·음성·MQTT·카메라를 포함한 전체 앱의 호스트 검사는 `--full`로 준비합니다.
+
+```sh
+python SW/wifi_sensing/prepare_ui_tests.py --full /tmp/safehub-full-ui-tests
+cd /tmp/safehub-full-ui-tests
+flutter pub get
+flutter test --reporter expanded
+```
+
+Windows에서는 `/tmp/...` 대신 저장소 밖의 새 폴더 경로를 지정합니다. 출력 폴더는 없거나 완전히 비어 있어야 하며, 기존 파일이 있으면 덮어쓰지 않고 중단합니다. 다시 검사 환경을 만들 때도 새 빈 폴더를 사용합니다. 저장소 내부·상위 폴더와 드라이브 루트는 출력 대상으로 허용하지 않습니다.
+
+`--full`은 원본 `lib`, `test`, `assets`, 분석 설정을 복사하고, 복사본 pubspec에서 ATLAS 전용 path 의존성 `audioplayers_atlas`, `record_atlas` 두 개만 제외합니다. 원본 소스와 pubspec은 수정하지 않습니다. 이 검사는 호스트 환경의 코드 동작을 대상으로 하며, ATLAS 전용 플러그인·Pi 빌드·실제 장비 성능을 검증하는 것은 아닙니다. 외부 원본의 라이선스와 해시는 runtime/NOTICE.md에 기록합니다.
