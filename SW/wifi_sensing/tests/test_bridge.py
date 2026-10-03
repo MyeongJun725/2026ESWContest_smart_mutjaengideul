@@ -1,6 +1,7 @@
 """Synthetic integration evidence only; does not measure action accuracy."""
 
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -264,6 +265,136 @@ class IntegrationTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join()
+
+    def test_15_training_blocks_model_replacement_and_inference(self):
+        self.app.training = {'state': 'running'}
+        for action, payload in [('recognize', {}), ('select_model', {'id': 'old'}),
+                                ('import_model', {'path': self.temp.name})]:
+            with self.subTest(action=action):
+                with self.assertRaisesRegex(ValueError, '학습 완료 후'):
+                    self.app.command(action, payload)
+        self.app.recognition.begin('old-session', 0, 'old-model', 0)
+        with patch.object(self.app.services, 'train_selected',
+                          return_value={'model_id': 'new-model'}):
+            self.app._fit([])
+        self.assertFalse(self.app.recognition.running)
+        self.assertIsNone(self.app.recognition.result)
+        self.assertEqual(self.app.model['model_id'], 'new-model')
+
+    def test_16_bad_catalog_files_do_not_hide_valid_data(self):
+        bad_record = self.app.db.SEGMENTS / 'broken-test.json'
+        bad_model = self.app.db.MODELS / 'broken-test.json'
+        try:
+            bad_record.write_text('{unfinished', encoding='utf-8')
+            bad_model.write_text('[]', encoding='utf-8')
+            state = self.app.status()
+            self.assertTrue(state['records'])
+            self.assertTrue(state['models'])
+            self.assertEqual(len(state['storage_warnings']), 2)
+            self.assertNotIn(self.temp.name, '\n'.join(state['storage_warnings']))
+            self.assertEqual(bad_record.read_text(), '{unfinished')
+            # Invalid content is cached too, but a corrected file is reread.
+            self.app.models()
+            with patch.object(Path, 'read_text', side_effect=AssertionError('unchanged metadata reread')):
+                self.app.models()
+            bad_model.write_text('{}', encoding='utf-8')
+            self.assertEqual(len(self.app.status()['storage_warnings']), 1)
+        finally:
+            bad_record.unlink(missing_ok=True)
+            bad_model.unlink(missing_ok=True)
+
+    def test_17_repeated_and_concurrent_polling_share_identical_waveform(self):
+        import numpy as np
+        from signal_pipeline import latest_signal
+        self.attach(self.frames(0, 139))
+        with patch.object(self.app.stream, 'now', return_value=139):
+            with patch('signal_pipeline.latest_signal', wraps=latest_signal) as process:
+                with ThreadPoolExecutor(max_workers=3) as pool:
+                    states = list(pool.map(lambda _: self.app.status(), range(3)))
+                self.assertEqual(process.call_count, 1)
+                expected = latest_signal(list(self.app.stream.frames), 'raw_iq_52', 4)
+                for state in states:
+                    np.testing.assert_array_equal(state['waveform']['signal'], expected['signal'])
+                self.app.status({'denoise': False})
+                self.assertEqual(process.call_count, 2)
+        with patch.object(self.app.stream, 'now', return_value=141):
+            self.assertIsNone(self.app.status()['waveform'])
+
+    def test_18_new_input_invalidates_cache_and_idle_worker_skips_copy(self):
+        from signal_pipeline import latest_signal
+        self.attach(self.frames())
+        with patch.object(self.app.stream, 'now', return_value=14):
+            with patch('signal_pipeline.latest_signal', wraps=latest_signal) as process:
+                self.app.status()
+                self.app.stream._append(self.frames(14 + 1 / 60, 1)[0])
+                self.app.status()
+                self.assertEqual(process.call_count, 2)
+        with patch.object(self.app.stream, 'snapshot', side_effect=AssertionError('idle full-buffer copy')):
+            self.app._advance()
+
+    def test_19_training_reads_only_selected_records(self):
+        records = self.app.records()
+        ids = [records[0]['id']]
+        real_read = Path.read_text
+        def selected_only(path, *args, **kwargs):
+            if path.parent == self.app.db.SEGMENTS:
+                self.assertIn(path.stem, ids)
+            return real_read(path, *args, **kwargs)
+        with patch.object(Path, 'read_text', selected_only):
+            selected = self.app.records(ids)
+        self.assertEqual([r['id'] for r in selected], ids)
+
+    def test_20_recent_snapshot_preserves_last_window_and_can_skip_frames(self):
+        self.attach(self.frames(0, 139))
+        with patch.object(self.app.stream, 'now', return_value=139):
+            state = self.app.stream.snapshot(max_seconds=4.025)
+            self.assertTrue(state['fresh'])
+            self.assertLessEqual(len(state['frames']), 243)
+            self.assertGreaterEqual(state['frames'][-1]['t'] - state['frames'][0]['t'], 4)
+            self.assertEqual(self.app.stream.snapshot(include_frames=False)['frames'], [])
+
+    def test_21_closed_controller_rejects_commands(self):
+        self.app.closed = True
+        try:
+            with self.assertRaisesRegex(ValueError, '종료 중'):
+                self.app.command('connect', {'mode': 'dummy'})
+            self.assertFalse(self.app.stream.connected)
+        finally:
+            self.app.closed = False
+
+    def test_22_failed_http_bind_closes_controller(self):
+        with patch('sys.argv', ['bridge.py', '--data-dir', self.temp.name]):
+            with patch('bridge.Controller') as controller:
+                with patch('bridge.ThreadingHTTPServer', side_effect=OSError('test occupied port')):
+                    with self.assertRaises(OSError):
+                        main()
+                controller.return_value.close.assert_called_once()
+
+    def test_23_missing_selected_model_clears_selection_and_prediction(self):
+        self.app.model = {'model_id': 'missing-model'}
+        self.app.recognition.begin('session', 0, 'missing-model', 0)
+        self.app.recognition.result = {'label': 'old-result'}
+        state = self.app.status()
+        self.assertIsNone(state['model'])
+        self.assertFalse(state['recognition']['running'])
+        self.assertIsNone(state['recognition']['result'])
+
+    def test_24_valid_json_with_invalid_model_fields_is_quarantined(self):
+        path = self.app.db.MODELS / 'invalid-fields.json'
+        try:
+            metadata = {'model_id': path.stem, 'feature_profile': self.app.profile, 'labels': None}
+            path.write_text(json.dumps(metadata), encoding='utf-8')
+            self.assertTrue(self.app.status()['storage_warnings'])
+            metadata.update(labels=['A', 'B'], balanced_accuracy=float('nan'))
+            path.write_text(json.dumps(metadata), encoding='utf-8')
+            state = self.app.status()
+            self.assertFalse(any(m['model_id'] == path.stem for m in state['models']))
+            self.assertTrue(state['storage_warnings'])
+            metadata.update(model_id='duplicate-id', balanced_accuracy=.8)
+            path.write_text(json.dumps(metadata), encoding='utf-8')
+            self.assertTrue(self.app.status()['storage_warnings'])
+        finally:
+            path.unlink(missing_ok=True)
 
 
 if __name__ == '__main__':

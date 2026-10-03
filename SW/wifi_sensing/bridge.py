@@ -4,6 +4,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -41,38 +42,104 @@ class Controller:
         self.capture_saved = False
         self.training = {'state': 'idle'}
         self.record_index = {}
+        self.model_index = {}
+        self.catalog_warnings = {}
+        self.waveform_lock = threading.Lock()
+        self.waveform_cache = None
+        self.waveform_stats = {'computations': 0, 'cache_hits': 0}
         self.model = None
         self.bundle = None
         self.pool = ThreadPoolExecutor(max_workers=2)
         self.predicting = False
         self.last_predict = 0
         self.stop_event = threading.Event()
+        self.closed = False
         self.worker = threading.Thread(target=self._run, daemon=True)
         self.worker.start()
 
     def close(self):
-        self.stop_event.set()
-        self.worker.join(timeout=2)
-        self.stream.stop()
-        self.pool.shutdown(wait=True, cancel_futures=True)
+        with self.lock:
+            if self.closed:
+                return
+            self.closed = True
+            self.stop_event.set()
+            self.recognition.stop('센싱 서비스가 종료되었습니다.')
+            if self.capture:
+                self.capture.cancel()
+        self.worker.join()
+        try:
+            self.stream.stop()
+        finally:
+            self.pool.shutdown(wait=True, cancel_futures=True)
 
-    def records(self):
-        return self.db.saved_segments()
+    def records(self, ids=None):
+        from radio import upgrade_record
+        wanted = None if ids is None else set(ids)
+        records = []
+        for path in sorted(self.db.SEGMENTS.glob('*.json')):
+            if wanted is not None and path.stem not in wanted:
+                continue
+            try:
+                record = json.loads(path.read_text(encoding='utf-8'))
+                self._record_summary(record)
+                records.append(upgrade_record(record))
+            except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError):
+                if wanted is not None:
+                    raise ValueError(f'기록 {path.stem}: 파일 형식 또는 읽기 권한을 확인하세요.') from None
+        return records
+
+    def _record_summary(self, record):
+        if not isinstance(record, dict) or not isinstance(record.get('frames'), list):
+            raise ValueError('invalid record')
+        if any(not isinstance(record.get(key), str) or not record[key].strip()
+               for key in ('id', 'label', 'experiment_id')):
+            raise ValueError('invalid record metadata')
+        if record.get('collection') is not None and not isinstance(record['collection'], dict):
+            raise ValueError('invalid collection')
+        summary = self.db.summary(record)
+        if not math.isfinite(summary['duration']) or summary['duration'] < 0:
+            raise ValueError('invalid duration')
+        return summary
+
+    def _catalog(self, directory, cache, kind, transform):
+        warnings = []
+        try:
+            paths = list(directory.glob('*.json'))
+        except OSError:
+            self.catalog_warnings[kind] = [f'{kind}: 저장 폴더를 읽을 수 없습니다.']
+            return []
+        current = {path.stem for path in paths}
+        for sid in list(cache):
+            if sid not in current:
+                del cache[sid]
+        for path in paths:
+            try:
+                stat = path.stat()
+                key = stat.st_mtime_ns, stat.st_size
+                if cache.get(path.stem, (None,))[0] != key:
+                    try:
+                        value = transform(json.loads(path.read_text(encoding='utf-8')))
+                        if value is not None:
+                            id_key = 'id' if kind == '기록' else 'model_id'
+                            if value.get(id_key) != path.stem:
+                                raise ValueError('metadata ID does not match file')
+                            json.dumps(value, allow_nan=False)
+                        cache[path.stem] = key, value, None
+                    except (ValueError, KeyError, TypeError, AttributeError, IndexError):
+                        cache[path.stem] = key, None, f'{kind} {path.stem}: 파일 형식을 확인하세요.'
+                if cache[path.stem][2]:
+                    warnings.append(cache[path.stem][2])
+            except FileNotFoundError:
+                cache.pop(path.stem, None)
+            except OSError:
+                cache.pop(path.stem, None)
+                warnings.append(f'{kind} {path.stem}: 파일을 읽을 수 없습니다.')
+        self.catalog_warnings[kind] = warnings
+        return [entry[1] for _, entry in sorted(cache.items()) if entry[1] is not None]
 
     def record_summaries(self):
         # Polling must not reread every full I/Q file twice a second on Pi.
-        paths = list(self.db.SEGMENTS.glob('*.json'))
-        current = {path.stem for path in paths}
-        for sid in list(self.record_index):
-            if sid not in current:
-                del self.record_index[sid]
-        for path in paths:
-            stat = path.stat()
-            key = stat.st_mtime_ns, stat.st_size
-            if self.record_index.get(path.stem, (None,))[0] != key:
-                record = json.loads(path.read_text(encoding='utf-8'))
-                self.record_index[path.stem] = key, self.db.summary(record)
-        return [entry[1] for _, entry in sorted(self.record_index.items())]
+        return self._catalog(self.db.SEGMENTS, self.record_index, '기록', self._record_summary)
 
     @staticmethod
     def model_summary(model):
@@ -84,18 +151,33 @@ class Controller:
         )}
 
     def models(self):
-        result = []
-        for path in self.db.MODELS.glob('*.json'):
-            metadata = json.loads(path.read_text(encoding='utf-8'))
-            if metadata.get('feature_profile') == self.profile:
-                result.append(metadata)
-        return result
+        def current_profile(metadata):
+            if not isinstance(metadata, dict):
+                raise ValueError('invalid model metadata')
+            if metadata.get('feature_profile') != self.profile:
+                return None
+            labels = metadata.get('labels')
+            if (not isinstance(metadata.get('model_id'), str) or not metadata['model_id'].strip()
+                    or not isinstance(labels, list) or not labels
+                    or any(not isinstance(label, str) or not label.strip() for label in labels)):
+                raise ValueError('invalid model labels or ID')
+            if metadata.get('name') is not None and not isinstance(metadata['name'], str):
+                raise ValueError('invalid model name')
+            score = metadata.get('balanced_accuracy')
+            if score is not None and (isinstance(score, bool) or not isinstance(score, (int, float))
+                                      or not math.isfinite(score) or not 0 <= score <= 1):
+                raise ValueError('invalid model score')
+            return metadata
+        return self._catalog(self.db.MODELS, self.model_index, '모델', current_profile)
 
     def _advance(self):
-        state = self.stream.snapshot()
-        now = self.stream.now()
-        frames = state['frames']
         with self.lock:
+            capturing = self.capture and self.capture.state in ('preparing', 'recording')
+            if not capturing and not self.recognition.running:
+                return
+            state = self.stream.snapshot(max_seconds=None if capturing else 4.025)
+            now = self.stream.now()
+            frames = state['frames']
             if self.capture and self.capture.state in ('preparing', 'recording'):
                 valid = (state['fresh'] and self.capture_key ==
                          (state['session'], state['epoch']))
@@ -147,39 +229,66 @@ class Controller:
                 if self.recognition.generation == generation:
                     self.recognition.clear(str(exc))
         finally:
-            self.predicting = False
+            with self.lock:
+                self.predicting = False
+
+    def _waveform(self, state, frames, options):
+        from signal_pipeline import latest_signal
+        options = options or {}
+        key = (state['session'], state['epoch'], state['received'],
+               len(frames), frames[0]['t'], frames[-1]['t'],
+               tuple((name, options.get(name, True))
+                     for name in ('denoise', 'normalize', 'pca', 'lowpass')),
+               options.get('subcarrier', 0))
+        # Concurrent polls for identical input share one preprocessing run.
+        with self.waveform_lock:
+            if self.waveform_cache and self.waveform_cache[0] == key:
+                self.waveform_stats['cache_hits'] += 1
+                return self.waveform_cache[1:]
+            self.waveform_stats['computations'] += 1
+            try:
+                waveform, reason = latest_signal(frames, 'raw_iq_52', 4, options), ''
+            except ValueError as exc:
+                waveform, reason = None, str(exc)
+            self.waveform_cache = key, waveform, reason
+            return waveform, reason
 
     def status(self, options=None):
-        from signal_pipeline import latest_signal
         from core import estimate_rate
-        state = self.stream.snapshot()
+        state = self.stream.snapshot(max_seconds=4.025)
         frames = state.pop('frames')
         waveform = None
         reason = '새 신호 대기'
         if frames:
-            try:
-                waveform = latest_signal(frames, 'raw_iq_52', 4, options)
-            except ValueError as exc:
-                reason = str(exc)
+            waveform, reason = self._waveform(state, frames, options)
         # No response may expose a previous result after a disconnect/gap.
-        latest = self.stream.snapshot()
-        if (not latest['fresh'] or
-                (latest['session'], latest['epoch']) != (state['session'], state['epoch'])):
-            waveform = None
-            frames = []
-            reason = '새 신호 대기'
-            state = {k: v for k, v in latest.items() if k != 'frames'}
         with self.lock:
+            latest = self.stream.snapshot(include_frames=False)
+            if (not latest['fresh'] or
+                    (latest['session'], latest['epoch']) != (state['session'], state['epoch'])):
+                waveform = None
+                frames = []
+                reason = '새 신호 대기'
+                state = {k: v for k, v in latest.items() if k != 'frames'}
             if not state['fresh']:
                 self.recognition.clear('새 신호 대기 · 이전 결과를 지웠습니다.')
             capture = self.capture
             settings = self.services.load_settings()
+            if not isinstance(settings, dict):
+                settings = {}
+            records = self.record_summaries()
+            models = [self.model_summary(m) for m in self.models()]
+            if self.model and self.model.get('model_id') not in {m['model_id'] for m in models}:
+                self.recognition.stop('선택한 모델 파일을 확인한 뒤 다시 선택하세요.')
+                self.model = self.bundle = None
+            warnings = [warning for items in self.catalog_warnings.values() for warning in items]
+            if len(warnings) > 20:
+                warnings = warnings[:20] + [f'추가 {len(warnings) - 20}개 파일을 확인하세요.']
             return dict(
                 **state, profile=self.profile, waveform=waveform,
                 waveform_reason=reason, rate_hz=estimate_rate(frames) if frames else 0,
                 behaviors=list(self.services.DEFAULT_BEHAVIORS) + self.services.custom_behaviors(settings),
-                records=self.record_summaries(),
-                models=[self.model_summary(m) for m in self.models()],
+                records=records, models=models, storage_warnings=warnings,
                 model=self.model_summary(self.model), training=self.training,
                 training_allowed=self.allow_training,
                 dummy_allowed=self.allow_dummy,
@@ -195,6 +304,8 @@ class Controller:
 
     def command(self, action, payload):
         with self.lock:
+            if self.closed:
+                raise ValueError('센싱 서비스가 종료 중입니다. 다시 실행하세요.')
             if action == 'connect':
                 if payload['mode'] == 'dummy' and not self.allow_dummy:
                     raise ValueError('실제 장비 연결 모드에서는 모의 신호를 사용할 수 없습니다.')
@@ -231,6 +342,7 @@ class Controller:
             elif action == 'train':
                 self._train(payload)
             elif action == 'select_model':
+                self._require_training_idle()
                 model = next((m for m in self.models() if m['model_id'] == payload['id']), None)
                 if model is None:
                     raise ValueError('모델을 찾을 수 없습니다.')
@@ -247,7 +359,7 @@ class Controller:
                 self.services.import_records(payload['paths'])
             elif action == 'export_records':
                 ids = set(payload['ids'])
-                records = [r for r in self.records() if r['id'] in ids]
+                records = self.records(ids)
                 if len(records) != len(ids):
                     raise ValueError('선택한 기록 목록이 변경되었습니다.')
                 target = self.db.DATA / 'exports'
@@ -256,6 +368,7 @@ class Controller:
                 self.services.export_records(records, output)
                 return {'path': str(output)}
             elif action == 'import_model':
+                self._require_training_idle()
                 self._import_model(Path(payload['path']))
             elif action == 'export_model':
                 if not self.model or self.bundle:
@@ -294,7 +407,7 @@ class Controller:
         if self.training['state'] == 'running':
             raise ValueError('학습이 이미 진행 중입니다.')
         ids = set(payload['ids'])
-        records = [r for r in self.records() if r['id'] in ids]
+        records = self.records(ids)
         if len(records) != len(ids):
             raise ValueError('선택한 기록 목록이 변경되었습니다.')
         ready, reason = self.services.selection_state(records, 4)
@@ -308,6 +421,7 @@ class Controller:
         try:
             model = self.services.train_selected(records, 4, 'SafeHub 행동 모델')
             with self.lock:
+                self.recognition.stop('학습 완료 · 새 모델로 인식을 시작하세요.')
                 self.model, self.bundle = model, None
                 self.training = {'state': 'complete', 'model_id': model['model_id']}
         except Exception as exc:
@@ -315,6 +429,7 @@ class Controller:
                 self.training = {'state': 'failed', 'error': str(exc)}
 
     def _recognize(self):
+        self._require_training_idle()
         if not self.model:
             raise ValueError('학습하거나 가져온 모델을 선택하세요.')
         state = self.stream.snapshot()
@@ -324,6 +439,10 @@ class Controller:
         if (expected['mode'], expected['hardware']) != (state['mode'], state['hardware']):
             raise ValueError('모의/실측 또는 보드 구성이 모델과 다릅니다.')
         self.recognition.begin(state['session'], state['epoch'], self.model['model_id'], self.stream.now())
+
+    def _require_training_idle(self):
+        if self.training['state'] == 'running':
+            raise ValueError('학습 완료 후 모델을 선택하거나 인식을 시작하세요.')
 
     def _import_model(self, folder):
         from edge_runtime import load_bundle
@@ -400,15 +519,17 @@ def main():
     args = parser.parse_args()
     controller = Controller(args.data_dir, args.allow_training,
                             allow_dummy=not args.real_only)
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
-    server.controller = controller
-    print(f'SafeHub CSI ready: http://127.0.0.1:{args.port}', flush=True)
+    server = None
     try:
+        server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
+        server.controller = controller
+        print(f'SafeHub CSI ready: http://127.0.0.1:{args.port}', flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        server.server_close()
+        if server is not None:
+            server.server_close()
         controller.close()
 
 

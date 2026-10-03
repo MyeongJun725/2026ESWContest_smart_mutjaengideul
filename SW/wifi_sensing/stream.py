@@ -51,12 +51,13 @@ class Stream:
 
     def stop(self):
         self.stop_event.set()
+        with self.lock:
+            self.connected = False
+            self.reset()
         if self.thread:
             self.thread.join(timeout=3)
             if self.thread.is_alive():
                 raise ValueError('연결 종료 중입니다. 잠시 후 다시 시도하세요.')
-        self.connected = False
-        self.reset()
 
     def start(self, mode, device='', baud=921600):
         if mode not in ('live', 'dummy'):
@@ -79,17 +80,27 @@ class Stream:
         )
         self.thread.start()
 
-    def snapshot(self):
+    def snapshot(self, max_seconds=None, include_frames=True):
         with self.lock:
-            frames = list(self.frames)
-            fresh = (self.connected and bool(frames)
-                     and self.now() - frames[-1]['t'] <= .75)
+            fresh = (self.connected and bool(self.frames)
+                     and self.now() - self.frames[-1]['t'] <= .75)
+            frames = []
+            if fresh and include_frames:
+                if max_seconds is None:
+                    frames = list(self.frames)
+                else:
+                    start = self.frames[-1]['t'] - max_seconds
+                    for frame in reversed(self.frames):
+                        if frame['t'] < start:
+                            break
+                        frames.append(frame)
+                    frames.reverse()
             hardware = 'c6_ht20_soom_input' if self.board.get('mode') == 'espnow' else {
                 'esp32': 'router_esp32', 'esp32c3': 'router_c3',
                 'esp32s3': 'router_s3',
             }.get(self.board.get('chip'), 'unknown')
             return {
-                'frames': frames if fresh else [], 'fresh': bool(fresh),
+                'frames': frames, 'fresh': bool(fresh),
                 'connected': self.connected, 'error': self.error,
                 'mode': self.mode, 'session': self.session, 'epoch': self.epoch,
                 'received': self.received, 'rejected': self.rejected,
@@ -116,6 +127,33 @@ class Stream:
             self.stop_event.wait(max(0, start + index / 60 - self.now()))
         self.connected = False
 
+    def _serial_lines(self, port):
+        # Serial timeouts may split one CSI line across reads. Preserve fragments,
+        # bound noisy input, and check cancellation between short chunk reads.
+        pending = bytearray()
+        discarding = False
+        limit = 65536
+        while not self.stop_event.is_set():
+            chunk = port.read(max(1, min(port.in_waiting, 8192)))
+            if not chunk:
+                continue
+            pending.extend(chunk)
+            while b'\n' in pending and not self.stop_event.is_set():
+                line, _, remaining = pending.partition(b'\n')
+                pending = bytearray(remaining)
+                if discarding:
+                    discarding = False
+                    continue
+                if len(line) > limit:
+                    self.rejected += 1
+                    continue
+                yield line.decode('utf-8', errors='replace').strip()
+            if len(pending) > limit:
+                pending.clear()
+                if not discarding:
+                    self.rejected += 1
+                discarding = True
+
     def _serial(self, device, baud):
         import serial
         while not self.stop_event.is_set():
@@ -126,11 +164,14 @@ class Stream:
                 with serial.Serial(device, baud, timeout=.2, write_timeout=1) as port:
                     port.reset_input_buffer()
                     port.write(b'{"cmd":"status"}\n')
+                    if self.stop_event.is_set():
+                        break
+                    with self.lock:
+                        self.board = {}
                     self.connected = True
                     self.error = '장치 시간 동기화 중'
                     previous_epoch = tracker.epoch
-                    while not self.stop_event.is_set():
-                        line = port.readline(65536).decode('utf-8', errors='replace').strip()
+                    for line in self._serial_lines(port):
                         if not line:
                             continue
                         try:
@@ -138,7 +179,10 @@ class Stream:
                         except ValueError:
                             event = None
                         if isinstance(event, dict) and event.get('event') == 'status':
-                            self.board.update(event)
+                            with self.lock:
+                                for key in ('mode', 'chip', 'firmware', 'role'):
+                                    if isinstance(event.get(key), str):
+                                        self.board[key] = event[key]
                             continue
                         if 'data' in line and '[' not in line:
                             header = next(csv.reader([line]), [])
