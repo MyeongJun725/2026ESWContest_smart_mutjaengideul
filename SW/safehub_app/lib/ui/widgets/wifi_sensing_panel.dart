@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 import '../../services/wifi_sensing_service.dart';
 
 class WifiSensingPanel extends StatefulWidget {
-  const WifiSensingPanel({super.key, required this.service});
+  const WifiSensingPanel({
+    super.key,
+    required this.service,
+    this.allowDummy = true,
+  });
   final WifiSensingService service;
+  final bool allowDummy;
 
   @override
   State<WifiSensingPanel> createState() => _WifiSensingPanelState();
@@ -56,6 +61,14 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
         'subcarrier': '$_channel',
       });
       if (!mounted || generation != _stageGeneration) return;
+      if (!widget.allowDummy &&
+          (state['dummy_allowed'] != false || state['mode'] == 'dummy')) {
+        setState(() {
+          _state = null;
+          _error = '실제 수신 전용 CSI 서비스를 연결하세요. 연결 설정에서 서비스 주소를 확인해주세요.';
+        });
+        return;
+      }
       setState(() {
         _state = state;
         _error = '';
@@ -343,15 +356,16 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
               connected ? '연결 해제' : '실제 신호 연결',
               connected
                   ? () => _command('disconnect')
-                  : _port == null
+                  : _port == null || _state == null
                   ? null
                   : () => _command('connect', {'mode': 'live', 'port': _port}),
               primary: true,
             ),
-            _button(
-              '장비 없이 모의 신호',
-              connected ? null : () => _command('connect', {'mode': 'dummy'}),
-            ),
+            if (widget.allowDummy && _state?['dummy_allowed'] != false)
+              _button(
+                '장비 없이 모의 신호',
+                connected ? null : () => _command('connect', {'mode': 'dummy'}),
+              ),
           ],
         ),
         const SizedBox(height: 10),

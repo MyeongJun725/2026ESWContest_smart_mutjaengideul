@@ -7,6 +7,7 @@ using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Web.Script.Serialization;
@@ -19,7 +20,6 @@ internal static class Launcher
     private static StreamWriter logWriter;
     private static string logPath;
     private static volatile bool serviceAnnouncedReady;
-    private const string MutexName = "Local\\SafeHubLocalPreviewLauncher";
 
     [STAThread]
     private static int Main(string[] args)
@@ -34,7 +34,7 @@ internal static class Launcher
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        using (Mutex mutex = new Mutex(false, MutexName))
+        using (Mutex mutex = new Mutex(false, LauncherMutexName()))
         {
             try
             {
@@ -43,7 +43,7 @@ internal static class Launcher
                 if (!ownsMutex)
                 {
                     if (!checkOnly)
-                        MessageBox.Show("SafeHub 통합 체험이 이미 실행 중입니다. 열린 SafeHub 창을 확인해 주세요.",
+                        MessageBox.Show("이 폴더의 SafeHub가 이미 실행 중입니다. 열린 SafeHub 창을 확인해 주세요.",
                             "SafeHub", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return 2;
                 }
@@ -53,6 +53,7 @@ internal static class Launcher
                     throw new InvalidOperationException("지원하지 않는 실행 옵션입니다. 실행 아이콘을 다시 눌러 주세요.");
 
                 Config config = Config.Read(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json"));
+                Log(config.RealOnly ? "실제 장비 연결 모드" : "장비 연결 전 체험 모드");
                 AssertPortAvailable(config.Port);
                 if (checkOnly)
                 {
@@ -61,7 +62,7 @@ internal static class Launcher
                 }
 
                 Directory.CreateDirectory(config.DataDir);
-                progress = new StartupForm();
+                progress = new StartupForm(config.RealOnly);
                 progress.Show();
                 Application.DoEvents();
                 job = new ChildProcessJob();
@@ -71,13 +72,7 @@ internal static class Launcher
                 WaitForService(config.Port, backend, progress);
                 if (progress.CancelRequested) throw new OperationCanceledException();
 
-                app = Process.Start(new ProcessStartInfo
-                {
-                    FileName = config.AppExe,
-                    WorkingDirectory = Path.GetDirectoryName(config.AppExe),
-                    UseShellExecute = false,
-                    CreateNoWindow = false
-                });
+                app = Process.Start(AppStartInfo(config));
                 if (app == null) throw new InvalidOperationException("SafeHub 화면을 시작하지 못했습니다.");
                 job.Add(app);
                 Log("직접 시작한 SafeHub 앱 PID=" + app.Id);
@@ -134,7 +129,31 @@ internal static class Launcher
             "-" + Process.GetCurrentProcess().Id + ".log");
         logWriter = new StreamWriter(logPath, false, new UTF8Encoding(false));
         logWriter.AutoFlush = true;
-        Log("SafeHub 장비 연결 전 체험 준비");
+        Log("SafeHub 실행 준비");
+    }
+
+    private static string LauncherMutexName()
+    {
+        // Separate installations may run together when they use different ports.
+        string directory = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant();
+        using (SHA256 hash = SHA256.Create())
+            return "Local\\SafeHubLauncher_" +
+                BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(directory))).Replace("-", "");
+    }
+
+    private static ProcessStartInfo AppStartInfo(Config config)
+    {
+        ProcessStartInfo info = new ProcessStartInfo
+        {
+            FileName = config.AppExe,
+            WorkingDirectory = Path.GetDirectoryName(config.AppExe),
+            UseShellExecute = false,
+            CreateNoWindow = false
+        };
+        if (!String.IsNullOrEmpty(config.SettingsFile))
+            info.EnvironmentVariables["SAFEHUB_CONFIG_FILE"] = config.SettingsFile;
+        return info;
     }
 
     private static void Log(string message)
@@ -159,25 +178,7 @@ internal static class Launcher
 
     private static Process StartBackend(Config config)
     {
-        ProcessStartInfo info = new ProcessStartInfo
-        {
-            FileName = config.PythonExe,
-            Arguments = "-u " + Quote(config.BridgeScript) + " --port " + config.Port +
-                " --allow-training --data-dir " + Quote(config.DataDir),
-            WorkingDirectory = Path.GetDirectoryName(config.BridgeScript),
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
-        };
-        info.EnvironmentVariables["PYTHONPATH"] = config.PythonSitePackages;
-        info.EnvironmentVariables["PYTHONUTF8"] = "1";
-        info.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
-        info.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
-        Process process = new Process { StartInfo = info };
+        Process process = new Process { StartInfo = BackendStartInfo(config) };
         process.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e)
         {
             if (e.Data == null) return;
@@ -195,6 +196,30 @@ internal static class Launcher
             return process;
         }
         catch { StopOwnedProcess(process); throw; }
+    }
+
+    private static ProcessStartInfo BackendStartInfo(Config config)
+    {
+        ProcessStartInfo info = new ProcessStartInfo
+        {
+            FileName = config.PythonExe,
+            Arguments = "-u " + Quote(config.BridgeScript) + " --port " + config.Port +
+                " --allow-training --data-dir " + Quote(config.DataDir) +
+                (config.RealOnly ? " --real-only" : ""),
+            WorkingDirectory = Path.GetDirectoryName(config.BridgeScript),
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+        info.EnvironmentVariables["PYTHONPATH"] = config.PythonSitePackages;
+        info.EnvironmentVariables["PYTHONUTF8"] = "1";
+        info.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
+        info.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
+        return info;
     }
 
     private static void WaitForService(int port, Process backend, StartupForm progress)
@@ -284,8 +309,9 @@ internal static class Launcher
 
     private sealed class Config
     {
-        internal string PythonExe, PythonSitePackages, BridgeScript, DataDir, AppExe;
+        internal string PythonExe, PythonSitePackages, BridgeScript, DataDir, AppExe, SettingsFile;
         internal int Port;
+        internal bool RealOnly;
 
         internal static Config Read(string path)
         {
@@ -307,6 +333,14 @@ internal static class Launcher
             if (values.ContainsKey("port") &&
                 (!Int32.TryParse(Convert.ToString(values["port"]), out config.Port) || config.Port < 1 || config.Port > 65535))
                 throw new InvalidOperationException("config.json의 port는 1~65535 사이 정수여야 합니다.");
+            if (values.ContainsKey("real_only"))
+            {
+                if (!(values["real_only"] is bool))
+                    throw new InvalidOperationException("config.json의 real_only는 true 또는 false여야 합니다.");
+                config.RealOnly = (bool)values["real_only"];
+            }
+            if (values.ContainsKey("settings_file"))
+                config.SettingsFile = ReadPath(values, "settings_file", false);
             return config;
         }
 
@@ -330,11 +364,13 @@ internal static class Launcher
     private sealed class StartupForm : Form
     {
         private readonly Label message;
+        private readonly bool realOnly;
         private bool completing;
         internal bool CancelRequested { get; private set; }
 
-        internal StartupForm()
+        internal StartupForm(bool realOnly)
         {
+            this.realOnly = realOnly;
             Text = "SafeHub 준비 중";
             ClientSize = new Size(450, 135);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -350,7 +386,9 @@ internal static class Launcher
 
         internal void SetElapsed(int seconds)
         {
-            message.Text = "SafeHub 통합 체험을 준비하고 있습니다.\n와이파이 센싱 서비스 시작 중 · " + seconds + "초\n\n장비 없이도 화면과 모의 신호를 체험할 수 있습니다.";
+            message.Text = realOnly
+                ? "SafeHub 실제 장비 연결 모드를 준비하고 있습니다.\n와이파이 센싱 서비스 시작 중 · " + seconds + "초\n\n장비가 연결되면 실제 신호를 수집할 수 있습니다."
+                : "SafeHub 통합 체험을 준비하고 있습니다.\n와이파이 센싱 서비스 시작 중 · " + seconds + "초\n\n장비 없이도 화면과 모의 신호를 체험할 수 있습니다.";
         }
 
         internal void Complete() { completing = true; Close(); }

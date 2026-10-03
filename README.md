@@ -8,7 +8,7 @@
 
 통합 화면은 수집·전처리 관찰·기록 선택·PC 학습·현재 행동 판단을 제공합니다. Raspberry Pi/ATLAS 실기기 배포와 전역 MQTT 안전 경보 연결은 아직 검증 전입니다. [통합 설계와 다음 검증](docs/wifi-csi/UI_INTEGRATION.md)을 참고하세요.
 
-장비 없는 Windows 실행 방법은 [통합 체험 빌드](SW/windows_preview/README.md)에 있습니다. 모의 신호는 사용자가 직접 시작하며 실제 행동 인식 결과와 구분합니다.
+Windows 실행 방법은 [통합 앱 빌드](SW/windows_preview/README.md)에 있습니다. [실제 모드](docs/wifi-csi/REAL_MODE.md)는 앱에서 장비 주소를 저장하며, 장비가 없으면 연결 대기로 표시합니다. 별도 체험 빌드에서만 모의 신호를 시작할 수 있습니다.
 
 ## Wi-Fi CSI 센싱 모듈
 

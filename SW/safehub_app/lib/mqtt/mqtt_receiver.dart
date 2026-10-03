@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:mqtt_client/mqtt_client.dart';
@@ -5,6 +6,40 @@ import 'package:mqtt_client/mqtt_server_client.dart';
 
 import '../core/event_manager.dart';
 import '../core/safety_event_normalizer.dart';
+
+// Keep disposal effective if a TCP connect completes after settings were changed.
+class _OwnedMqttClient extends MqttServerClient {
+  _OwnedMqttClient(String host, String id, int port)
+    : super.withPort(host, id, port, maxConnectionAttempts: 1);
+
+  bool _closed = false;
+
+  @override
+  Future<MqttClientConnectionStatus?> connect([
+    String? username,
+    String? password,
+  ]) async {
+    final pending = super.connect(username, password);
+    final pendingHandler = connectionHandler;
+    try {
+      return await pending;
+    } finally {
+      // disconnect() clears the public client's handler before a late socket arrives.
+      if (_closed) {
+        try {
+          pendingHandler?.stopListening();
+        } catch (_) {}
+      }
+    }
+  }
+
+  @override
+  void disconnect() {
+    _closed = true;
+    autoReconnect = false;
+    super.disconnect();
+  }
+}
 
 class MqttReceiver {
   static const String shortcutCommandTopic =
@@ -25,8 +60,17 @@ class MqttReceiver {
   // MQTT 연결 상태 변경
   final void Function(bool connected)? onConnectionChanged;
 
-  late final MqttServerClient _client;
+  MqttServerClient? _client;
+  StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _messages;
+  Future<void>? _connecting;
+  Timer? _retryTimer;
+  bool _disposed = false;
+  int _failures = 0;
   bool _connected = false;
+  final Duration initialRetryDelay;
+  final Duration maxRetryDelay;
+  final MqttServerClient Function(String, String, int) _clientFactory;
+  final Timer Function(Duration, void Function()) _retryTimerFactory;
 
   MqttReceiver({
     required this.broker,
@@ -36,101 +80,161 @@ class MqttReceiver {
     this.onSignTextReceived,
     this.onDeviceCommand,
     this.onConnectionChanged,
-  });
+    this.initialRetryDelay = const Duration(seconds: 3),
+    this.maxRetryDelay = const Duration(seconds: 15),
+    MqttServerClient Function(String, String, int)? clientFactory,
+    Timer Function(Duration, void Function())? retryTimerFactory,
+  }) : assert(initialRetryDelay > Duration.zero),
+       assert(maxRetryDelay >= initialRetryDelay),
+       _clientFactory = clientFactory ?? _OwnedMqttClient.new,
+       _retryTimerFactory = retryTimerFactory ?? Timer.new;
 
-  Future<void> connect() async {
+  Future<void> connect() {
+    if (_disposed || _connected) return Future<void>.value();
+    if (_connecting != null) return _connecting!;
+    // Once connected, the MQTT client's existing auto-reconnect owns recovery.
+    if (_client != null) return Future<void>.value();
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    return _connecting = _connectOnce().whenComplete(() => _connecting = null);
+  }
+
+  bool _current(MqttServerClient client) =>
+      !_disposed && identical(client, _client);
+
+  Future<void> _connectOnce() async {
     final clientId = 'safehub_rpi5_${DateTime.now().millisecondsSinceEpoch}';
 
     print('[MQTT] connecting broker=$broker port=$port client=$clientId');
 
-    _client = MqttServerClient.withPort(
-      broker,
-      clientId,
-      port,
-    );
+    final client = _clientFactory(broker, clientId, port);
+    _client = client;
 
-    _client.keepAlivePeriod = 20;
+    client.keepAlivePeriod = 20;
 
-    // 연결이 끊어지면 자동 재연결
-    _client.autoReconnect = true;
+    // Initial failures use one capped backoff timer, never a second reconnect loop.
+    client.autoReconnect = false;
 
     // 자동 재연결 성공 후 기존 MQTT 토픽 다시 구독
-    _client.resubscribeOnAutoReconnect = true;
+    client.resubscribeOnAutoReconnect = true;
 
-    _client.onConnected = () {
+    client.onConnected = () {
+      if (!_current(client)) return;
       _connected = true;
       print('[MQTT] connected broker=$broker port=$port');
       onConnectionChanged?.call(true);
     };
 
-    _client.onDisconnected = () {
+    client.onDisconnected = () {
+      if (!_current(client)) return;
       _connected = false;
-      print('[MQTT] disconnected state=${_client.connectionStatus?.state}');
+      print('[MQTT] disconnected state=${client.connectionStatus?.state}');
       onConnectionChanged?.call(false);
     };
 
-    _client.onSubscribed = (topic) {
+    client.onSubscribed = (topic) {
+      if (!_current(client)) return;
       print('[MQTT] subscribed topic=$topic');
     };
 
-    _client.onSubscribeFail = (topic) {
+    client.onSubscribeFail = (topic) {
+      if (!_current(client)) return;
       print('[MQTT] subscribe failed topic=$topic');
     };
 
-    _client.onAutoReconnect = () {
+    client.onAutoReconnect = () {
+      if (!_current(client)) return;
       _connected = false;
       print('[MQTT] auto reconnecting');
       onConnectionChanged?.call(false);
     };
 
-    _client.onAutoReconnected = () {
+    client.onAutoReconnected = () {
+      if (!_current(client)) return;
       _connected = true;
       print('[MQTT] auto reconnected');
       onConnectionChanged?.call(true);
     };
 
-    _client.connectionMessage =
+    client.connectionMessage =
         MqttConnectMessage().withClientIdentifier(clientId).startClean();
 
     try {
-      await _client.connect();
-    } catch (e) {
-      print('[MQTT] connection failed: $e');
-      _client.disconnect();
+      await client.connect();
+      if (!_current(client)) return;
+
+      if (client.connectionStatus?.state != MqttConnectionState.connected) {
+        throw Exception('MQTT 브로커 연결 실패');
+      }
+      client.autoReconnect = true;
+      _failures = 0;
+
+      // 침실 CSI 이벤트
+      client.subscribe('safehub/csi/bedroom/event', MqttQos.atLeastOnce);
+
+      // 화장실 CSI 이벤트
+      client.subscribe('safehub/csi/bathroom/event', MqttQos.atLeastOnce);
+
+      // 수어 번역 결과
+      client.subscribe(
+        'safehub/vision/livingroom/translation',
+        MqttQos.atMostOnce,
+      );
+
+      _messages = client.updates?.listen((messages) {
+        if (_current(client)) _onMessage(messages);
+      });
+      client.subscribe(
+        'safehub/control/livingroom/aircon/command',
+        MqttQos.atLeastOnce,
+      );
+    } catch (error) {
+      if (!_current(client)) return;
+      print('[MQTT] connection failed; waiting to retry');
+      _client = null;
+      _connected = false;
+      _messages?.cancel();
+      _messages = null;
+      _closeClient(client);
+      onConnectionChanged?.call(false);
+      _scheduleRetry();
       rethrow;
+    } finally {
+      if (!_current(client)) {
+        _closeClient(client);
+      }
     }
-
-    if (_client.connectionStatus?.state != MqttConnectionState.connected) {
-      _client.disconnect();
-      throw Exception('MQTT 브로커 연결 실패');
-    }
-
-    // 침실 CSI 이벤트
-    _client.subscribe(
-      'safehub/csi/bedroom/event',
-      MqttQos.atLeastOnce,
-    );
-
-    // 화장실 CSI 이벤트
-    _client.subscribe(
-      'safehub/csi/bathroom/event',
-      MqttQos.atLeastOnce,
-    );
-
-    // 수어 번역 결과
-    _client.subscribe(
-      'safehub/vision/livingroom/translation',
-      MqttQos.atMostOnce,
-    );
-
-    _client.updates?.listen(_onMessage);
-    _client.subscribe(
-        'safehub/control/livingroom/aircon/command', MqttQos.atLeastOnce);
   }
 
-  void _onMessage(
-    List<MqttReceivedMessage<MqttMessage?>> messages,
-  ) {
+  void _scheduleRetry() {
+    if (_disposed || _retryTimer != null) return;
+    final multiplier = 1 << (_failures > 3 ? 3 : _failures);
+    _failures++;
+    final millis = (initialRetryDelay.inMilliseconds * multiplier).clamp(
+      1,
+      maxRetryDelay.inMilliseconds,
+    );
+    _retryTimer = _retryTimerFactory(Duration(milliseconds: millis), () {
+      _retryTimer = null;
+      if (_disposed) return;
+      unawaited(connect().catchError((Object _, StackTrace __) {}));
+    });
+  }
+
+  void _closeClient(MqttServerClient client) {
+    client.autoReconnect = false;
+    client.onConnected = null;
+    client.onDisconnected = null;
+    client.onAutoReconnect = null;
+    client.onAutoReconnected = null;
+    client.onSubscribed = null;
+    client.onSubscribeFail = null;
+    try {
+      client.disconnect();
+    } catch (_) {}
+  }
+
+  void _onMessage(List<MqttReceivedMessage<MqttMessage?>> messages) {
     for (final receivedMessage in messages) {
       _handleMessage(receivedMessage);
     }
@@ -146,9 +250,7 @@ class MqttReceiver {
 
       final topic = receivedMessage.topic;
 
-      final payload = utf8.decode(
-        message.payload.message,
-      );
+      final payload = utf8.decode(message.payload.message);
 
       print('[MQTT] received topic=$topic bytes=${payload.length}');
 
@@ -203,13 +305,14 @@ class MqttReceiver {
   }
 
   bool publishShortcutCommand(String payload) {
+    final client = _client;
     final cleanPayload = payload.trim();
 
-    if (!_connected || cleanPayload.isEmpty) {
+    if (_disposed || client == null || !_connected || cleanPayload.isEmpty) {
       return false;
     }
 
-    if (_client.connectionStatus?.state != MqttConnectionState.connected) {
+    if (client.connectionStatus?.state != MqttConnectionState.connected) {
       _connected = false;
       onConnectionChanged?.call(false);
       return false;
@@ -223,11 +326,7 @@ class MqttReceiver {
       return false;
     }
 
-    _client.publishMessage(
-      shortcutCommandTopic,
-      MqttQos.atLeastOnce,
-      bytes,
-    );
+    client.publishMessage(shortcutCommandTopic, MqttQos.atLeastOnce, bytes);
 
     print(
       '[MQTT] published shortcut command '
@@ -238,7 +337,14 @@ class MqttReceiver {
   }
 
   void disconnect() {
+    _disposed = true;
     _connected = false;
-    _client.disconnect();
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _messages?.cancel();
+    _messages = null;
+    final client = _client;
+    _client = null;
+    if (client != null) _closeClient(client);
   }
 }

@@ -8,13 +8,13 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import urllib.error
 import urllib.request
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from bridge import Controller, Handler, RUNTIME
+from bridge import Controller, Handler, RUNTIME, main
 
 
 class IntegrationTests(unittest.TestCase):
@@ -39,6 +39,7 @@ class IntegrationTests(unittest.TestCase):
         self.app.model = self.app.bundle = None
         self.app.training = {'state': 'idle'}
         self.app.allow_training = True
+        self.app.allow_dummy = True
 
     def frames(self, start=10, seconds=4):
         from stream import dummy_frame
@@ -205,6 +206,64 @@ class IntegrationTests(unittest.TestCase):
                 state = self.app.status()
         self.assertIsNone(state['waveform'])
         self.assertFalse(state['fresh'])
+
+    def test_11_real_only_rejects_dummy_without_interrupting_current_input(self):
+        self.app.allow_dummy = False
+        self.app.capture = Mock(state='recording')
+        previous = self.app.stream.snapshot()
+        with patch.object(self.app.stream, 'start') as start:
+            with patch.object(self.app.recognition, 'stop') as stop:
+                with self.assertRaisesRegex(ValueError, '실제 장비 연결 모드'):
+                    self.app.command('connect', {'mode': 'dummy'})
+                start.assert_not_called()
+                stop.assert_not_called()
+        self.app.capture.cancel.assert_not_called()
+        self.assertEqual(self.app.stream.snapshot()['session'], previous['session'])
+        self.assertEqual(self.app.stream.snapshot()['epoch'], previous['epoch'])
+        self.app.capture = None
+        self.assertFalse(self.app.status()['dummy_allowed'])
+
+    def test_12_real_only_keeps_serial_connect_path(self):
+        self.app.allow_dummy = False
+        with patch.object(self.app.stream, 'start') as start:
+            self.app.command('connect', {'mode': 'live', 'port': 'TEST_PORT',
+                                         'baud': 921600})
+        start.assert_called_once_with('live', 'TEST_PORT', 921600)
+
+    def test_13_cli_real_only_flag_and_compatible_default(self):
+        for flag, allowed in [([], True), (['--real-only'], False)]:
+            with self.subTest(real_only=not allowed):
+                with patch('sys.argv', ['bridge.py', '--data-dir', self.temp.name] + flag):
+                    with patch('bridge.Controller') as controller:
+                        with patch('bridge.ThreadingHTTPServer') as server:
+                            server.return_value.serve_forever.side_effect = KeyboardInterrupt
+                            main()
+                        controller.assert_called_once_with(Path(self.temp.name), False,
+                                                           allow_dummy=allowed)
+                        controller.return_value.close.assert_called_once()
+
+    def test_14_real_only_http_rejects_synthetic_request(self):
+        self.app.allow_dummy = False
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        server.controller = self.app
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f'http://127.0.0.1:{server.server_port}'
+        try:
+            with urllib.request.urlopen(base + '/state') as response:
+                self.assertFalse(json.load(response)['dummy_allowed'])
+            request = urllib.request.Request(base + '/command/connect',
+                                             data=b'{"mode":"dummy"}',
+                                             headers={'Content-Type': 'application/json'})
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request)
+            self.assertEqual(error.exception.code, 400)
+            self.assertIn('실제 장비 연결 모드', json.load(error.exception)['error'])
+            self.assertFalse(self.app.stream.snapshot()['connected'])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
 
 if __name__ == '__main__':

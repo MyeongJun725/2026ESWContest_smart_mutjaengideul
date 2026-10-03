@@ -18,7 +18,7 @@ sys.path.insert(0, str(RUNTIME))
 
 
 class Controller:
-    def __init__(self, data_dir, allow_training=False):
+    def __init__(self, data_dir, allow_training=False, allow_dummy=True):
         # Configure isolated storage before the unchanged engine is imported.
         os.environ['WIFI_SENSING2_DATA_DIR'] = str(Path(data_dir).resolve())
         import server
@@ -30,6 +30,9 @@ class Controller:
         self.db, self.services, self.teaching = server, services, teaching
         self.profile = PROFILE
         self.stream = Stream()
+        self.allow_dummy = allow_dummy
+        if not allow_dummy:
+            self.stream.error = 'ESP32 수신기를 연결하고 USB 포트를 선택하세요.'
         self.recognition = Recognition()
         self.lock = threading.RLock()
         self.allow_training = allow_training
@@ -179,6 +182,7 @@ class Controller:
                 models=[self.model_summary(m) for m in self.models()],
                 model=self.model_summary(self.model), training=self.training,
                 training_allowed=self.allow_training,
+                dummy_allowed=self.allow_dummy,
                 recognition={'running': self.recognition.running,
                              'result': self.recognition.result,
                              'reason': self.recognition.reason},
@@ -192,6 +196,8 @@ class Controller:
     def command(self, action, payload):
         with self.lock:
             if action == 'connect':
+                if payload['mode'] == 'dummy' and not self.allow_dummy:
+                    raise ValueError('실제 장비 연결 모드에서는 모의 신호를 사용할 수 없습니다.')
                 self.recognition.stop()
                 if self.capture:
                     self.capture.cancel()
@@ -389,8 +395,11 @@ def main():
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--data-dir', type=Path, default=Path.home() / 'SafeHubData' / 'csi')
     parser.add_argument('--allow-training', action='store_true')
+    parser.add_argument('--real-only', action='store_true',
+                        help='Disable synthetic input; only accept a real serial device.')
     args = parser.parse_args()
-    controller = Controller(args.data_dir, args.allow_training)
+    controller = Controller(args.data_dir, args.allow_training,
+                            allow_dummy=not args.real_only)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
     server.controller = controller
     print(f'SafeHub CSI ready: http://127.0.0.1:{args.port}', flush=True)

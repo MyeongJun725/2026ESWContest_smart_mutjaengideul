@@ -43,6 +43,61 @@ Map<String, dynamic> fixture() => {
 };
 
 void main() {
+  for (final realService in [false, true]) {
+    testWidgets('real mode requires a real-only service: $realService', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final state = fixture();
+      if (realService) {
+        state.addAll({
+          'mode': 'live',
+          'dummy_allowed': false,
+          'connected': false,
+          'fresh': false,
+          'waveform': null,
+          'records': [],
+          'rate_hz': 0.0,
+          'error': 'ESP32 연결 대기',
+        });
+      }
+      final requests = <http.Request>[];
+      final service = WifiSensingService(
+        baseUrl: 'http://127.0.0.1:8766',
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response(
+            request.url.path == '/ports' ? '[]' : jsonEncode(state),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WifiSensingPanel(service: service, allowDummy: false),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('장비 없이 모의 신호'), findsNothing);
+      expect(
+        find.textContaining('실제 수신 전용 CSI 서비스를 연결하세요.'),
+        realService ? findsNothing : findsOneWidget,
+      );
+      if (realService)
+        expect(find.textContaining('ESP32 연결 대기'), findsOneWidget);
+      expect(requests.every((r) => r.method == 'GET'), isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      service.close();
+    });
+  }
+
   testWidgets('stage changes and selected IDs reach the existing engine API', (
     tester,
   ) async {

@@ -51,7 +51,7 @@ def preflight(flutter_path, output_dir):
     return flutter_path, output_dir, pubspec
 
 
-def prepare(flutter_path, output_dir, pubspec, build=False):
+def prepare(flutter_path, output_dir, pubspec, build=False, real=False):
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [str(flutter_path), "create", "--platforms=windows", "--no-pub",
@@ -74,7 +74,7 @@ def prepare(flutter_path, output_dir, pubspec, build=False):
     if build:
         subprocess.run(
             [str(flutter_path), "build", "windows", "--release",
-             "--dart-define=APP_LOCAL_PREVIEW=true"],
+             f"--dart-define=APP_LOCAL_PREVIEW={'false' if real else 'true'}"],
             cwd=output_dir, check=True,
         )
 
@@ -85,6 +85,8 @@ def main(argv=None):
                         help="Full path to the installed Flutter bin/flutter.bat")
     parser.add_argument("--output-dir", type=Path, required=True,
                         help="New directory outside SW/safehub_app")
+    parser.add_argument("--real", action="store_true",
+                        help="Build for real device connections with editable settings")
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument("--build", action="store_true",
                          help="Also resolve packages and build the Windows release app")
@@ -98,7 +100,7 @@ def main(argv=None):
             return 0
         if sys.platform != "win32":
             raise ValueError("Prepare the Windows preview on Windows.")
-        prepare(flutter, output, pubspec, args.build)
+        prepare(flutter, output, pubspec, args.build, args.real)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"Windows preview preparation failed: {exc}", file=sys.stderr)
         print("An incomplete output folder is preserved for inspection.", file=sys.stderr)
@@ -106,8 +108,9 @@ def main(argv=None):
     print(f"Windows host: {output}")
     print("The canonical ATLAS project has not been changed.")
     if not args.build:
+        mode = 'false' if args.real else 'true'
         print("Run flutter pub get, then flutter build windows --release "
-              "--dart-define=APP_LOCAL_PREVIEW=true from this host folder.")
+              f"--dart-define=APP_LOCAL_PREVIEW={mode} from this host folder.")
     return 0
 
 

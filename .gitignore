@@ -273,3 +273,6 @@ SW/windows_preview/logs/
 SW/windows_preview/data/
 SW/windows_preview/build/
 .venv-safehub/
+**/connection-settings.json
+**/connection-settings.env
+**/connection-settings.*.tmp

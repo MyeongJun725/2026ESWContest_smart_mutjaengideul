@@ -18,6 +18,7 @@ import '../services/stt_service.dart';
 import '../services/tts_service.dart';
 import '../services/voice_recorder_service.dart';
 import '../services/wifi_sensing_service.dart';
+import 'connection_settings_page.dart';
 import 'utils/disaster_display.dart';
 import 'widgets/disaster_overlay.dart';
 import 'widgets/appliance_panel.dart';
@@ -26,7 +27,8 @@ import 'widgets/wifi_sensing_panel.dart';
 enum _SafeHubPage { home, signTranslation, appliances, wifiSensing }
 
 class SafeHubHomePage extends StatefulWidget {
-  const SafeHubHomePage({super.key});
+  const SafeHubHomePage({super.key, this.onSettingsSaved});
+  final VoidCallback? onSettingsSaved;
 
   @override
   State<SafeHubHomePage> createState() => _SafeHubHomePageState();
@@ -57,6 +59,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   _SafeHubPage _currentPage = _SafeHubPage.home;
 
   bool _mqttConnected = false;
+  bool _mqttStarted = false;
   String _connectionStatus = '연결 중';
   String _signText = '수어 인식 대기 중';
   String _ttsStatus = '음성 안내 대기';
@@ -108,9 +111,14 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     if (AppConfig.localPreview) {
       _connectionStatus = '체험 모드';
     } else {
-      _connectMqtt();
-      _connectCamera();
-      _startDisasterPolling();
+      if (AppConfig.mqttConfigured) {
+        _mqttStarted = true;
+        _connectMqtt();
+      } else {
+        _connectionStatus = '주소 미설정';
+      }
+      if (AppConfig.cameraConfigured) _connectCamera();
+      if (AppConfig.disasterConfigured) _startDisasterPolling();
     }
   }
 
@@ -612,6 +620,13 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     });
   }
 
+  Future<void> _openConnectionSettings() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const ConnectionSettingsPage()),
+    );
+    if (saved == true && mounted) widget.onSettingsSaved?.call();
+  }
+
   @override
   void dispose() {
     _wifiSensingService.close();
@@ -626,8 +641,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _cameraImage?.dispose();
     _cameraImage = null;
     _alertPulseController.dispose();
-    // The MQTT client is initialized by connect(), which preview never calls.
-    if (!AppConfig.localPreview) _mqttReceiver.disconnect();
+    if (_mqttStarted) _mqttReceiver.disconnect();
     super.dispose();
   }
 
@@ -697,7 +711,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
               child: Column(
                 children: [
                   _glassHeader(),
-                  if (AppConfig.localPreview) ...[
+                  ...[
                     const SizedBox(height: 8),
                     Container(
                       width: double.infinity,
@@ -710,14 +724,34 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0x778CABD0)),
                       ),
-                      child: const Text(
-                        '장비 연결 전 체험 · 실제 수어·안전 감지는 동작하지 않습니다. '
-                        '와이파이 센싱에서 모의 신호를 시작해 수집·학습을 체험하세요.',
-                        style: TextStyle(
-                          color: _ink,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              AppConfig.setupError ??
+                                  (AppConfig.localPreview
+                                      ? '장비 연결 전 체험 · 실제 수어·안전 감지는 동작하지 않습니다. '
+                                          '와이파이 센싱에서 모의 신호를 시작해 수집·학습을 체험하세요.'
+                                      : '실제 장비 연결 모드 · 장비에서 새 데이터가 들어오면 표시합니다.'),
+                              style: const TextStyle(
+                                color: _ink,
+                                fontSize: 14,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          FilledButton.icon(
+                            onPressed: _openConnectionSettings,
+                            icon: const Icon(Icons.settings_input_component),
+                            label: const Text('연결 설정'),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(132, 48),
+                              backgroundColor: _blue,
+                              foregroundColor: const Color(0xFF202B3D),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -725,28 +759,28 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                   Expanded(
                     child:
                         _currentPage == _SafeHubPage.home
-                            ? AppConfig.localPreview
-                                ? LayoutBuilder(
-                                  builder:
-                                      (context, constraints) =>
-                                          SingleChildScrollView(
-                                            child: SizedBox(
-                                              height: math.max(
-                                                840,
-                                                constraints.maxHeight,
-                                              ),
-                                              child: _glassDashboard(
-                                                activeAlert,
-                                              ),
-                                            ),
+                            ? LayoutBuilder(
+                              builder:
+                                  (context, constraints) =>
+                                      SingleChildScrollView(
+                                        child: SizedBox(
+                                          height: math.max(
+                                            840,
+                                            constraints.maxHeight,
                                           ),
-                                )
-                                : _glassDashboard(activeAlert)
+                                          child: _glassDashboard(activeAlert),
+                                        ),
+                                      ),
+                            )
                             : _currentPage == _SafeHubPage.wifiSensing
-                            ? WifiSensingPanel(service: _wifiSensingService)
+                            ? WifiSensingPanel(
+                              service: _wifiSensingService,
+                              allowDummy: AppConfig.localPreview,
+                            )
                             : _currentPage == _SafeHubPage.appliances
                             ? AppliancePanel(
                               controls: _appliances,
+                              allowPreview: AppConfig.localPreview,
                               connected: _mqttConnected,
                               latestSign: _signText,
                               publishShortcutCommand:
@@ -1060,6 +1094,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                 _text(
                   AppConfig.localPreview
                       ? '장비 연결 후 수어 인식을 사용할 수 있어요'
+                      : !AppConfig.cameraConfigured
+                      ? '연결 설정에서 카메라 서버 주소를 입력하세요'
                       : _cameraConnected
                       ? '카메라 영상 수신 대기 중'
                       : 'RPi4 카메라 연결 대기 중',
@@ -1204,7 +1240,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
             : fall
             ? '즉시 확인이 필요합니다'
             : !_mqttConnected
-            ? 'MQTT 연결 끊김'
+            ? AppConfig.mqttConfigured
+                ? 'MQTT 연결 대기'
+                : 'MQTT 주소 미설정'
             : living
             ? '번역 결과 수신 영역'
             : 'Wi-Fi CSI · 센서 상태 미확인';
@@ -1253,12 +1291,12 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
             child: _systemRow(
               Icons.warning_amber_rounded,
               '화면 경보',
-              AppConfig.localPreview
-                  ? '장비 미연결'
+              AppConfig.localPreview || !_mqttConnected
+                  ? '수신 대기'
                   : active
                   ? '알림 발생'
                   : '대기 중',
-              AppConfig.localPreview
+              AppConfig.localPreview || !_mqttConnected
                   ? _muted
                   : active
                   ? _amber
@@ -1295,7 +1333,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                     ? '체험 모드'
                     : _mqttConnected
                     ? '연결됨'
-                    : '연결 확인',
+                    : _connectionStatus,
                 _mqttConnected ? _green : _amber,
               ),
             ],
@@ -1304,6 +1342,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
           _text(
             AppConfig.localPreview
                 ? '장비 연결 전에는 메시지를 주고받지 않습니다'
+                : !AppConfig.mqttConfigured
+                ? '연결 설정에서 MQTT 브로커 주소를 입력하세요'
                 : AppConfig.mqttBroker + ':' + AppConfig.mqttPort.toString(),
             size: 14,
             color: _muted,

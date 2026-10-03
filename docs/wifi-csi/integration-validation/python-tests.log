@@ -8,8 +8,14 @@ test_07_pi_rejects_training_and_dummy_live_models_cannot_mix (__main__.Integrati
 test_08_http_contract_and_browser_mutation_rejection (__main__.IntegrationTests.test_08_http_contract_and_browser_mutation_rejection) ... ok
 test_09_polling_uses_metadata_cache_and_buffer_is_bounded (__main__.IntegrationTests.test_09_polling_uses_metadata_cache_and_buffer_is_bounded) ... ok
 test_10_disconnecting_during_preprocessing_cannot_show_old_waveform (__main__.IntegrationTests.test_10_disconnecting_during_preprocessing_cannot_show_old_waveform) ... ok
+test_11_real_only_rejects_dummy_without_interrupting_current_input (__main__.IntegrationTests.test_11_real_only_rejects_dummy_without_interrupting_current_input) ... ok
+test_12_real_only_keeps_serial_connect_path (__main__.IntegrationTests.test_12_real_only_keeps_serial_connect_path) ... ok
+SafeHub CSI ready: http://127.0.0.1:8765
+SafeHub CSI ready: http://127.0.0.1:8765
+test_13_cli_real_only_flag_and_compatible_default (__main__.IntegrationTests.test_13_cli_real_only_flag_and_compatible_default) ... ok
+test_14_real_only_http_rejects_synthetic_request (__main__.IntegrationTests.test_14_real_only_http_rejects_synthetic_request) ... ok
 
 ----------------------------------------------------------------------
-Ran 10 tests in 22.602s
+Ran 14 tests in 26.132s
 
 OK

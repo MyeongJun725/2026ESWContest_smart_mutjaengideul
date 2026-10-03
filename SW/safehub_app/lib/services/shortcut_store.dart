@@ -5,7 +5,7 @@ class ShortcutStore {
   final File file;
   ShortcutStore(this.file);
   factory ShortcutStore.forApp() {
-    final home = Platform.environment['HOME'];
+    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     if (home == null || home.isEmpty) throw StateError('앱 저장 경로가 없습니다');
     return ShortcutStore(File('$home/safehub_shortcuts/bindings.json'));
   }

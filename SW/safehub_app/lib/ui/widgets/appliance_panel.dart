@@ -10,6 +10,7 @@ class AppliancePanel extends StatefulWidget {
   final String latestSign;
   final ShortcutStore? store;
   final bool loadShortcuts;
+  final bool allowPreview;
   final bool Function(String payload)? publishShortcutCommand;
 
   const AppliancePanel({
@@ -19,6 +20,7 @@ class AppliancePanel extends StatefulWidget {
     required this.latestSign,
     this.store,
     this.loadShortcuts = true,
+    this.allowPreview = true,
     this.publishShortcutCommand,
   });
   @override
@@ -54,6 +56,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
   @override
   void initState() {
     super.initState();
+    _preview = widget.allowPreview;
 
     if (widget.loadShortcuts) {
       _load();
@@ -282,8 +285,10 @@ class _AppliancePanelState extends State<AppliancePanel> {
           const Text('거실 기기 & 수어 단축키',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          const Text('버튼 테스트와 허브 명령 확인을 분리했습니다. 실제 가전은 작동하지 않습니다.'),
-          SwitchListTile(
+          Text(widget.allowPreview
+              ? '버튼 테스트와 허브 명령 확인을 분리했습니다. 실제 가전은 작동하지 않습니다.'
+              : '허브에서 받은 명령을 표시합니다. 수동 가전 제어 버튼은 아직 연동되지 않았습니다.'),
+          if (widget.allowPreview) SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('시뮬레이션 모드'),
               subtitle: Text(
