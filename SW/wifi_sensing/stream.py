@@ -26,8 +26,9 @@ def dummy_frame(t):
 
 
 class Stream:
-    def __init__(self):
+    def __init__(self, request_status=True):
         self.lock = threading.RLock()
+        self.request_status = request_status
         self.frames = deque(maxlen=8400)
         self.stop_event = threading.Event()
         self.thread = None
@@ -59,12 +60,15 @@ class Stream:
             if self.thread.is_alive():
                 raise ValueError('연결 종료 중입니다. 잠시 후 다시 시도하세요.')
 
-    def start(self, mode, device='', baud=921600):
+    def start(self, mode, device='', baud=921600, *, wait_for_device=False):
         if mode not in ('live', 'dummy'):
             raise ValueError('실측 또는 모의 신호를 선택하세요.')
         if mode == 'live':
             from serial.tools import list_ports
-            if device not in [p.device for p in list_ports.comports()]:
+            # A configured boot receiver may appear after the HTTP service starts.
+            # Interactive connections still require a currently available port.
+            if not device or (not wait_for_device and
+                              device not in [p.device for p in list_ports.comports()]):
                 raise ValueError('선택한 USB 포트가 없습니다.')
             if baud not in (115200, 460800, 921600):
                 raise ValueError('지원하지 않는 baud입니다.')
@@ -161,9 +165,15 @@ class Stream:
             header = None
             serial_started = self.now()
             try:
-                with serial.Serial(device, baud, timeout=.2, write_timeout=1) as port:
+                with serial.Serial(port=None, baudrate=baud, timeout=.2, write_timeout=1) as port:
+                    # Configure control lines before opening: asserting them can
+                    # reset the receiver.
+                    port.dtr = port.rts = False
+                    port.port = device
+                    port.open()
                     port.reset_input_buffer()
-                    port.write(b'{"cmd":"status"}\n')
+                    if self.request_status:
+                        port.write(b'{"cmd":"status"}\n')
                     if self.stop_event.is_set():
                         break
                     with self.lock:

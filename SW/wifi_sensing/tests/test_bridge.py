@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -245,15 +246,19 @@ class IntegrationTests(unittest.TestCase):
         start.assert_called_once_with('live', 'TEST_PORT', 921600)
 
     def test_13_cli_real_only_flag_and_compatible_default(self):
-        for flag, allowed in [([], True), (['--real-only'], False)]:
-            with self.subTest(real_only=not allowed):
+        cases = [([], True, False), (['--real-only'], False, False),
+                 (['--passive-receiver'], True, True),
+                 (['--real-only', '--passive-receiver'], False, True)]
+        for flag, allowed, passive in cases:
+            with self.subTest(real_only=not allowed, passive_receiver=passive):
                 with patch('sys.argv', ['bridge.py', '--data-dir', self.temp.name] + flag):
                     with patch('bridge.Controller') as controller:
                         with patch('bridge.ThreadingHTTPServer') as server:
                             server.return_value.serve_forever.side_effect = KeyboardInterrupt
                             main()
                         controller.assert_called_once_with(Path(self.temp.name), False,
-                                                           allow_dummy=allowed)
+                                                           allow_dummy=allowed,
+                                                           passive_receiver=passive)
                         controller.return_value.close.assert_called_once()
 
     def test_14_real_only_http_rejects_synthetic_request(self):
@@ -310,7 +315,13 @@ class IntegrationTests(unittest.TestCase):
             self.app.models()
             with patch.object(Path, 'read_text', side_effect=AssertionError('unchanged metadata reread')):
                 self.app.models()
+            # The cache keys on (mtime_ns, size). Both JSON strings are two bytes,
+            # so explicitly change mtime even if rapid writes share a timestamp.
+            previous_stat = bad_model.stat()
             bad_model.write_text('{}', encoding='utf-8')
+            os.utime(bad_model, ns=(previous_stat.st_atime_ns,
+                                   previous_stat.st_mtime_ns + 2_000_000_000))
+            self.assertNotEqual(bad_model.stat().st_mtime_ns, previous_stat.st_mtime_ns)
             self.assertEqual(len(self.app.status()['storage_warnings']), 1)
         finally:
             bad_record.unlink(missing_ok=True)
@@ -408,6 +419,36 @@ class IntegrationTests(unittest.TestCase):
             self.assertTrue(self.app.status()['storage_warnings'])
         finally:
             path.unlink(missing_ok=True)
+
+    def test_25_passive_receiver_configures_stream_status_request(self):
+        for passive in (False, True):
+            with self.subTest(passive_receiver=passive):
+                with patch('stream.Stream') as stream:
+                    controller = Controller(self.temp.name, passive_receiver=passive)
+                    try:
+                        stream.assert_called_once_with(request_status=not passive)
+                    finally:
+                        controller.close()
+
+    def test_26_boot_receiver_starts_after_http_bind_and_cleans_up(self):
+        argv = ['bridge.py', '--data-dir', self.temp.name, '--real-only',
+                '--passive-receiver', '--receiver-port', '/dev/serial/by-id/receiver']
+        with patch('sys.argv', argv), patch('bridge.Controller') as controller:
+            with patch('bridge.ThreadingHTTPServer') as server:
+                server.return_value.serve_forever.side_effect = KeyboardInterrupt
+                main()
+            controller.assert_called_once_with(Path(self.temp.name), False,
+                                               allow_dummy=False, passive_receiver=True)
+            controller.return_value.stream.start.assert_called_once_with(
+                'live', '/dev/serial/by-id/receiver', 921600, wait_for_device=True)
+            controller.return_value.close.assert_called_once()
+            server.return_value.server_close.assert_called_once()
+        with patch('sys.argv', argv), patch('bridge.Controller') as controller:
+            with patch('bridge.ThreadingHTTPServer', side_effect=OSError('occupied')):
+                with self.assertRaises(OSError):
+                    main()
+            controller.return_value.stream.start.assert_not_called()
+            controller.return_value.close.assert_called_once()
 
 
 if __name__ == '__main__':

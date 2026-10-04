@@ -40,7 +40,7 @@ def export_model_bundle(model, output):
 
 
 class Controller:
-    def __init__(self, data_dir, allow_training=False, allow_dummy=True):
+    def __init__(self, data_dir, allow_training=False, allow_dummy=True, passive_receiver=False):
         # Configure isolated storage before the processing engine is imported.
         os.environ['WIFI_SENSING2_DATA_DIR'] = str(Path(data_dir).resolve())
         import server
@@ -53,7 +53,7 @@ class Controller:
         verify_runtime()
         self.db, self.services, self.teaching = server, services, teaching
         self.profile = PROFILE
-        self.stream = Stream()
+        self.stream = Stream(request_status=not passive_receiver)
         self.allow_dummy = allow_dummy
         if not allow_dummy:
             self.stream.error = 'ESP32 수신기를 연결하고 USB 포트를 선택하세요.'
@@ -538,13 +538,24 @@ def main():
     parser.add_argument('--allow-training', action='store_true')
     parser.add_argument('--real-only', action='store_true',
                         help='Disable synthetic input; only accept a real serial device.')
+    parser.add_argument('--passive-receiver', action='store_true',
+                        help='Read output-only receiver firmware without sending status commands.')
+    parser.add_argument('--receiver-port', default='',
+                        help='Connect this receiver at startup; retry while USB is absent. '
+                             'On Linux, prefer a stable /dev/serial/by-id/ path.')
+    parser.add_argument('--receiver-baud', type=int, default=921600,
+                        choices=(115200, 460800, 921600))
     args = parser.parse_args()
     controller = Controller(args.data_dir, args.allow_training,
-                            allow_dummy=not args.real_only)
+                            allow_dummy=not args.real_only,
+                            passive_receiver=args.passive_receiver)
     server = None
     try:
         server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
         server.controller = controller
+        if args.receiver_port:
+            controller.stream.start('live', args.receiver_port, args.receiver_baud,
+                                    wait_for_device=True)
         print(f'SafeHub CSI ready: http://127.0.0.1:{args.port}', flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
