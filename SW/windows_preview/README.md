@@ -1,6 +1,10 @@
 # SafeHub Windows 런처
 
-이 노트북의 Python CSI 서비스와 Flutter Windows 앱을 함께 실행하는 작은 WinExe입니다. Python 또는 Flutter를 다운로드하거나, 보드를 연결하거나, 모의 신호를 자동으로 시작하지 않습니다. 실제 수어 결과도 생성하지 않습니다.
+Python CSI 서비스와 Flutter Windows 앱의 시작·종료를 관리하는 WinExe입니다. 실제 모드에서 장비가 없으면 연결 대기로 표시합니다.
+
+## 실행 파일 다운로드
+
+[Windows x64 전달용 ZIP](https://github.com/MyeongJun725/2026ESWContest_smart_mutjaengideul/releases/download/safehub-windows-preview-20261004/SafeHub-Windows-x64-20261004.zip)을 모두 압축 풀고 `SafeHub 시작.exe`를 실행합니다. Python·Visual Studio를 별도로 설치할 필요가 없습니다. 실제 CSI 보드와 수어·카메라 서버는 별도로 연결합니다. 아래 빌드 절차는 소스에서 실행본을 만드는 개발자용 안내입니다.
 
 ## 실제 모드로 준비
 
