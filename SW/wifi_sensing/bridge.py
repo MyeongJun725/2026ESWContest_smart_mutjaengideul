@@ -276,13 +276,13 @@ class Controller:
             self.waveform_cache = key, waveform, reason
             return waveform, reason
 
-    def status(self, options=None):
+    def status(self, options=None, *, include_waveform=True):
         from core import estimate_rate
         state = self.stream.snapshot(max_seconds=4.025)
         frames = state.pop('frames')
         waveform = None
         reason = '새 신호 대기'
-        if frames:
+        if frames and include_waveform:
             waveform, reason = self._waveform(state, frames, options)
         # No response may expose a previous result after a disconnect/gap.
         with self.lock:
@@ -504,7 +504,8 @@ class Handler(BaseHTTPRequestHandler):
                 options = {key: query.get(key, ['true'])[0] == 'true'
                            for key in ('denoise', 'normalize', 'pca', 'lowpass')}
                 options['subcarrier'] = max(0, min(51, int(query.get('subcarrier', ['0'])[0])))
-                self.send_json(self.server.controller.status(options))
+                self.send_json(self.server.controller.status(
+                    options, include_waveform=query.get('view') != ['summary']))
             elif route.path == '/ports':
                 from serial.tools import list_ports
                 self.send_json([{'port': p.device, 'name': p.description} for p in list_ports.comports()])
@@ -525,7 +526,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload, dict):
                 raise ValueError('JSON 객체가 필요합니다.')
-            action = self.path.removeprefix('/command/')
+            action = urlparse(self.path).path.removeprefix('/command/')
             self.send_json(self.server.controller.command(action, payload))
         except (ValueError, KeyError, TypeError, OSError) as exc:
             self.send_json({'error': str(exc)}, 400)

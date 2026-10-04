@@ -16,13 +16,15 @@ import '../services/disaster_service.dart';
 import '../services/sign_speech_policy.dart';
 import '../services/stt_service.dart';
 import '../services/tts_service.dart';
-import '../services/voice_recorder_service.dart';
+import '../services/live_caption_service.dart';
 import '../services/wifi_sensing_service.dart';
 import 'connection_settings_page.dart';
 import 'utils/disaster_display.dart';
 import 'widgets/disaster_overlay.dart';
 import 'widgets/appliance_panel.dart';
 import 'widgets/wifi_sensing_panel.dart';
+import 'widgets/wifi_action_status.dart';
+import 'widgets/live_caption_panel.dart';
 
 enum _SafeHubPage { home, signTranslation, appliances, wifiSensing }
 
@@ -47,7 +49,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   late final AnimationController _alertPulseController;
   late final TtsService _ttsService;
   late final SttService _sttService;
-  final VoiceRecorderService _voiceRecorderService = VoiceRecorderService();
+  late final LiveCaptionService _captions;
+  bool _resumeCaptionsAfterAlert = false;
   final CameraStreamService _cameraStreamService = CameraStreamService();
   final WifiSensingService _wifiSensingService = WifiSensingService(
     baseUrl: AppConfig.csiServiceUrl,
@@ -55,6 +58,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
   Timer? _disasterTimer;
   Timer? _signOverlayTimer;
+  Timer? _clockTimer;
+  final _clock = ValueNotifier<DateTime>(DateTime.now());
 
   _SafeHubPage _currentPage = _SafeHubPage.home;
 
@@ -63,12 +68,6 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   String _connectionStatus = '연결 중';
   String _signText = '수어 인식 대기 중';
   String _ttsStatus = '음성 안내 대기';
-  String _sttText = '음성 인식 대기 중';
-  String _sttStatus = '마이크 대기';
-  bool _sttRecording = false;
-  bool _sttBusy = false;
-  bool _sttStarting = false;
-
   static const int _cameraWidth = 320;
   static const int _cameraHeight = 240;
 
@@ -87,6 +86,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   @override
   void initState() {
     super.initState();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _clock.value = DateTime.now();
+    });
 
     _alertPulseController = AnimationController(
       vsync: this,
@@ -96,6 +98,12 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _ttsService = TtsService(baseUrl: AppConfig.ttsServerUrl);
 
     _sttService = SttService(baseUrl: AppConfig.sttServerUrl);
+    _captions = LiveCaptionService(
+        transcribe: _sttService.transcribe,
+        connectStream: _sttService.connectCaptions);
+    if (!AppConfig.localPreview && AppConfig.sttServerUrl.trim().isNotEmpty) {
+      unawaited(_captions.start());
+    }
 
     _mqttReceiver = MqttReceiver(
       broker: AppConfig.mqttBroker,
@@ -409,119 +417,6 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     }
   }
 
-  Future<void> _toggleSttRecording() async {
-    if (_sttBusy || _alertCoordinator.hasActiveAlert) {
-      return;
-    }
-
-    if (AppConfig.sttServerUrl.trim().isEmpty) {
-      setState(() {
-        _sttStatus = 'STT 서버 미설정';
-      });
-      return;
-    }
-
-    if (!_sttRecording) {
-      setState(() {
-        _sttBusy = true;
-        _sttStarting = true;
-        _sttStatus = '마이크 준비 중';
-      });
-      try {
-        await _audioService.stop();
-        if (!mounted || _alertCoordinator.hasActiveAlert) return;
-        await _voiceRecorderService.start();
-
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _sttRecording = true;
-          _sttStatus = '음성을 듣고 있습니다';
-        });
-      } catch (error, stackTrace) {
-        debugPrint('[STT 녹음 시작 실패] $error');
-        debugPrintStack(stackTrace: stackTrace);
-
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _sttRecording = false;
-          _sttStatus = '마이크 시작 실패: $error';
-        });
-      } finally {
-        if (mounted)
-          setState(() {
-            _sttBusy = false;
-            _sttStarting = false;
-          });
-      }
-
-      return;
-    }
-
-    setState(() {
-      _sttRecording = false;
-      _sttBusy = true;
-      _sttStatus = '음성을 글자로 변환 중';
-    });
-
-    try {
-      final audioBytes = await _voiceRecorderService.stopAndRead();
-      final result = await _sttService.transcribe(audioBytes);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _sttText = result;
-        _sttStatus = '음성 인식 완료';
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _sttStatus = '음성 인식 실패';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _sttBusy = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _cancelSttRecording() async {
-    if (!_sttRecording && !_sttStarting) {
-      return;
-    }
-
-    try {
-      await _voiceRecorderService.cancel();
-    } catch (_) {
-      if (mounted) setState(() => _sttStatus = '마이크 중단 상태를 확인하세요');
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _sttRecording = false;
-      _sttBusy = false;
-      _sttStarting = false;
-      _sttStatus = '안전 경보로 녹음 중단';
-    });
-  }
-
   void _handleEvent(Map<String, dynamic> event) {
     if (!mounted) {
       print('[UI] event ignored because widget is not mounted');
@@ -588,7 +483,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
         debugPrint('[음성 안내 중단 실패] $error');
       }),
     );
-    unawaited(_cancelSttRecording());
+    _resumeCaptionsAfterAlert = _resumeCaptionsAfterAlert || _captions.enabled;
+    unawaited(_captions.pause(reason: '안전 경보 확인 후 자막을 재개합니다'));
 
     if (mounted) {
       setState(() {
@@ -603,6 +499,10 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     setState(() {});
 
     _syncAlertPulse();
+    if (!_alertCoordinator.hasActiveAlert && _resumeCaptionsAfterAlert) {
+      _resumeCaptionsAfterAlert = false;
+      unawaited(_captions.start());
+    }
   }
 
   void _restartAlertPulse() {
@@ -652,20 +552,15 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
   @override
   void dispose() {
+    _clockTimer?.cancel();
+    _clock.dispose();
     _wifiSensingService.close();
     _disasterTimer?.cancel();
     _signOverlayTimer?.cancel();
     _speechGeneration++;
     _ttsService.dispose();
     _sttService.dispose();
-    unawaited(
-      _voiceRecorderService.dispose().catchError((
-        Object error,
-        StackTrace stack,
-      ) {
-        debugPrint('[마이크 종료 실패] $error');
-      }),
-    );
+    _captions.dispose();
     unawaited(
       _audioService.dispose().catchError((Object error, StackTrace stack) {
         debugPrint('[음성 안내 종료 실패] $error');
@@ -892,6 +787,11 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
               disaster: activeAlert.data,
               pulseAnimation: _alertPulseController,
               onAcknowledge: _acknowledgeActiveAlert,
+              activityStatus: WifiActionStatus(
+                service: _wifiSensingService,
+                allowDummy: AppConfig.localPreview,
+                compact: true,
+              ),
             ),
         ],
       ),
@@ -1073,14 +973,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     ),
   );
 
-  Widget _headerClock() => StreamBuilder<DateTime>(
-    stream: Stream<DateTime>.periodic(
-      const Duration(seconds: 1),
-      (_) => DateTime.now(),
-    ),
-    initialData: DateTime.now(),
-    builder: (context, snapshot) {
-      final now = snapshot.data!;
+  Widget _headerClock() => ValueListenableBuilder<DateTime>(
+    valueListenable: _clock,
+    builder: (context, now, child) {
       final hh = now.hour.toString().padLeft(2, '0');
       final mm = now.minute.toString().padLeft(2, '0');
       final date =
@@ -1131,7 +1026,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     final sign = SizedBox(height: 660, child: _signPanel());
     final space = SizedBox(height: 490, child: _spacePanel(alert));
     final alarm = SizedBox(height: 490, child: _alarmPanel(alert));
-    final disaster = SizedBox(height: 320, child: _disasterPanel());
+    final captions = SizedBox(height: 340, child: _sttPanel());
     final events = SizedBox(height: 320, child: _eventsPanel());
     const gap = SizedBox(height: 20);
     return SingleChildScrollView(
@@ -1143,7 +1038,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                   Expanded(child: Column(children: [sign, gap, events])),
                   const SizedBox(width: 20),
                   Expanded(
-                    child: Column(children: [space, gap, alarm, gap, disaster]),
+                    child: Column(children: [space, gap, captions, gap, alarm]),
                   ),
                 ],
               )
@@ -1155,7 +1050,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                   gap,
                   alarm,
                   gap,
-                  disaster,
+                  captions,
                   gap,
                   events,
                 ],
@@ -1174,7 +1069,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
           children: [
             Expanded(flex: 6, child: _spacePanel(alert)),
             const SizedBox(height: 20),
-            Expanded(flex: 4, child: _disasterPanel()),
+            Expanded(flex: 4, child: _sttPanel()),
           ],
         ),
       ),
@@ -1316,32 +1211,24 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   );
 
   Widget _spacePanel(SafeHubAlert? alert) {
-    final rooms =
-        <(String, String, IconData)>[
-              ('bedroom', '침실', Icons.bed_outlined),
-              ('bathroom', '화장실', Icons.bathroom_outlined),
-              ('livingroom', '거실', Icons.weekend_outlined),
-            ]
-            .where((room) => _selectedRoom == 'all' || _selectedRoom == room.$1)
-            .toList();
     return _glass(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _heading(Icons.sensors_outlined, '공간별 상태'),
+          _heading(Icons.sensors_outlined, '재실 · 활동 상태'),
+          const SizedBox(height: 10),
+          Expanded(
+            child: WifiActionStatus(
+              service: _wifiSensingService,
+              allowDummy: AppConfig.localPreview,
+            ),
+          ),
           const SizedBox(height: 10),
           _action(
-            '와이파이 센싱',
+            '신호 수집 · 모델 관리',
             Icons.sensors_rounded,
             () => setState(() => _currentPage = _SafeHubPage.wifiSensing),
           ),
-          const SizedBox(height: 18),
-          for (var i = 0; i < rooms.length; i++) ...[
-            Expanded(
-              child: _spaceRow(rooms[i].$1, rooms[i].$2, rooms[i].$3, alert),
-            ),
-            if (i < rooms.length - 1) const SizedBox(height: 10),
-          ],
           if (_selectedRoom == 'all' || _selectedRoom == 'livingroom') ...[
             const SizedBox(height: 10),
             _action(
@@ -1356,140 +1243,54 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     );
   }
 
-  Widget _spaceRow(String id, String name, IconData icon, SafeHubAlert? alert) {
-    final fall =
-        alert != null &&
-        alert.kind == AlertKind.fall &&
-        alert.data['location'] == id;
-    final living = id == 'livingroom';
-    final status =
-        AppConfig.localPreview
-            ? '장비 미연결'
-            : fall
-            ? '낙상 감지'
-            : !_mqttConnected
-            ? '연결 확인'
-            : living
-            ? '수어 번역'
-            : '이벤트 대기';
-    final subtitle =
-        AppConfig.localPreview
-            ? '장비 연결 후 사용 가능'
-            : fall
-            ? '즉시 확인이 필요합니다'
-            : !_mqttConnected
-            ? AppConfig.mqttConfigured
-                ? 'MQTT 연결 대기'
-                : 'MQTT 주소 미설정'
-            : living
-            ? '번역 결과 수신 영역'
-            : 'Wi-Fi CSI · 센서 상태 미확인';
-    final color =
-        fall
-            ? const Color(0xFFFF9A93)
-            : !_mqttConnected
-            ? _amber
-            : living
-            ? _blue
-            : _muted;
-    return _glass(
-      inset: true,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 29, color: _muted),
-          const SizedBox(width: 14),
-          _text(name, size: 20, weight: FontWeight.w600),
-          const SizedBox(width: 20),
-          Expanded(
+  Widget _alarmPanel(SafeHubAlert? alert) => _glass(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _heading(Icons.shield_outlined, '경보 · 재난 알림'),
+        const SizedBox(height: 16),
+        Expanded(
+          child: SingleChildScrollView(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _text(status, size: 20, color: color, weight: FontWeight.w600),
-                const SizedBox(height: 4),
-                _text(subtitle, size: 14, color: _muted),
+                _systemRow(
+                  Icons.warning_amber_rounded,
+                  '화면 경보',
+                  alert != null
+                      ? '알림 발생'
+                      : _mqttConnected
+                      ? '수신 대기'
+                      : '연결 확인 필요',
+                  alert != null ? _amber : _muted,
+                ),
+                const SizedBox(height: 18),
+                _disasterSummary(),
+                const SizedBox(height: 18),
+                _systemRow(
+                  Icons.sensors_outlined,
+                  '초인종 · 세탁기',
+                  '이벤트 연결 필요',
+                  _muted,
+                ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _alarmPanel(SafeHubAlert? alert) {
-    final active = alert != null;
-    return _glass(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _heading(Icons.shield_outlined, '경보 시스템'),
-          const SizedBox(height: 18),
-          Expanded(
-            child: _systemRow(
-              Icons.warning_amber_rounded,
-              '화면 경보',
-              AppConfig.localPreview || !_mqttConnected
-                  ? '수신 대기'
-                  : active
-                  ? '알림 발생'
-                  : '대기 중',
-              AppConfig.localPreview || !_mqttConnected
-                  ? _muted
-                  : active
-                  ? _amber
-                  : _green,
-            ),
-          ),
-          const Divider(color: Color(0x22FFFFFF), height: 1),
-          Expanded(
-            child: _systemRow(
-              Icons.volume_up_outlined,
-              '음성 안내',
-              AppConfig.ttsServerUrl.trim().isEmpty ? '미설정' : _ttsStatus,
-              _muted,
-            ),
-          ),
-          const Divider(color: Color(0x22FFFFFF), height: 1),
-          Expanded(
-            child: _systemRow(
-              Icons.sensors_outlined,
-              '외부 경보 장치',
-              '상태 미연동',
-              _muted,
-            ),
-          ),
-          const Divider(color: Color(0x33FFFFFF), height: 1),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const Icon(Icons.wifi, color: _blue, size: 25),
-              const SizedBox(width: 12),
-              Expanded(child: _text('MQTT 브로커', size: 17)),
-              _dot(
-                AppConfig.localPreview
-                    ? '체험 모드'
-                    : _mqttConnected
-                    ? '연결됨'
-                    : _connectionStatus,
-                _mqttConnected ? _green : _amber,
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          _text(
-            AppConfig.localPreview
-                ? '장비 연결 전에는 메시지를 주고받지 않습니다'
-                : !AppConfig.mqttConfigured
-                ? '연결 설정에서 MQTT 브로커 주소를 입력하세요'
-                : AppConfig.mqttBroker + ':' + AppConfig.mqttPort.toString(),
-            size: 14,
-            color: _muted,
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+        const Divider(color: Color(0x33FFFFFF), height: 24),
+        _systemRow(
+          Icons.wifi,
+          '알림 연결',
+          AppConfig.localPreview
+              ? '체험 모드'
+              : _mqttConnected
+              ? '연결됨'
+              : _connectionStatus,
+          _mqttConnected ? _green : _amber,
+        ),
+      ],
+    ),
+  );
 
   Widget _systemRow(IconData icon, String label, String value, Color color) =>
       Row(
@@ -1502,70 +1303,60 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
         ],
       );
 
-  Widget _disasterPanel() {
+  Widget _disasterSummary() {
     final disaster = _latestDisaster;
-    return _glass(
+    final color =
+        disaster == null
+            ? _muted
+            : _disasterAccent(getDisasterSeverity(disaster));
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0x33202020),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(.35)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _heading(
-            Icons.campaign_outlined,
-            '재난 정보',
-            trailing:
-                disaster == null
-                    ? null
-                    : _more(() => _showDisasterDetails(disaster)),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: _glass(
-              inset: true,
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  Icon(
-                    disaster == null
-                        ? Icons.info_outline
-                        : _disasterIcon(disaster['DST_SE_NM']?.toString()),
-                    size: 34,
-                    color:
-                        disaster == null
-                            ? _muted
-                            : _disasterAccent(getDisasterSeverity(disaster)),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _text(
-                          disaster == null
-                              ? '수신된 정보가 없습니다'
-                              : disaster['DST_SE_NM']?.toString() ?? '재난 안내',
-                          size: 20,
-                          weight: FontWeight.w600,
-                          lines: 2,
-                        ),
-                        const SizedBox(height: 8),
-                        _text(
-                          disaster == null
-                              ? AppConfig.localPreview
-                                  ? '체험 모드에서는 실시간 재난 정보를 받지 않습니다'
-                                  : '재난 API 연결 확인 필요'
-                              : disaster['MSG_CN']?.toString() ??
-                                  '상세 정보를 확인해 주세요',
-                          size: 15,
-                          color: _muted,
-                          lines: 3,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          Row(
+            children: [
+              Icon(
+                _disasterIcon(disaster?['DST_SE_NM']?.toString()),
+                color: color,
+                size: 24,
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(child: _text('재난경보', size: 18, weight: FontWeight.w600)),
+              if (disaster != null) _more(() => _showDisasterDetails(disaster)),
+            ],
           ),
+          const SizedBox(height: 12),
+          _text(
+            disaster == null
+                ? '수신된 재난 정보가 없습니다'
+                : disaster['DST_SE_NM']?.toString() ?? '재난 안내',
+            size: 17,
+            weight: FontWeight.w600,
+            lines: 2,
+          ),
+          const SizedBox(height: 8),
+          _text(
+            disaster == null
+                ? AppConfig.localPreview
+                    ? '체험 모드에서는 재난 정보를 수신하지 않습니다'
+                    : AppConfig.disasterConfigured
+                    ? '새 재난 정보 수신 대기'
+                    : '재난 API 연결 설정 필요'
+                : disaster['MSG_CN']?.toString() ?? '상세 정보를 확인해 주세요',
+            size: 15,
+            color: _muted,
+            lines: 4,
+          ),
+          if (disaster?['CRT_DT'] != null) ...[
+            const SizedBox(height: 8),
+            _text(disaster!['CRT_DT'].toString(), size: 12, color: _muted),
+          ],
         ],
       ),
     );
@@ -1942,93 +1733,13 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     },
   );
 
-  Widget _sttPanel() {
-    final statusColor =
-        _sttRecording
-            ? const Color(0xFFFF9A93)
-            : _sttBusy
-            ? _amber
-            : _sttStatus == '음성 인식 완료'
-            ? _green
-            : _muted;
-
-    final buttonLabel =
-        _sttStarting
-            ? '마이크 준비 중'
-            : _sttBusy
-            ? '음성 변환 중'
-            : _sttRecording
-            ? '녹음 종료 및 변환'
-            : '음성 녹음 시작';
-
-    final buttonIcon =
-        _sttBusy
-            ? Icons.hourglass_top_rounded
-            : _sttRecording
-            ? Icons.stop_circle_outlined
-            : Icons.mic_none_rounded;
-
-    return _glass(
-      inset: true,
-      padding: const EdgeInsets.all(22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.record_voice_over_outlined,
-                color: statusColor,
-                size: 23,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _text('음성 → 텍스트', size: 18, weight: FontWeight.w600),
-              ),
-              const SizedBox(width: 12),
-              Flexible(
-                child: _text(
-                  _sttStatus,
-                  size: 14,
-                  color: statusColor,
-                  lines: 2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: Text(
-                  _sttText,
-                  key: ValueKey(_sttText),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _sttText == '음성 인식 대기 중' ? _muted : _ink,
-                    fontSize: _sttText == '음성 인식 대기 중' ? 22 : 34,
-                    height: 1.3,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _action(
-            buttonLabel,
-            buttonIcon,
-            _sttBusy ? () {} : () => unawaited(_toggleSttRecording()),
-            primary: !_sttBusy,
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _sttPanel() => _glass(
+    child: LiveCaptionPanel(
+      service: _captions,
+      configured: AppConfig.sttServerUrl.trim().isNotEmpty,
+      preview: AppConfig.localPreview,
+    ),
+  );
 
   Widget _buildFallOverlay(Map<String, dynamic> event) {
     final eventName = _getEventName(event);

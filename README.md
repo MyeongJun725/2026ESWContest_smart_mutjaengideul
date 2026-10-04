@@ -6,7 +6,12 @@
 
 [SW/wifi_sensing](SW/wifi_sensing/README.md)은 현재 노트북의 **52채널/PCA 1성분/4초 모델**을 기존 SafeHub 수어 UI 안에서 사용하는 통합 작업입니다. 아래의 WiFi-CSI-Sensing 폴더는 이전 독립 앱 구현이며 서로 다른 모델 버전을 섞지 않습니다.
 
-통합 화면은 수집·전처리 관찰·기록 선택·PC 학습·현재 행동 판단을 제공합니다. Raspberry Pi/ATLAS 실기기 배포와 전역 MQTT 안전 경보 연결은 아직 검증 전입니다. [통합 설계와 다음 검증](docs/wifi-csi/UI_INTEGRATION.md)을 참고하세요.
+통합 화면은 수집·전처리 관찰·기록 선택·PC 학습·현재 행동 판단을 제공합니다. ATLAS RPi5에서 실제 C6 신호 수집과 화면 조작, RPi4 수어 결과 전달을 확인했습니다. 현장 행동 정확도와 전역 MQTT 안전 경보 연결은 별도 검증 대상입니다. [ATLAS 검증 범위](docs/wifi-csi/ATLAS_VALIDATION.md)와 [통합 설계](docs/wifi-csi/UI_INTEGRATION.md)를 참고하세요.
+
+메인 화면에 행동 예측과 연속 음성 자막을 표시하고 경보·재난 알림을 통합했습니다.
+음성 인식은 [Pi 내부의 한국어 스트리밍 서버](SW/local_stt/README.md)를 사용합니다.
+[Home Assistant·LG ThinQ](docs/home-assistant/STATUS.md)는 토큰 설정까지 완료했으며,
+Cloud Gateway 등록과 세탁 완료 이벤트 연결은 아직 완료하지 않았습니다.
 
 Windows 실행 방법은 [통합 앱 빌드](SW/windows_preview/README.md)에 있습니다. [실제 모드](docs/wifi-csi/REAL_MODE.md)는 앱에서 장비 주소를 저장하며, 장비가 없으면 연결 대기로 표시합니다. 별도 체험 빌드에서만 모의 신호를 시작할 수 있습니다.
 

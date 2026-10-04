@@ -17,6 +17,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+!SW/safehub_app/third_party/record_atlas/lib/
+!SW/safehub_app/third_party/record_atlas/lib/**
 parts/
 sdist/
 var/
@@ -276,3 +278,8 @@ SW/windows_preview/build/
 **/connection-settings.json
 **/connection-settings.env
 **/connection-settings.*.tmp
+
+# Local speech model and recordings.
+SW/local_stt/korean-streaming-174m/
+SW/local_stt/venv/
+SW/local_stt/*.wav

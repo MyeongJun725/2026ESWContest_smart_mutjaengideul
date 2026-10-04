@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:safehub_app/config/app_config.dart';
 import 'package:safehub_app/main.dart';
+import 'package:safehub_app/services/live_caption_service.dart';
+import 'package:safehub_app/ui/widgets/live_caption_panel.dart';
 
 import 'local_preview_test.dart' show mockAudioPlugins;
 
@@ -74,30 +76,27 @@ void main() {
       AppConfig.resetForTesting();
       await directory.delete(recursive: true);
     });
-    await tester.pumpWidget(const SafeHubApp());
-    await tester.pump();
-    await tester.ensureVisible(find.text('의사소통 화면 열기'));
-    await tester.tap(find.text('의사소통 화면 열기'));
-    await tester.pump();
-    await tester.ensureVisible(find.text('음성 녹음 시작'));
-    final startPosition = tester.getCenter(find.text('음성 녹음 시작'));
-    await tester.tapAt(startPosition);
-    await tester.pump();
-    await tester.tapAt(startPosition);
+    final captions = LiveCaptionService(transcribe: (_) async => '');
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: LiveCaptionPanel(service: captions, configured: true))));
+    unawaited(captions.start());
     await tester.pump();
     expect(find.text('마이크 준비 중'), findsWidgets);
+    expect(find.text('음성 녹음 시작'), findsNothing);
     expect(permissionRequests, 1);
     permission.complete(false);
     await tester.pump();
     await tester.pump();
-    expect(find.text('음성 녹음 시작'), findsOneWidget);
+    expect(find.text('자막 다시 시작'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
+    await captions.close();
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
 
   for (final size in [
+    const Size(1920, 1080),
     const Size(1024, 600),
     const Size(800, 480),
     const Size(600, 800),
@@ -118,12 +117,13 @@ void main() {
       );
       await tester.pump();
       expect(tester.takeException(), isNull);
+      expect(find.text('경보 · 재난 알림'), findsOneWidget);
+      expect(find.text('실시간 음성 자막'), findsOneWidget);
       if (Platform.environment['SAFEHUB_CAPTURE_UI'] == '1') {
         await tester.pump(const Duration(milliseconds: 400));
         await tester.runAsync(() async {
-          final boundary =
-              captureKey.currentContext!.findRenderObject()!
-                  as RenderRepaintBoundary;
+          final boundary = captureKey.currentContext!.findRenderObject()!
+              as RenderRepaintBoundary;
           final image = await boundary.toImage();
           final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
           await File(

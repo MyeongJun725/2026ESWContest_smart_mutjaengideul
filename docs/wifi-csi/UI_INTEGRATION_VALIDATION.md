@@ -2,6 +2,19 @@
 
 검증 기준일: 2026-10-04 (Asia/Seoul)
 
+## 2026-10-05 소스 게시 전 재검사
+
+- 최신 소스를 새 호스트 테스트 폴더로 복사해 Flutter 테스트 162개를 통과했다.
+- Windows Python CSI 테스트 52개, ATLAS 녹음 어댑터의 모의 프로세스 테스트 2개를 통과했다.
+- 로컬 STT Python 소스 2개의 구문 검사를 통과했다. 이 검사는 음성 정확도 시험이 아니다.
+- Flutter 정적 검사에서 미사용 import를 제거했다. 오류·경고와 별개로 스타일·deprecated API 안내가 남아 있어 `--no-fatal-infos`로 검사한다.
+- 게시 파일에서 토큰·개인 키·비밀번호 대입 패턴을 검사했다. 개인 기록·모델·음성,
+  Home Assistant 계정 설정과 비공개 ATLAS 자료는 포함하지 않았다.
+
+아래 배포 패키지 검사는 이전 Windows 릴리스를 대상으로 한 결과다. 이번 게시로
+그 ZIP이 갱신되지는 않는다. 실기기 결과와 남은 한계는 [ATLAS 검증](ATLAS_VALIDATION.md),
+로컬 음성 모델과 측정 조건은 [STT 문서](../../SW/local_stt/README.md)를 참고한다.
+
 ## 구성과 범위
 
 - UI 기준: 팀 `feature/SW`, commit `110a09e3063d629bc54676d157d940c347ebd1a5`

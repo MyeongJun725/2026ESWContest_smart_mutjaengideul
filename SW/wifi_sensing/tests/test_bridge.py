@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
+from http.client import HTTPConnection
 import json
 import os
 from pathlib import Path
@@ -73,6 +74,20 @@ class IntegrationTests(unittest.TestCase):
             raw = self.app.status(dict(denoise=False, normalize=False, pca=False, lowpass=False))['waveform']['signal']
             self.assertFalse(np.array_equal(shown, raw))
             self.assertEqual(len(raw), 240)
+
+    def test_home_summary_skips_waveform_and_clears_stale_result(self):
+        self.attach(self.frames())
+        with patch.object(self.app.stream, 'now', return_value=14), \
+                patch.object(self.app, '_waveform') as waveform:
+            summary = self.app.status(include_waveform=False)
+            self.assertTrue(summary['fresh'])
+            self.assertIsNone(summary['waveform'])
+            waveform.assert_not_called()
+        self.app.recognition.result = {'label': 'old result'}
+        with patch.object(self.app.stream, 'now', return_value=20):
+            summary = self.app.status(include_waveform=False)
+            self.assertFalse(summary['fresh'])
+            self.assertIsNone(summary['recognition']['result'])
 
     def test_03_capture_saves_and_batch_delete_restores(self):
         stream = self.app.stream
@@ -449,6 +464,31 @@ class IntegrationTests(unittest.TestCase):
                     main()
             controller.return_value.stream.start.assert_not_called()
             controller.return_value.close.assert_called_once()
+
+    def test_27_native_client_empty_query_does_not_change_command_name(self):
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        server.controller = self.app
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = HTTPConnection('127.0.0.1', server.server_port, timeout=5)
+        name = 'Native transport check'
+        try:
+            for action, suffix, present in [('add_behavior', '?', True),
+                                             ('remove_behavior', '?client=native', False)]:
+                connection.request('POST', '/command/' + action + suffix,
+                                   json.dumps({'name': name}),
+                                   {'Content-Type': 'application/json'})
+                response = connection.getresponse()
+                result = json.loads(response.read())
+                self.assertEqual(response.status, 200, result)
+                self.assertTrue(result['ok'])
+                self.assertEqual(name in self.app.status()['behaviors'], present)
+        finally:
+            connection.close()
+            self.app.command('remove_behavior', {'name': name})
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
 
 if __name__ == '__main__':

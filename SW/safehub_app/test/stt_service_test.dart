@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -6,7 +7,33 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:safehub_app/services/stt_service.dart';
 
+class HangingBodyClient extends http.BaseClient {
+  final body = StreamController<List<int>>();
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async =>
+      http.StreamedResponse(body.stream, 200);
+}
+
 void main() {
+  test('no-speech response is quiet, not a server failure', () async {
+    final service = SttService(
+        baseUrl: 'http://localhost',
+        client: MockClient((_) async => http.Response('no speech', 422)));
+    expect(await service.transcribe(Uint8List.fromList([1])), isEmpty);
+    service.dispose();
+  });
+
+  test('timeout covers a stalled response body', () async {
+    final client = HangingBodyClient();
+    final service = SttService(
+        baseUrl: 'http://localhost',
+        client: client,
+        timeout: const Duration(milliseconds: 20));
+    await expectLater(service.transcribe(Uint8List.fromList([1])),
+        throwsA(isA<TimeoutException>()));
+    await client.body.close();
+    service.dispose();
+  });
   test('WAV 파일을 multipart로 전송하고 text를 반환한다', () async {
     final client = MockClient((request) async {
       expect(request.method, 'POST');

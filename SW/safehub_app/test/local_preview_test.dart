@@ -70,11 +70,11 @@ void main() {
       );
       expect(find.text('연결 설정'), findsOneWidget);
       expect(find.text('수어 인식 대기 중'), findsOneWidget);
-      expect(find.text('와이파이 센싱'), findsOneWidget);
+      expect(find.text('신호 수집 · 모델 관리'), findsOneWidget);
       expect(find.text('연결 중'), findsNothing);
       expect(tester.takeException(), isNull);
 
-      await tester.tap(find.text('와이파이 센싱'));
+      await tester.tap(find.text('신호 수집 · 모델 관리'));
       await tester.pump();
       expect(find.text('1. 신호 수집'), findsOneWidget);
       expect(find.text('2. 기록 · 학습'), findsOneWidget);

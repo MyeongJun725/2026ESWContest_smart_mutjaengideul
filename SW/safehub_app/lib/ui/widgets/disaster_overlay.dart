@@ -7,12 +7,14 @@ class DisasterOverlay extends StatelessWidget {
   final Map<String, dynamic> disaster;
   final Animation<double> pulseAnimation;
   final VoidCallback onAcknowledge;
+  final Widget? activityStatus;
 
   const DisasterOverlay({
     super.key,
     required this.disaster,
     required this.pulseAnimation,
     required this.onAcknowledge,
+    this.activityStatus,
   });
 
   @override
@@ -167,6 +169,10 @@ class DisasterOverlay extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 24),
+                        if (activityStatus != null) ...[
+                          activityStatus!,
+                          const SizedBox(height: 24),
+                        ],
                         Text(
                           date,
                           style: const TextStyle(

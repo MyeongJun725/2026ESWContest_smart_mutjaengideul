@@ -77,3 +77,13 @@ journalctl -u safehub-csi -u safehub-mqtt -u safehub-ui -n 50
 공유 라이브러리를 전용 폴더에 풀어 사용한다. 시스템 라이브러리를 덮어쓰지
 않는다. 원본 패키지 목록·버전·SHA-256과 저작권 문서는 설치 폴더에 보존한다.
 실제 CSI 소스 및 Python 의존성은 `../wifi_sensing`의 규격을 따른다.
+## ATLAS UI 녹음 플러그인 소스
+
+저장소의 `record_atlas` 패키지는 pubspec과 라이선스만 추적되어 Dart 구현이
+누락되어 있었다. `record_linux` 1.2.0의 BSD-3-Clause 구현을 기반으로
+`RecordAtlas`를 복구하고 `lib/` 제외 규칙에 예외를 추가했다.
+출처: [record_linux 1.2.0](https://pub.dev/packages/record_linux/versions/1.2.0).
+
+ATLAS의 `/data/share/safehub-tools/parecord`를 사용하며, 앱에서 쓰는 16kHz mono
+WAV는 parecord가 직접 저장한다. 종료 시 프로세스가 파일을 마무리할 때까지 기다린다.
+외부 STT/TTS 서버와 실제 마이크·스피커까지의 동작은 UI·CSI 검증과 구분한다.

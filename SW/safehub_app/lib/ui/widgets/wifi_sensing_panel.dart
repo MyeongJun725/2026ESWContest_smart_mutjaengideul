@@ -43,7 +43,11 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
       (_) => _refresh(),
     );
     _portsTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (_page == 0 && _state?['connected'] != true && !_busy) _refreshPorts();
+      if (_page == 0 &&
+          (_state?['connected'] != true || _portsError.isNotEmpty) &&
+          !_busy) {
+        _refreshPorts();
+      }
     });
   }
 
