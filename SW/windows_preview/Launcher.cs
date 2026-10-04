@@ -69,7 +69,7 @@ internal static class Launcher
                 backend = StartBackend(config);
                 job.Add(backend);
                 Log("직접 시작한 CSI 서비스 PID=" + backend.Id);
-                WaitForService(config.Port, backend, progress);
+                WaitForService(config.Port, backend, progress, config.StartupTimeoutSeconds);
                 if (progress.CancelRequested) throw new OperationCanceledException();
 
                 app = Process.Start(AppStartInfo(config));
@@ -203,7 +203,7 @@ internal static class Launcher
         ProcessStartInfo info = new ProcessStartInfo
         {
             FileName = config.PythonExe,
-            Arguments = "-u " + Quote(config.BridgeScript) + " --port " + config.Port +
+            Arguments = (config.IsolatedPython ? "-I " : "") + "-X utf8 -u " + Quote(config.BridgeScript) + " --port " + config.Port +
                 " --allow-training --data-dir " + Quote(config.DataDir) +
                 (config.RealOnly ? " --real-only" : ""),
             WorkingDirectory = Path.GetDirectoryName(config.BridgeScript),
@@ -222,10 +222,10 @@ internal static class Launcher
         return info;
     }
 
-    private static void WaitForService(int port, Process backend, StartupForm progress)
+    private static void WaitForService(int port, Process backend, StartupForm progress, int timeoutSeconds)
     {
         Stopwatch elapsed = Stopwatch.StartNew();
-        while (elapsed.Elapsed < TimeSpan.FromSeconds(45))
+        while (elapsed.Elapsed < TimeSpan.FromSeconds(timeoutSeconds))
         {
             Application.DoEvents();
             if (progress.CancelRequested) throw new OperationCanceledException();
@@ -242,7 +242,7 @@ internal static class Launcher
             progress.SetElapsed((int)elapsed.Elapsed.TotalSeconds);
             Thread.Sleep(200);
         }
-        throw new InvalidOperationException("45초 동안 와이파이 센싱 서비스를 준비하지 못했습니다.\n" +
+        throw new InvalidOperationException(timeoutSeconds + "초 동안 와이파이 센싱 서비스를 준비하지 못했습니다.\n" +
             "잠시 후 다시 실행해 주세요. 계속되지 않으면 실행 기록을 확인해 주세요.");
     }
 
@@ -310,8 +310,8 @@ internal static class Launcher
     private sealed class Config
     {
         internal string PythonExe, PythonSitePackages, BridgeScript, DataDir, AppExe, SettingsFile;
-        internal int Port;
-        internal bool RealOnly;
+        internal int Port, StartupTimeoutSeconds;
+        internal bool RealOnly, IsolatedPython;
 
         internal static Config Read(string path)
         {
@@ -328,7 +328,8 @@ internal static class Launcher
                 BridgeScript = ReadPath(values, "bridge_script", false),
                 DataDir = ReadPath(values, "data_dir", null),
                 AppExe = ReadPath(values, "app_exe", false),
-                Port = 8765
+                Port = 8765,
+                StartupTimeoutSeconds = 45
             };
             if (values.ContainsKey("port") &&
                 (!Int32.TryParse(Convert.ToString(values["port"]), out config.Port) || config.Port < 1 || config.Port > 65535))
@@ -339,6 +340,16 @@ internal static class Launcher
                     throw new InvalidOperationException("config.json의 real_only는 true 또는 false여야 합니다.");
                 config.RealOnly = (bool)values["real_only"];
             }
+            if (values.ContainsKey("isolated_python"))
+            {
+                if (!(values["isolated_python"] is bool))
+                    throw new InvalidOperationException("isolated_python은 true 또는 false여야 합니다.");
+                config.IsolatedPython = (bool)values["isolated_python"];
+            }
+            if (values.ContainsKey("startup_timeout_seconds") &&
+                (!Int32.TryParse(Convert.ToString(values["startup_timeout_seconds"]), out config.StartupTimeoutSeconds)
+                 || config.StartupTimeoutSeconds < 15 || config.StartupTimeoutSeconds > 300))
+                throw new InvalidOperationException("startup_timeout_seconds는 15~300 사이 정수여야 합니다.");
             if (values.ContainsKey("settings_file"))
                 config.SettingsFile = ReadPath(values, "settings_file", false);
             return config;
@@ -351,7 +362,7 @@ internal static class Launcher
                 throw new InvalidOperationException("config.json에 " + key + " 경로가 필요합니다.");
             string path = (string)raw;
             if (!Path.IsPathRooted(path))
-                throw new InvalidOperationException(key + "에는 전체 경로를 입력해 주세요.");
+                path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, path);
             path = Path.GetFullPath(path);
             if (directory == true && !Directory.Exists(path))
                 throw new InvalidOperationException("필요한 폴더가 없습니다: " + key + "\n" + path);
