@@ -6,7 +6,7 @@ This measures this host's software lifecycle, not RF behavior or Raspberry Pi sp
 import argparse
 from collections import deque
 import ctypes
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 from http.server import ThreadingHTTPServer
 import json
@@ -20,6 +20,89 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bridge import Controller, Handler, RUNTIME
+
+
+class SoakInterrupted(Exception):
+    def __init__(self, details):
+        super().__init__(details['reason'])
+        self.details = details
+
+
+def host_clocks():
+    """Keep sleep-inclusive elapsed time separate from Windows awake time.
+
+    Microsoft documents GetTickCount64 as including sleep/hibernation, while
+    QueryUnbiasedInterruptTime excludes them. Neither is changed by wall-clock edits.
+    https://learn.microsoft.com/windows/win32/sysinfo/windows-time
+    """
+    if os.name == 'nt':
+        tick = ctypes.windll.kernel32.GetTickCount64
+        tick.argtypes = []
+        tick.restype = ctypes.c_ulonglong
+        unbiased = ctypes.windll.kernel32.QueryUnbiasedInterruptTime
+        unbiased.argtypes = [ctypes.POINTER(ctypes.c_ulonglong)]
+        unbiased.restype = ctypes.c_int
+
+        def awake():
+            value = ctypes.c_ulonglong()
+            if not unbiased(ctypes.byref(value)):
+                raise ctypes.WinError()
+            return value.value / 10_000_000
+
+        return lambda: tick() / 1000, awake, 'windows_tick_and_unbiased'
+    if hasattr(time, 'CLOCK_BOOTTIME'):
+        return lambda: time.clock_gettime(time.CLOCK_BOOTTIME), None, 'boottime_only'
+    # A long wall-clock gap is unobserved time, not proof of system suspend.
+    return time.time, None, 'wall_clock_only'
+
+
+class SoakClock:
+    def __init__(self, seconds, wall_clock=None, awake_clock=None):
+        if wall_clock is None:
+            wall_clock, awake_clock, self.source = host_clocks()
+        else:
+            self.source = 'injected_test_clock'
+        self.wall_clock, self.awake_clock = wall_clock, awake_clock
+        self.seconds = seconds
+        self.started = self.previous_wall = wall_clock()
+        self.awake_started = self.previous_awake = awake_clock() if awake_clock else None
+        self.suspended_seconds = 0.0
+        self.events = deque(maxlen=20)
+
+    def elapsed(self):
+        return max(0.0, self.wall_clock() - self.started)
+
+    def remaining(self):
+        return max(0.0, self.seconds - self.elapsed())
+
+    def metrics(self):
+        return {'clock_source': self.source, 'wall_elapsed_seconds': round(self.elapsed(), 3),
+                'awake_elapsed_seconds': (round(self.awake_clock() - self.awake_started, 3)
+                                          if self.awake_clock else None),
+                'suspend_seconds_from_clocks': round(self.suspended_seconds, 3),
+                'observation_gaps': list(self.events)}
+
+    def check(self):
+        wall = self.wall_clock()
+        awake = self.awake_clock() if self.awake_clock else None
+        wall_delta = wall - self.previous_wall
+        awake_delta = awake - self.previous_awake if awake is not None else None
+        suspended = max(0.0, wall_delta - awake_delta) if awake_delta is not None else None
+        self.previous_wall, self.previous_awake = wall, awake
+        reason = ('clock_discontinuity' if wall_delta < -1 else
+                  'suspend' if suspended is not None and suspended >= 1 else 'unobserved_gap')
+        if suspended is not None and suspended >= 1:
+            self.suspended_seconds += suspended
+        if wall_delta >= 3 or reason in ('suspend', 'clock_discontinuity'):
+            event = {'elapsed_seconds': round(wall - self.started, 3), 'reason': reason,
+                     'wall_gap_seconds': round(wall_delta, 3),
+                     'awake_gap_seconds': round(awake_delta, 3) if awake_delta is not None else None,
+                     'suspend_seconds_from_clocks': round(suspended, 3) if suspended is not None else None}
+            self.events.append(event)
+            # Ordinary multi-second load is recorded without calling it suspend.
+            # A continuous run cannot be certified across a long unobserved gap.
+            if reason in ('suspend', 'clock_discontinuity') or wall_delta >= 15:
+                raise SoakInterrupted(event)
 
 
 def rss_bytes():
@@ -63,7 +146,9 @@ def main():
     root = Path(__file__).resolve().parents[1]
     checkpoints, errors = deque(maxlen=121), deque(maxlen=20)
     source_hashes = {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-                     for name in ('bridge.py', 'stream.py', 'runtime/LOCAL_SOURCE_MANIFEST.json')}
+                     for name in ('bridge.py', 'stream.py', 'runtime/LOCAL_SOURCE_MANIFEST.json',
+                                  'runtime/LOCAL_MODIFICATIONS.json', 'runtime/soom_engine.py',
+                                  'tests/soak_bridge.py')}
     result = {'scope': 'synthetic input only; current host; no physical devices',
               'source_sha256': source_hashes, 'requested_seconds': args.seconds,
               'started_utc': datetime.now(timezone.utc).isoformat(),
@@ -78,9 +163,10 @@ def main():
     capture_started = False
     started = time.perf_counter()
     cpu_started = time.process_time()
+    run_clock = None
 
     def write_report(status):
-        elapsed = time.perf_counter() - started
+        elapsed = run_clock.elapsed() if run_clock else time.perf_counter() - started
         with arrival_lock:
             arrivals = dict(observed)
         sample = {'elapsed_seconds': round(elapsed, 3), 'rss_bytes': rss_bytes(),
@@ -102,6 +188,17 @@ def main():
         checkpoints.append(sample)
         result.update(status=status, latest=sample, checkpoints=list(checkpoints),
                       errors=list(errors), saved_record_checks=saved_checks)
+        if run_clock is not None:
+            result['clock_diagnostics'] = run_clock.metrics()
+        result['timing_warnings'] = [name for name, condition in (
+            ('append_gap_over_150ms', arrivals['max_arrival_gap_seconds'] > .15),
+            ('append_gap_over_freshness_750ms', arrivals['max_arrival_gap_seconds'] > .75),
+            ('stale_input_observed', stale_polls > 0),
+            ('poll_exceeded_500ms_target', max_poll_seconds > .5),
+            ('poll_exceeded_app_5s_timeout', max_poll_seconds > 5),
+        ) if condition]
+        result['functional_result'] = ('INCOMPLETE' if status == 'INTERRUPTED' else
+                                       'FAIL' if failures else 'PASS' if status == 'PASS' else 'RUNNING')
         temporary = output.with_name(output.name + '.tmp')
         temporary.write_text(json.dumps(result, indent=2), encoding='utf-8')
         temporary.replace(output)
@@ -111,22 +208,19 @@ def main():
         with tempfile.TemporaryDirectory(prefix='safehub-soak-') as folder:
             try:
                 controller = Controller(folder, allow_training=False, allow_dummy=True)
-                from soom_engine import verify_vendor
-                verify_vendor()
-                manifest = json.loads((RUNTIME / 'LOCAL_SOURCE_MANIFEST.json').read_text())
-                assert all(hashlib.sha256((RUNTIME / name).read_bytes()).hexdigest() == digest
-                           for name, digest in manifest['files'].items())
+                from soom_engine import verify_runtime
+                result['runtime_verification'] = verify_runtime()
                 server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
                 server.controller = controller
                 server_thread = threading.Thread(target=server.serve_forever, daemon=True)
                 server_thread.start()
                 base = f'http://127.0.0.1:{server.server_port}'
 
-                def request(path, body=None):
+                def request(path, body=None, timeout=10):
                     req = urllib.request.Request(base + path,
                         data=None if body is None else json.dumps(body).encode(),
                         headers={'Content-Type': 'application/json'})
-                    with urllib.request.urlopen(req, timeout=10) as response:
+                    with urllib.request.urlopen(req, timeout=timeout) as response:
                         return json.load(response)
 
                 append = controller.stream._append
@@ -146,13 +240,26 @@ def main():
                 controller.stream._append = observe
                 request('/command/connect', {'mode': 'dummy'})
                 started, cpu_started = time.perf_counter(), time.process_time()
+                run_clock = SoakClock(args.seconds)
+                collection_start = datetime.now(timezone.utc)
+                result['collection_started_utc'] = collection_start.isoformat()
+                result['collection_deadline_utc'] = (collection_start + timedelta(seconds=args.seconds)).isoformat()
                 next_poll, next_checkpoint = started, started
                 write_report('running')
-                while time.perf_counter() - started < args.seconds:
+                while True:
+                    run_clock.check()
+                    if run_clock.remaining() <= 0:
+                        break
                     time.sleep(max(0, next_poll - time.perf_counter()))
+                    run_clock.check()
+                    if run_clock.remaining() <= 0:
+                        break
                     tick = time.perf_counter()
                     try:
-                        state = request('/state')
+                        state = request('/state', timeout=max(.05, min(10, run_clock.remaining())))
+                        run_clock.check()
+                        if run_clock.remaining() <= 0:
+                            break
                         polls += 1
                         assert state['mode'] == 'dummy' and state['hardware'] == 'synthetic'
                         assert not state['training_allowed']
@@ -172,7 +279,16 @@ def main():
                             assert len(state['records']) == 1
                             saved_checks += 1
                         assert len(controller.stream.frames) <= 8400
+                    except SoakInterrupted:
+                        raise
                     except Exception as exc:
+                        # If an in-flight request crossed host sleep, keep its
+                        # observed timeout but classify the run as interrupted.
+                        try:
+                            run_clock.check()
+                        except SoakInterrupted as interrupted:
+                            interrupted.details['request_error_type'] = type(exc).__name__
+                            raise
                         failures += 1
                         errors.append({'elapsed_seconds': round(time.perf_counter() - started, 3),
                                        'phase': 'HTTP poll', 'type': type(exc).__name__})
@@ -183,12 +299,20 @@ def main():
                     if time.perf_counter() >= next_checkpoint:
                         write_report('running')
                         next_checkpoint = time.perf_counter() + args.checkpoint_seconds
-                request('/command/disconnect', {})
-                state = request('/state')
+                request('/command/disconnect', {}, timeout=2)
+                run_clock.check()
+                state = request('/state', timeout=2)
+                run_clock.check()
                 assert not state['connected'] and state['waveform'] is None
                 assert state['recognition']['result'] is None
                 assert saved_checks > 0, 'capture did not complete'
                 write_report('PASS' if failures == 0 else 'FAIL')
+            except SoakInterrupted as interrupted:
+                result['interruption'] = interrupted.details
+                # Do not resume collection or synthesize a replacement run.
+                if controller is not None:
+                    controller.stream.stop()
+                write_report('INTERRUPTED')
             finally:
                 if server is not None:
                     server.shutdown()
@@ -202,13 +326,13 @@ def main():
         result['cleanup']['temporary_data_removed'] = not Path(folder).exists()
         output.write_text(json.dumps(result, indent=2), encoding='utf-8')
     except Exception as exc:
-        result.update(status='FAIL', fatal_error=type(exc).__name__)
+        result.update(status='FAIL', functional_result='FAIL', fatal_error=type(exc).__name__)
         output.write_text(json.dumps(result, indent=2), encoding='utf-8')
         raise
     print(json.dumps({'status': result['status'], 'elapsed_seconds': result['latest']['elapsed_seconds'],
                       'http_polls': polls, 'http_failures': failures, 'cleanup': result['cleanup']}))
     if result['status'] != 'PASS':
-        raise SystemExit(1)
+        raise SystemExit(2 if result['status'] == 'INTERRUPTED' else 1)
 
 
 if __name__ == '__main__':

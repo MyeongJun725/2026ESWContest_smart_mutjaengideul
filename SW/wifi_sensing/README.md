@@ -2,6 +2,8 @@
 
 노트북 최신 WifiSensing2-src의 엔진을 기존 수어 Flutter UI에 연결한 개발본입니다. 원래 WifiSensing2.0 EXE/데이터는 수정하지 않습니다. 실기기 검증 전 상태입니다.
 
+입력 I/Q의 문자열 변환을 줄인 숫자 변환기를 관찰·학습·추론에서 공유합니다. 원본 변환기, 변경 명세와 라이선스는 runtime에 보존하며 전처리 수치·채널·모델 입력 구조는 유지합니다.
+
 ## 실행
 
 같은 기기에서 CSI 서비스와 기존 SafeHub 앱을 함께 실행합니다. 앱 홈의 **와이파이 센싱**을 누릅니다. 기본 연결 주소는 `http://127.0.0.1:8765`입니다. 웹 화면을 띄우는 구조가 아니라 네이티브 Flutter 화면이 로컬 Python 서비스에 명령을 전달합니다.
@@ -52,6 +54,7 @@ Pi 기록은 체크 후 `선택 기록 내보내기`를 누르고 표시된 ZIP�
 
 ```sh
 python SW/wifi_sensing/tests/test_bridge.py
+python -m unittest discover -s SW/wifi_sensing/tests -p "test_*.py" -v
 python SW/wifi_sensing/prepare_ui_tests.py /tmp/safehub-wifi-ui-tests
 cd /tmp/safehub-wifi-ui-tests
 flutter pub get

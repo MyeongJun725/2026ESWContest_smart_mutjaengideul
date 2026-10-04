@@ -1,4 +1,4 @@
-"""Local SafeHub control API around the unchanged latest laptop CSI engine."""
+"""Local SafeHub control API for the shared CSI processing engine."""
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -10,17 +10,38 @@ from pathlib import Path
 import shutil
 import sys
 import threading
+import tempfile
 import time
 from urllib.parse import parse_qs, urlparse
 import uuid
+import zipfile
 
 RUNTIME = Path(__file__).resolve().parent / 'runtime'
 sys.path.insert(0, str(RUNTIME))
 
 
+def export_model_bundle(model, output):
+    """Keep provenance with the portable model and replace only complete ZIPs."""
+    from edge_export import export_bundle
+    from soom_engine import verify_runtime
+    verify_runtime()
+    with tempfile.NamedTemporaryFile(dir=output.parent, suffix='.zip', delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        export_bundle(model, temporary)
+        with zipfile.ZipFile(temporary, 'a', zipfile.ZIP_DEFLATED) as archive:
+            for name in ('LICENSE', 'NOTICE.md', 'THIRD_PARTY_NOTICES.txt',
+                         'LOCAL_SOURCE_MANIFEST.json', 'LOCAL_MODIFICATIONS.json',
+                         'reference/soom_engine.py'):
+                archive.write(RUNTIME / name, name)
+        os.replace(temporary, output)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 class Controller:
     def __init__(self, data_dir, allow_training=False, allow_dummy=True):
-        # Configure isolated storage before the unchanged engine is imported.
+        # Configure isolated storage before the processing engine is imported.
         os.environ['WIFI_SENSING2_DATA_DIR'] = str(Path(data_dir).resolve())
         import server
         import services
@@ -28,6 +49,8 @@ class Controller:
         from stream import Stream
         from recognition import Recognition
         from soom_processing import PROFILE
+        from soom_engine import verify_runtime
+        verify_runtime()
         self.db, self.services, self.teaching = server, services, teaching
         self.profile = PROFILE
         self.stream = Stream()
@@ -373,11 +396,10 @@ class Controller:
             elif action == 'export_model':
                 if not self.model or self.bundle:
                     raise ValueError('PC에서 학습한 모델을 먼저 선택하세요.')
-                from edge_export import export_bundle
                 target = self.db.DATA / 'exports'
                 target.mkdir(exist_ok=True)
                 output = target / (self.model['model_id'] + '.zip')
-                export_bundle(self.model, output)
+                export_model_bundle(self.model, output)
                 return {'path': str(output)}
             else:
                 raise ValueError('지원하지 않는 요청입니다.')

@@ -6,13 +6,15 @@
 
 - UI 기준: 팀 feature/SW, commit `110a09e3063d629bc54676d157d940c347ebd1a5`
 - 로컬 작업 브랜치: `feature/wifi-sensing-ui`, 개인 fork를 origin으로 사용
-- CSI 기준: 노트북 WifiSensing2-src의 실행 소스 29개. runtime/LOCAL_SOURCE_MANIFEST.json으로 파일별 일치 확인
+- CSI 기준: 노트북 WifiSensing2-src의 실행 소스 29개. 복사 당시 해시는 runtime/LOCAL_SOURCE_MANIFEST.json에 보존한다. 숫자 입력 변환기의 변경 해시와 보존 원본은 LOCAL_MODIFICATIONS.json 및 reference/soom_engine.py로 검사한다.
 - Python: 노트북의 기존 Python 3.12 환경, torch 2.7.1+cpu, NumPy 2.2.6
 - UI 검사 도구: Flutter 3.29.3 / Dart 3.7.2, Windows 호스트
 - 원래 WifiSensing2.0 EXE/측정 기록/모델: 변경하지 않음
 - 제출 대상: 개인 fork의 `feature/wifi-sensing-ui` → 팀 저장소 `develop`. 병합은 팀 리뷰 후 결정한다.
 
-## 통과한 검사
+최신 Python 검사: **44개 통과**. 아래 최초 통합 검사와 이후 변경 검사를 포함한다. Flutter 화면·코드는 이번 숫자 입력 최적화에서 변경하지 않았으며, 직전 검증 결과는 전체 135개와 체험 홈 3개 통과다.
+
+## 최초 통합 검사
 
 Python 통합 검사 **14개 통과**:
 
@@ -104,7 +106,7 @@ CSI 화면은 USB 목록을 주기적으로 갱신하고, 늦게 도착한 조�
 
 MQTT 검사는 실제 클라이언트와 임의 포트의 TCP 브로커 시험 코드로도 수행했다. 기존 4개 구독 토픽과 QoS, 수어·낙상·가전 명령 수신, shortcut UTF-8 메시지 발행, 최초 접속 거부 뒤 재접속, 연결 도중 종료 등 3개 검사가 통과했다. 팀의 실제 브로커·액추에이터와 통합한 결과는 아니다.
 
-합성 입력 장시간 검사는 별도 임시 저장소와 임의 loopback 포트에서 수행한다. 실행 중인 사용자 앱·측정 기록을 사용하지 않는다. 60분 실행 결과는 완료 후 별도로 기록한다.
+합성 입력 장시간 검사는 별도 임시 저장소와 임의 loopback 포트에서 수행한다. 실행 중인 사용자 앱·측정 기록을 사용하지 않는다. 밤사이 60분 검사는 절전으로 중단됐으며 결과와 제한은 아래에 기록한다.
 
 ## Windows 종료 오류 보완 (2026-10-04 01:51 KST)
 
@@ -113,6 +115,31 @@ MQTT 검사는 실제 클라이언트와 임의 포트의 TCP 브로커 시험 �
 Windows 호스트의 독립 vendor 복사본에서만 이벤트 처리기의 소유권을 하나로 정리했다. Pub 캐시·ATLAS 원본·라이선스는 보존한다. 원본/수정본/라이선스 해시 검사와 덮어쓰기 방지를 포함한 준비 스크립트 검사 7개가 통과했다. [패치 및 빌드 절차](../../SW/windows_preview/README.md)에 원인과 적용 범위를 기록했다.
 
 패치한 Windows x64 Release 빌드가 통과했다. 별도 설정·18766 포트로 앱을 세 번 실행하고 정상 종료했으며, 첫 실행에서는 설정 저장 후 홈 재생성도 확인했다. 세 실행의 런처는 모두 정상 종료를 기록했고 검사 시각까지 새 Application Error는 없었다. [실행 로그와 바이너리 해시](integration-validation/windows-audio-smoke.json)를 남겼다. 실제 음성 출력이나 모든 종료 경합을 검증한 결과는 아니다.
+
+## I/Q 숫자 입력 변환 (2026-10-04)
+
+기존 입력 변환은 I/Q 배열을 JSON 문자열로 쓰고 AST로 다시 읽은 뒤 진폭을 계산했다. 현재는 같은 int64 I/Q 값에서 진폭을 직접 계산한다. 채널 6–31 및 33–58의 52개 진폭, pandas의 나노초 타임스탬프 변환, DWT·표준화·PCA·FFT·CNN은 유지한다. JSON/AST의 특수 입력 처리 방식이 달라지는 bool·NumPy scalar 등은 보존된 변환 경로로 처리한다.
+
+무작위/경계 I/Q, 큰 epoch·소수 타임스탬프, 잘못된 입력, 입력 불변성, 전처리 단계 16조합과 채널 3개, 표시 신호·학습 입력·고정 모델 추론의 배열 동등성을 확인했다. NumPy/PC CNN 점수도 허용 오차 내에 일치한다. 복사 당시 원본과 현재 파일 해시를 함께 검사하며, 해시 변조 거부도 검증했다. 원본 upstream 6개 파일은 변경하지 않았다. 전체 Python 검사 44개에는 기존 100 epoch 선택 학습·모델 ZIP·PC/NumPy 추론 검사와 절전 판단 가짜 시계 검사 7개가 포함된다.
+
+모델 ZIP은 출처·MIT 라이선스·입력 변환 원본·변경 명세를 포함한다. 완성된 ZIP만 목적 경로에 교체하며 실패 시 이전 파일을 유지하는 검사도 통과했다. ZIP에는 전체 서비스 파일이 포함되지 않으므로, LOCAL_SOURCE_MANIFEST.json은 복사 당시 기준 명세이며 ZIP 전체 설치 검증 명세가 아니다.
+
+241개 새 합성 프레임, 준비 5회 이후 30회, 기준/변경 순서 교대, 캐시 없이 측정했다. 동일 프로세스의 Torch thread 수는 1이다.
+
+| 경로 · 중앙값 | 기존 문자열 변환 | 숫자 변환 |
+| --- | --- | --- |
+| I/Q → 52채널 진폭 | 152.63ms | 10.58ms |
+| 4초 구간 전체 전처리 | 212.93ms | 52.09ms |
+
+Windows 노트북의 소프트웨어 처리 시간이다. 입력 수신·UI 렌더링·Pi 성능·행동 정확도를 포함하지 않는다. [원자료](integration-validation/numeric-input-benchmark.json), [재현 스크립트](../../SW/wifi_sensing/tests/benchmark_numeric_input.py)를 참고한다.
+
+## 밤사이 관찰과 연속 실행 검사의 제한
+
+이전 60분 합성 검사는 02:16 KST의 Windows Modern Standby 이후 연속 관찰이 끊겼다. 원자료의 결과는 **FAIL**, HTTP timeout 1회이며 그대로 보존한다. 절전 뒤 시계상 7,056.7초에 종료됐고 최대 수신 공백은 4,453.5초였다. 절전 전에도 동시 빌드 중 수신 공백 1.657초와 stale poll 2회가 있었으므로 그 구간도 성능 통과로 해석하지 않는다. [원자료](integration-validation/soak-overnight-interrupted.json).
+
+실제 모드 GUI의 같은 프로세스가 절전 전·후에 확인됐고, 해당 시점까지 관련 Application Error는 없었다. 샘플이 연속으로 있는 구간은 약 20분 및 복귀 후 2분이며, 중간 6시간 7분은 관찰되지 않았다. 따라서 8시간 연속 동작·메모리 누수 없음·센서 안정성을 검증한 결과가 아니다. [관찰 요약](integration-validation/desktop-idle-summary.json)은 당시 스냅샷이다.
+
+새 합성 검사 도구는 Windows의 절전 포함 시계와 깨어 있는 시간 시계를 비교한다. 절전이나 긴 미관찰 공백이면 INTERRUPTED로 종료하여 연속 실행 PASS로 기록하지 않는다. 이 판단은 가짜 시계로 검증했으며 실제 절전을 새로 유발하지 않았다. 최적화 후 별도 20분 검사를 수행하고 완료된 결과만 아래에 기록한다.
 
 ## 아직 하지 않은 검사
 

@@ -1,6 +1,5 @@
 """Synthetic integration evidence only; does not measure action accuracy."""
 
-import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 import json
@@ -55,10 +54,10 @@ class IntegrationTests(unittest.TestCase):
             stream.frames.extend(frames)
 
     def test_01_source_hashes_match_laptop_snapshot(self):
-        manifest = json.loads((RUNTIME / 'LOCAL_SOURCE_MANIFEST.json').read_text())
-        for filename, digest in manifest['files'].items():
-            self.assertEqual(hashlib.sha256((RUNTIME / filename).read_bytes()).hexdigest(), digest)
-        from soom_engine import verify_vendor
+        from soom_engine import verify_runtime, verify_vendor
+        verified = verify_runtime()
+        self.assertEqual(verified['baseline_files'], 29)
+        self.assertEqual(verified['modified_files'], 1)
         self.assertEqual(len(verify_vendor()['files']), 6)
 
     def test_02_live_preview_equals_latest_engine_and_toggles(self):
@@ -142,6 +141,10 @@ class IntegrationTests(unittest.TestCase):
         exported = self.app.command('export_model', {})['path']
         folder = Path(self.temp.name) / 'portable'
         with zipfile.ZipFile(exported) as archive:
+            for name in ('LICENSE', 'NOTICE.md', 'THIRD_PARTY_NOTICES.txt',
+                         'LOCAL_SOURCE_MANIFEST.json', 'LOCAL_MODIFICATIONS.json',
+                         'reference/soom_engine.py', 'soom_engine.py'):
+                self.assertEqual(archive.read(name), (RUNTIME / name).read_bytes())
             archive.extractall(folder)
         bundle = load_bundle(folder / 'model')
         python_result = self.app.teaching.predict_frames(model, records[0]['frames'], 'raw_iq_52')
@@ -150,6 +153,16 @@ class IntegrationTests(unittest.TestCase):
         self.app.command('import_model', {'path': str(folder / 'model')})
         self.assertIsNotNone(self.app.bundle)
         self.assertEqual(self.app.model['feature_profile'], self.app.profile)
+
+    def test_failed_export_preserves_previous_complete_bundle(self):
+        from bridge import export_model_bundle
+        output = Path(self.temp.name) / 'previous.zip'
+        output.write_bytes(b'previous complete export')
+        with patch('edge_export.export_bundle', side_effect=OSError('disk unavailable')):
+            with self.assertRaises(OSError):
+                export_model_bundle({}, output)
+        self.assertEqual(output.read_bytes(), b'previous complete export')
+        self.assertEqual(list(output.parent.glob('tmp*.zip')), [])
 
     def test_07_pi_rejects_training_and_dummy_live_models_cannot_mix(self):
         self.app.allow_training = False
