@@ -1,0 +1,15 @@
+.dart_tool/
+build/
+__pycache__/
+*.pyc
+*.exe
+*.dll
+*.ipk
+*.dill
+*.so
+.env*
+SafeHubScenarioData/
+connection-settings.*
+situation-settings.json
+*.litertlm
+*.tflite
