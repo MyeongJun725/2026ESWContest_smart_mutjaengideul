@@ -9,6 +9,7 @@ import '../config/app_config.dart';
 import '../core/alert_coordinator.dart';
 import '../core/house_scenario.dart';
 import 'widgets/house_status_card.dart';
+import 'widgets/scenario_event_overlay.dart';
 import '../core/appliance_controls.dart';
 import '../core/event_manager.dart';
 import '../core/recent_activity.dart';
@@ -71,6 +72,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   Timer? _disasterTimer;
   Timer? _signOverlayTimer;
   Timer? _clockTimer;
+  Timer? _previewSignTimer;
   final _clock = ValueNotifier<DateTime>(DateTime.now());
 
   _SafeHubPage _currentPage = _SafeHubPage.home;
@@ -160,6 +162,19 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
     if (AppConfig.localPreview) {
       _connectionStatus = '체험 모드';
+      final demoSign = Uri.base.queryParameters['signDemo'];
+      if (demoSign == 'help' || demoSign == 'collapse') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _previewScenario(HouseScenario.assistance);
+          final active = _situation.flow.active;
+          _previewSignTimer = Timer(const Duration(seconds: 3), () {
+            if (mounted && _situation.flow.active == active) {
+              _situation.receiveSign(demoSign == 'help' ? '도움' : '쓰러짐', simulated: true);
+            }
+          });
+        });
+      }
     } else {
       if (AppConfig.mqttConfigured) {
         _mqttStarted = true;
@@ -631,6 +646,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
   @override
   void dispose() {
+    _previewSignTimer?.cancel();
     _situationTimer?.cancel();
     _stopScenarioSignal();
     _situation.dispose();
@@ -723,6 +739,18 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       letterSpacing: -0.3,
     ),
   );
+
+  void _previewScenario(HouseScenario kind) {
+    _previewSignTimer?.cancel();
+    _situation.settings.enabled = false;
+    _situation.settings.address = '예시로 119, 안심아파트 101동 1203호';
+    _situation.startScenarioTest(kind, switch (kind) {
+      HouseScenario.broadcast => '아파트 안내방송입니다. 화재가 발생했습니다. 방송 안내에 따라 비상계단으로 대피하세요.',
+      HouseScenario.disaster => '시연지역에 지진이 발생했습니다. 재난 안내에 따라 대피 장소와 주변 안전을 확인해 주세요.',
+      HouseScenario.assistance => '침실 · 보호자 쓰러짐 의심. 실제 의식 상태는 확인이 필요합니다.',
+    });
+    _sendScenarioSignal();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -839,31 +867,28 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
             visible:
                 _showSignOverlay && activeAlert == null && _detailTitle == null,
           ),
+          if (AppConfig.localPreview)
+            Positioned(left: 16, right: 16, bottom: 12, child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Material(color: const Color(0xFFF6F5F3), elevation: 3, borderRadius: BorderRadius.circular(14), child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Wrap(spacing: 6, children: [
+                  TextButton(onPressed: () => _previewScenario(HouseScenario.broadcast), child: const Text('① 방송 화재')),
+                  TextButton(onPressed: () => _previewScenario(HouseScenario.disaster), child: const Text('② 재난 알림')),
+                  TextButton(onPressed: () => _previewScenario(HouseScenario.assistance), child: const Text('③ 보호자 도움')),
+                ]),
+              )),
+            )),
           Positioned.fill(
             child: AnimatedBuilder(
               animation: _situation,
               builder: (context, _) {
-                if (activeAlert == null && !_situation.needsAttention)
+                if (activeAlert == null && _situation.flow.active == null && !_situation.needsAttention)
                   return const SizedBox.shrink();
-                final fall = activeAlert?.kind == AlertKind.fall;
-                return SituationResponse(
+                return ScenarioEventOverlay(
+                  key: ValueKey(_situation.flow.active),
                   service: _situation,
-                  captions: _captions,
                   camera: _cameraPlaceholder(),
-                  incidentTitle:
-                      _situation.flow.active?.title ??
-                      (activeAlert == null
-                          ? null
-                          : fall
-                          ? '낙상 의심 신호 · 상황을 확인해 주세요'
-                          : '재난 알림이 도착했어요'),
-                  incidentText:
-                      _situation.flow.active?.evidence ??
-                      (activeAlert == null
-                          ? null
-                          : fall
-                          ? '${_getLocationName(activeAlert.data)} · ${_formatEventDateTime(activeAlert.data)} · ${_getEventName(activeAlert.data)}'
-                          : '${activeAlert.data['MSG_CN'] ?? '재난 원문 확인 필요'}'),
                   onSignal: () {
                     _sendScenarioSignal();
                     setState(() {});
