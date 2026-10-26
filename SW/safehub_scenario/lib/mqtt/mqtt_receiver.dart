@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:collection';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'dart:convert';
 
 import 'package:mqtt_client/mqtt_client.dart';
@@ -69,6 +71,8 @@ class MqttReceiver {
   bool _disposed = false;
   int _failures = 0;
   bool _connected = false;
+  final _seenSafetyMessageIds = LinkedHashSet<String>();
+  static const _maxSeenSafetyMessageIds = 2000;
   final Duration initialRetryDelay;
   final Duration maxRetryDelay;
   final MqttServerClient Function(String, String, int) _clientFactory;
@@ -171,6 +175,10 @@ class MqttReceiver {
       client.autoReconnect = true;
       _failures = 0;
 
+      _messages = client.updates?.listen((messages) {
+        if (_current(client)) _onMessage(messages);
+      });
+
       // 침실 CSI 이벤트
       client.subscribe('safehub/csi/bedroom/event', MqttQos.atLeastOnce);
 
@@ -180,12 +188,10 @@ class MqttReceiver {
       // 수어 번역 결과
       client.subscribe(
         'safehub/vision/livingroom/translation',
-        MqttQos.atMostOnce,
+        MqttQos.atLeastOnce,
       );
 
-      _messages = client.updates?.listen((messages) {
-        if (_current(client)) _onMessage(messages);
-      });
+
       client.subscribe(
         'safehub/control/livingroom/aircon/command',
         MqttQos.atLeastOnce,
@@ -254,6 +260,21 @@ class MqttReceiver {
 
       final payload = utf8.decode(message.payload.message);
 
+      final packetId = message.variableHeader?.messageIdentifier ?? 0;
+      if (topic == 'safehub/vision/livingroom/translation' && packetId != 0) {
+        final key = '$packetId:$payload';
+        if (message.header?.duplicate == true && _signPackets.contains(key)) return;
+        _signPackets.add(key);
+        if (_signPackets.length > 128) _signPackets.remove(_signPackets.first);
+      }
+      handlePayload(topic, payload);
+    } catch (_) { print('[MQTT] invalid publish packet ignored'); }
+  }
+
+  @visibleForTesting
+  void handlePayload(String topic, String payload) {
+    if (_disposed) return;
+    try {
       print('[MQTT] received topic=$topic bytes=${payload.length}');
 
       final decoded = jsonDecode(payload);
@@ -266,17 +287,6 @@ class MqttReceiver {
 
       // 수어 번역 결과
       if (topic == 'safehub/vision/livingroom/translation') {
-        final packetId = message.variableHeader?.messageIdentifier ?? 0;
-        final key = '$packetId:$payload';
-        if (packetId != 0 &&
-            message.header?.duplicate == true &&
-            _signPackets.contains(key))
-          return;
-        if (packetId != 0) {
-          _signPackets.add(key);
-          if (_signPackets.length > 128)
-            _signPackets.remove(_signPackets.first);
-        }
         if (decoded is! Map<String, dynamic>) {
           return;
         }
@@ -304,7 +314,20 @@ class MqttReceiver {
         return;
       }
 
+      final rawId = event['message_id'];
+      String? messageId;
+      if (rawId != null) {
+        if (rawId is! String || rawId.trim().isEmpty) return;
+        messageId = rawId.trim();
+        if (_seenSafetyMessageIds.contains(messageId)) return;
+        event['message_id'] = messageId;
+      }
       eventManager.addEvent(event);
+      if (messageId != null) {
+        _seenSafetyMessageIds.add(messageId);
+        if (_seenSafetyMessageIds.length > _maxSeenSafetyMessageIds)
+          _seenSafetyMessageIds.remove(_seenSafetyMessageIds.first);
+      }
 
       print(
         '[MQTT] event queued event=${event['event']} '
@@ -337,6 +360,20 @@ class MqttReceiver {
     } catch (_) {
       return false;
     }
+  }
+
+  bool publishHardwareTestFan(bool powerOn) {
+    final client = _client;
+    if (_disposed || !_connected || client == null ||
+        client.connectionStatus?.state != MqttConnectionState.connected) return false;
+    try {
+    final builder = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({
+      'source': 'manual_test', 'action': 'set_power', 'power_on': powerOn,
+    }));
+    client.publishMessage('safehub/control/livingroom/aircon/command',
+        MqttQos.atLeastOnce, builder.payload!, retain: false);
+    return true;
+    } catch (_) { return false; }
   }
 
   bool publishShortcutCommand(String payload) {

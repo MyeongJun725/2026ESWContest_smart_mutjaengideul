@@ -10,6 +10,7 @@ import '../core/alert_coordinator.dart';
 import '../core/house_scenario.dart';
 import 'widgets/house_status_card.dart';
 import 'widgets/editable_dashboard.dart';
+import 'widgets/hardware_test_dialog.dart';
 import 'widgets/scenario_event_overlay.dart';
 import '../core/appliance_controls.dart';
 import '../core/event_manager.dart';
@@ -48,6 +49,24 @@ class SafeHubHomePage extends StatefulWidget {
 class _SafeHubHomePageState extends State<SafeHubHomePage>
     with SingleTickerProviderStateMixin {
   bool _layoutEditing = false;
+  bool _hardwareTestOpen = false;
+  void _closeHardwareTestForAlert() {
+    if (_hardwareTestOpen && mounted) {
+      _hardwareTestOpen = false;
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+    }
+  }
+  void _openHardwareTest() {
+    if (_hardwareTestOpen) return;
+    _hardwareTestOpen = true;
+    showDialog<void>(context: context,
+    builder: (_) => HardwareTestDialog(connected: _mqttConnected && !AppConfig.localPreview,
+      publishAlert: _mqttReceiver.publishAlertSignal,
+      publishFan: _mqttReceiver.publishHardwareTestFan,
+      classifierUri: Uri.parse(_situation.settings.endpoint).replace(path: '/classify')))
+      .whenComplete(() => _hardwareTestOpen = false);
+  }
   final EventManager _eventManager = EventManager();
   final ApplianceControls _appliances = ApplianceControls();
   final DisasterService _disasterService = DisasterService();
@@ -117,11 +136,13 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
     _situation.onAnnouncement = () {
       if (!mounted) return;
+      _closeHardwareTestForAlert();
       _interruptNormalSpeech();
       _sendScenarioSignal();
     };
     _situation.onScenarioAlert = () {
       if (!mounted) return;
+      _closeHardwareTestForAlert();
       _interruptNormalSpeech();
       _sendScenarioSignal();
     };
@@ -575,6 +596,13 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     }
     if (AppConfig.localPreview || !settings.actuatorsEnabled) {
       _situation.liveFlow.setDelivery('화면 안내 중 · LED·진동 명령 전송 꺼짐');
+      return;
+    }
+    final incident = _situation.liveFlow.active;
+    if (incident?.kind == HouseScenario.disaster &&
+        settings.homeRegion.trim().isEmpty &&
+        !(incident?.evidence.contains('지역: 전국') ?? false)) {
+      _situation.liveFlow.setDelivery('집 지역 미설정 · 지역 확인 후 자동 장치 알림을 사용하세요. 장치 테스트는 가능해요.');
       return;
     }
     final shaker = _mqttReceiver.publishAlertSignal('bedshaker', 'on');

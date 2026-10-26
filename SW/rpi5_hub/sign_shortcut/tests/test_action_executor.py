@@ -89,5 +89,21 @@ assert executor.livingroom_aircon_power_on is True
 print("PASS | 06 unsupported device rejected without state change")
 
 
+# Manual absolute power must become the baseline for the next sign toggle.
+executor.sync_livingroom_aircon_power(False)
+executor.sync_livingroom_aircon_power(False)
+assert executor.execute(aircon_toggle).power_on is True
+executor.sync_livingroom_aircon_power(True)
+assert executor.execute(aircon_toggle).power_on is False
+for invalid in (1, 0, "false", None):
+    try:
+        executor.sync_livingroom_aircon_power(invalid)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Non-boolean power must be rejected")
+assert executor.livingroom_aircon_power_on is False
+print("PASS | 07 manual absolute state synchronizes subsequent sign toggles")
+
 print()
 print("PASS | ActionExecutor all tests passed")

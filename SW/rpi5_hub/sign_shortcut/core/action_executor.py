@@ -23,6 +23,11 @@ class ActionExecutor:
     def livingroom_aircon_power_on(self) -> bool:
         return self._livingroom_aircon_power_on
 
+    def sync_livingroom_aircon_power(self, power_on: bool) -> None:
+        if type(power_on) is not bool:
+            raise ValueError("power_on must be a boolean")
+        self._livingroom_aircon_power_on = power_on
+
     def execute(self, shortcut: SignShortcut) -> ActionResult:
         # V1 지원 기능:
         # 거실 에어컨 전원 ON/OFF Toggle

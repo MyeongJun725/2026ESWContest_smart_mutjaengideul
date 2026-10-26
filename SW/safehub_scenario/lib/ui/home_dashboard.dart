@@ -149,6 +149,9 @@ extension _HomeDashboard on _SafeHubHomePageState {
           ok: _mqttConnected && !AppConfig.localPreview,
         ),
         const SizedBox(width: 12),
+        OutlinedButton.icon(onPressed: _openHardwareTest,
+          icon: const Icon(Icons.science_outlined, size: 21),
+          label: const Text('장치 테스트')),
         IconButton(
           tooltip: '화면 배치 편집',
           onPressed:

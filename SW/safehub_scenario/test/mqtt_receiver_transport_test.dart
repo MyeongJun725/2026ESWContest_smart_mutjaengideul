@@ -9,7 +9,7 @@ import 'package:safehub_app/mqtt/mqtt_receiver.dart';
 const _expectedSubscriptions = {
   'safehub/csi/bedroom/event': 1,
   'safehub/csi/bathroom/event': 1,
-  'safehub/vision/livingroom/translation': 0,
+  'safehub/vision/livingroom/translation': 1,
   'safehub/control/livingroom/aircon/command': 1,
 };
 

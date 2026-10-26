@@ -58,7 +58,7 @@ class HouseScenarioFlow extends ChangeNotifier {
   int get pendingCount => _pending.length;
   static final _hazard = RegExp(r'화재가?\s*(발생|났)|불이\s*났|대피(하|해|\s*바랍)|가스\s*누출');
   static final _nonEmergency = RegExp(
-    r'훈련|연습|테스트|시나리오|예시|가정|실험|예방|취소|해제|화재[^.!?\n]{0,16}(발생하지\s*않|아닙|아니|없습|없음)|불이\s*나지\s*않',
+    r'훈련|연습|테스트|시나리오|예시|가정|실험|예방|취소|해제|화재[^.!?\n]{0,16}(발생하지\s*않|아닙|아니|없습|없음)|불이\s*나지\s*않|대피(하지\s*않|[^.!?\n]{0,8}필요[가\s]*없)',
   );
 
   bool broadcast(String text, {DateTime? now}) {

@@ -1,0 +1,18 @@
+[Unit]
+Description=SafeHub Uno LED vibration and fan bridge
+After=network.target
+RequiresMountsFor=/data/safehub-uno
+
+[Service]
+Type=simple
+ExecStart=/data/safehub-uno/python/bin/python3.12 -u /data/safehub-uno/app/bridge.py
+Environment=PYTHONPATH=/data/safehub-uno/packages
+Environment=PYTHONDONTWRITEBYTECODE=1
+Restart=on-failure
+RestartSec=3
+Nice=5
+MemoryMax=96M
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
