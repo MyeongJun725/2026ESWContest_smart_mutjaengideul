@@ -1,3 +1,9 @@
+> 검토용 1.2.0 후보: 앱 ID는 `com.atlas.app.safehub_scenario_pr7`로 유지합니다.
+> `atlas/` runner와 버전 표기는 재현 후보이며 설치 IPK와의 대응은 아직 확인되지 않았습니다.
+> [이번 선별·검증 기록](../../docs/integration/scenario-review-20261026.md)과
+> [호스트 검사·적용/복원 준비](../../docs/integration/scenario-reproduction-20261026.md)를 먼저 읽으세요.
+> 새 장치 테스트 창/PR #9·#10의 실제 장비 적용은 이 후보에 포함하지 않습니다.
+
 # SafeHub Scenario
 
 기존 `SW/safehub_app`을 유지하면서 별도 앱으로 실행하는 가정 내 상황 안내 UI입니다. 수어·카메라, CSI 상태, 음성자막, 재난, 가전 화면을 포함합니다. 음성자막을 교정하거나 LLM 응답을 스피커로 읽지 않습니다.

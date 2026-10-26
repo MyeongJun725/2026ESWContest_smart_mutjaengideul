@@ -1,0 +1,79 @@
+{
+  "recorded_at": "2026-10-26T13:31:23.131802+00:00",
+  "refs": {
+    "main": "40551d781e19a8e7974be47334ef4132d1ed4d1d",
+    "develop": "3ecfa82eff1d2c96118d5015697ac34455ec95a3",
+    "pr6": "7061b35dbcfe5200d80311799b8509fbc13e4df8",
+    "pr8": "9037ac901b0ef16a67a4b7a9d519a7d46d18de1e",
+    "pr9": "ae887ac277bb0e3fc95ad4dc766f678b29bb9876",
+    "pr10": "da7248fac4c00f92f7a9a4fa265c733c9e73f765"
+  },
+  "ui_baseline": {
+    "source_pr": 8,
+    "reported_installed_version": "1.2.0",
+    "candidate_pubspec_version": "1.2.0+1",
+    "app_id": "com.atlas.app.safehub_scenario_pr7",
+    "device_test_window_included": false,
+    "installed_package_source_correspondence_verified": false,
+    "approved_device_layout_available": false
+  },
+  "direct_runs": {
+    "bootstrap_stub": {
+      "passed": 4
+    },
+    "source_packaging": {
+      "passed": 3
+    },
+    "windows_helpers": {
+      "passed": 11
+    },
+    "pr6_offline_adapter": {
+      "passed": 8,
+      "adopted": false
+    },
+    "pr9_cpp_host": {
+      "passed": 19,
+      "compiler": "GCC 14.2.0",
+      "cmake": "3.31.6",
+      "configuration": "Release, assertions enabled",
+      "arch": "x86_64"
+    },
+    "pr9_python_diagnostics": {
+      "passed": 3
+    },
+    "pr10_uno_contract": {
+      "passed": 14
+    },
+    "pr10_context_rules": {
+      "passed": 6
+    }
+  },
+  "not_run": [
+    "Scenario Flutter tests/analyzer/formatter/build (SDK unavailable; download blocked)",
+    "ATLAS UI ARM64 package build",
+    "PR9 independent ARM64 portable build/static ABI rerun (target collection and candidate absent)",
+    "PR9 optional OpenCV/ORT geometry tests and extra live vision translation-unit build",
+    "Arduino Uno compile (sketch/build manifest not received)",
+    "RPi4/RPi5/Uno physical execution or deployment"
+  ],
+  "reported_pr9_arm64": {
+    "source": "docs/sign/word1229-portable-abi.json at ae887ac277bb0e3fc95ad4dc766f678b29bb9876",
+    "candidate_sha256": "5c14f1fc0d7741417b46299b8ad010054ee509167eeda16c7a9b7a48e34d775c",
+    "passed": true,
+    "independently_rerun_here": false,
+    "target_execution_performed": false,
+    "deployed": false
+  },
+  "pr10": {
+    "received": true,
+    "adopted_into_ui_candidate": false,
+    "uno_sketch_received": false,
+    "publisher_ack_is_physical_completion": false
+  },
+  "protected_actions_performed": {
+    "main_develop_push": false,
+    "existing_pr_closed_or_merged": false,
+    "device_execution_replaced": false,
+    "firmware_flash": false
+  }
+}
