@@ -15,6 +15,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <vector>
+#include "hand_observation_policy.hpp"
 
 namespace fs = std::filesystem;
 using Box = std::array<int, 4>;
@@ -40,23 +41,31 @@ struct Crop {
 };
 
 Crop crop_pad(const cv::Mat& image, cv::Point2d lo,
-              cv::Point2d hi, bool rotation) {
+              cv::Point2d hi, bool rotation, bool square = false) {
+    if (!std::isfinite(lo.x) || !std::isfinite(lo.y) ||
+        !std::isfinite(hi.x) || !std::isfinite(hi.y) || hi.x<=lo.x || hi.y<=lo.y)
+        throw vision_runtime::InvalidHandCrop("Invalid palm crop bounds");
     const auto wh = hi - lo;
     const cv::Point2d shift(0, rotation ? 0 : -0.4 * wh.y);
     lo += shift;
     hi += shift;
     const auto center = (lo + hi) * 0.5;
-    const auto half = (hi - lo) * ((rotation ? 4.0 : 3.0) / 2.0);
+    cv::Point2d expanded_wh = hi - lo;
+    if (square) {
+        const double side = std::max(expanded_wh.x, expanded_wh.y);
+        expanded_wh = {side, side};
+    }
+    const auto half = expanded_wh * ((rotation ? 4.0 : 3.0) / 2.0);
     lo = center - half;
     hi = center + half;
     Box b = {
-        std::clamp(static_cast<int>(lo.x), 0, image.cols),
-        std::clamp(static_cast<int>(lo.y), 0, image.rows),
-        std::clamp(static_cast<int>(hi.x), 0, image.cols),
-        std::clamp(static_cast<int>(hi.y), 0, image.rows)
+        static_cast<int>(std::clamp(lo.x, 0.0, double(image.cols))),
+        static_cast<int>(std::clamp(lo.y, 0.0, double(image.rows))),
+        static_cast<int>(std::clamp(hi.x, 0.0, double(image.cols))),
+        static_cast<int>(std::clamp(hi.y, 0.0, double(image.rows)))
     };
     const int w = b[2] - b[0], h = b[3] - b[1];
-    if (w <= 0 || h <= 0) throw std::runtime_error("Empty crop");
+    if (w <= 0 || h <= 0) throw vision_runtime::InvalidHandCrop("Empty crop");
     const int side = rotation
         ? static_cast<int>(std::sqrt(double(h)*h + double(w)*w))
         : std::max(h, w);
@@ -71,6 +80,7 @@ Crop crop_pad(const cv::Mat& image, cv::Point2d lo,
 
 
 struct Palm {
+    int tracked_side = 0; // +1 physical LEFT, -1 physical RIGHT; detector inputs stay 0.
     int id;
     double score;
     std::array<double,4> box;
@@ -81,6 +91,18 @@ struct Hand {
     double confidence, handedness;
     std::array<cv::Point2f,21> xy;
     std::array<cv::Point3f,21> world_xyz;
+    std::array<int, 4> crop_box{};
+    int crop_side = 0;
+    int palm_points_outside_crop = 0;
+    double crop_angle = 0;
+    bool invalid_crop = false;
+};
+
+struct PalmScanDiagnostics {
+    std::size_t candidates = 0, selected = 0, suppressed = 0;
+    double max_suppressed_iou = 0, max_suppressed_keypoint_distance = 0;
+    struct Suppression { Palm candidate, keeper; double iou; };
+    std::vector<Suppression> pairs;
 };
 
 // NHWC RGB float32, matching NumPy's explicit division.
@@ -136,7 +158,9 @@ double overlap(const Palm& a,const Palm& b) {
     double u=(x[2]-x[0])*(x[3]-x[1])+(y[2]-y[0])*(y[3]-y[1])-intersection;
     return u>0?intersection/u:0;
 }
-std::vector<Palm> palms(const cv::Mat& image,Model& model) {
+template<class PalmModel>
+std::vector<Palm> palms(const cv::Mat& image,PalmModel& model,
+                       PalmScanDiagnostics* diagnostics = nullptr) {
     double ratio=std::min(192.0/image.rows,192.0/image.cols);
     int nh=int(image.rows*ratio),nw=int(image.cols*ratio);
     if(nh<1||nw<1) throw std::runtime_error("Image aspect ratio too extreme");
@@ -174,17 +198,33 @@ std::vector<Palm> palms(const cv::Mat& image,Model& model) {
     std::cout<<"Palm candidates: "<<candidates.size()<<"\n";
     std::stable_sort(candidates.begin(),candidates.end(),[](const Palm&a,const Palm&b){return a.score>b.score;});
     std::vector<Palm> selected;
+    if (diagnostics) { *diagnostics = {}; diagnostics->candidates = candidates.size(); }
     for(const auto& p:candidates) {
         bool suppressed=false;
-        for(const auto& q:selected) if(overlap(p,q)>0.3) {suppressed=true;break;}
+        for(const auto& q:selected) if(overlap(p,q)>0.3) {
+            suppressed=true;
+            if (diagnostics) {
+                ++diagnostics->suppressed;
+                if (diagnostics->pairs.size()<6)
+                    diagnostics->pairs.push_back({p,q,overlap(p,q)});
+                diagnostics->max_suppressed_iou = std::max(diagnostics->max_suppressed_iou, overlap(p,q));
+                double distance = 0;
+                for (std::size_t k=0; k<7; ++k) distance += cv::norm(p.points[k]-q.points[k])/7;
+                diagnostics->max_suppressed_keypoint_distance = std::max(
+                    diagnostics->max_suppressed_keypoint_distance, distance);
+            }
+            break;
+        }
         if(!suppressed) selected.push_back(p);
     }
     std::cout<<"After NMS: "<<selected.size()<<"\n";
+    if (diagnostics) diagnostics->selected = selected.size();
     return selected;
 }
 
-bool hand(const cv::Mat& image,const Palm& p,Model& model,Hand& result) {
-    auto first=crop_pad(image,{p.box[0],p.box[1]},{p.box[2],p.box[3]},true);
+template<class HandModel>
+bool hand(const cv::Mat& image,const Palm& p,HandModel& model,Hand& result, bool square_retry = false) {
+    auto first=crop_pad(image,{p.box[0],p.box[1]},{p.box[2],p.box[3]},true,square_retry);
     cv::Mat rgb;
     cv::cvtColor(first.image,rgb,cv::COLOR_BGR2RGB);
     std::array<cv::Point2d,7> local;
@@ -203,20 +243,30 @@ bool hand(const cv::Mat& image,const Palm& p,Model& model,Hand& result) {
         double y=matrix.at<double>(1,0)*point.x+matrix.at<double>(1,1)*point.y+matrix.at<double>(1,2);
         lo.x=std::min(lo.x,x);lo.y=std::min(lo.y,y);hi.x=std::max(hi.x,x);hi.y=std::max(hi.y,y);
     }
-    auto second=crop_pad(rotated,lo,hi,false);
+    auto second=crop_pad(rotated,lo,hi,false,square_retry);
+    result.crop_box = second.box;
+    result.crop_side = second.image.cols;
+    result.crop_angle = angle;
+    for (const auto& point : local) {
+        const double x = matrix.at<double>(0,0)*point.x+matrix.at<double>(0,1)*point.y+matrix.at<double>(0,2)-second.bias.x;
+        const double y = matrix.at<double>(1,0)*point.x+matrix.at<double>(1,1)*point.y+matrix.at<double>(1,2)-second.bias.y;
+        if (x<0 || y<0 || x>=second.image.cols || y>=second.image.rows)
+            ++result.palm_points_outside_crop;
+    }
     cv::Mat roi;
     cv::resize(second.image,roi,{224,224},0,0,cv::INTER_AREA);
     auto input=tensor_rgb(roi);
     auto out=model.run(input,{"Identity","Identity_1","Identity_2","Identity_3"},{{1,63},{1,1},{1,1},{1,63}});
     std::cout<<"Anchor "<<p.id<<": palm="<<p.score<<", hand="<<out[1][0]<<"\n";
+    // Expose rejection score for the bounded retry decision. No rejected landmarks are used.
+    result.confidence = out[1][0];
+    result.handedness = out[2][0];
     if(out[1][0]<0.8f) return false;
     cv::Mat inverse;
     cv::invertAffineTransform(matrix,inverse);
-    double cx=(second.box[0]+second.box[2])/2.0,cy=(second.box[1]+second.box[3])/2.0;
-    double ocx=inverse.at<double>(0,0)*cx+inverse.at<double>(0,1)*cy+inverse.at<double>(0,2);
-    double ocy=inverse.at<double>(1,0)*cx+inverse.at<double>(1,1)*cy+inverse.at<double>(1,2);
-    double scale=std::max((second.box[2]-second.box[0])/224.0,(second.box[3]-second.box[1])/224.0);
-    auto rotation=cv::getRotationMatrix2D(cv::Point2f(0,0),angle,1.0);
+    const std::array<double,6> inverse_coefficients{
+        inverse.at<double>(0,0), inverse.at<double>(0,1), inverse.at<double>(0,2),
+        inverse.at<double>(1,0), inverse.at<double>(1,1), inverse.at<double>(1,2)};
     result.palm=p;result.confidence=out[1][0];result.handedness=out[2][0];
     for(int i=0;i<21;++i) {
         result.world_xyz[i] = {
@@ -224,10 +274,10 @@ bool hand(const cv::Mat& image,const Palm& p,Model& model,Hand& result) {
             out[3][i*3+1],
             out[3][i*3+2]
         };
-        float x=float((double(out[0][i*3])-112.0)*scale),y=float((double(out[0][i*3+1])-112.0)*scale);
-        double ox=double(x)*rotation.at<double>(0,0)+double(y)*rotation.at<double>(1,0);
-        double oy=double(x)*rotation.at<double>(0,1)+double(y)*rotation.at<double>(1,1);
-        result.xy[i]={float((ox+ocx)+first.bias.x),float((oy+ocy)+first.bias.y)};
+        const auto point = vision_runtime::restoreCropPoint(
+            out[0][i*3], out[0][i*3+1], second.image.cols,
+            second.bias.x, second.bias.y, inverse_coefficients, first.bias.x, first.bias.y);
+        result.xy[i]={float(point[0]),float(point[1])};
         if(!std::isfinite(result.xy[i].x)||!std::isfinite(result.xy[i].y)) throw std::runtime_error("Nonfinite XY");
     }
     return true;

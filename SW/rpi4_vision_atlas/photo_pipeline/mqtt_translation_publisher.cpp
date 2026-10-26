@@ -1,10 +1,25 @@
 #include "mqtt_translation_publisher.hpp"
+#include "log_record.hpp"
 
 #include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <utility>
+
+namespace {
+
+// Paho requires a message callback to run its background keepalive loop,
+// including for a client that only publishes. This client never subscribes.
+int discardIncomingMessage(
+    void*, char* topic, int, MQTTClient_message* message
+) {
+    MQTTClient_freeMessage(&message);
+    MQTTClient_free(topic);
+    return 1;
+}
+
+}  // namespace
 
 MqttTranslationPublisher::MqttTranslationPublisher(
     std::string host,
@@ -37,10 +52,17 @@ MqttTranslationPublisher::MqttTranslationPublisher(
     if (result != MQTTCLIENT_SUCCESS) {
         client_ = nullptr;
 
-        std::cerr
-            << "[mqtt] client creation failed: "
-            << result
-            << '\n';
+        writeSignLog("[mqtt] client creation failed: " + std::to_string(result) + "\n");
+        return;
+    }
+
+    const int callback_result = MQTTClient_setCallbacks(
+        client_, nullptr, nullptr, discardIncomingMessage, nullptr
+    );
+    if (callback_result != MQTTCLIENT_SUCCESS) {
+        writeSignLog("[mqtt] callback setup failed: " + std::to_string(callback_result) + "\n");
+        MQTTClient_destroy(&client_);
+        client_ = nullptr;
     }
 }
 
@@ -76,20 +98,12 @@ bool MqttTranslationPublisher::connect() {
     );
 
     if (result != MQTTCLIENT_SUCCESS) {
-        std::cerr
-            << "[mqtt] connection failed: "
-            << address_
-            << " rc="
-            << result
-            << '\n';
+        writeSignLog("[mqtt] connection failed: " + address_ + " rc=" + std::to_string(result) + "\n");
 
         return false;
     }
 
-    std::cout
-        << "[mqtt] connected: "
-        << address_
-        << '\n';
+    writeSignLog("[mqtt] connected: " + address_ + "\n");
 
     return true;
 }
@@ -204,18 +218,12 @@ bool MqttTranslationPublisher::publishText(
         }
 
         if (result == MQTTCLIENT_SUCCESS) {
-            std::cout
-                << "[mqtt] published: "
-                << payload
-                << '\n';
+            writeSignLog("[mqtt] published: " + payload + "\n");
 
             return true;
         }
 
-        std::cerr
-            << "[mqtt] publish failed: rc="
-            << result
-            << '\n';
+        writeSignLog("[mqtt] publish failed: rc=" + std::to_string(result) + "\n");
 
         disconnect();
     }

@@ -3,6 +3,7 @@
 #include "vision_frame_hands.hpp"
 
 #include <cstddef>
+#include <array>
 #include <optional>
 
 class LiveSignSession {
@@ -18,6 +19,12 @@ public:
     > push(
         sign_engine::VisionFrameDetections frame
     );
+
+    // Live capture uses monotonic capture time. The legacy overload is retained
+    // for coordinate fixtures that contain no clock; never invent timestamps.
+    std::optional<sign_engine::VisionRecordingDetections> push(
+        sign_engine::VisionFrameDetections frame, double capture_ms,
+        bool recovering_second_hand);
 
     std::optional<
         sign_engine::VisionRecordingDetections
@@ -52,4 +59,10 @@ private:
     std::size_t observed_hand_frames_ = 0;
     std::size_t empty_streak_ = 0;
     std::size_t release_empty_streak_ = 0;
+    double first_empty_ms_ = -1;
+    double last_capture_ms_ = -1;
+    double release_start_ms_ = -1;
+    std::array<double, 8> capture_intervals_ms_{};
+    std::size_t capture_interval_index_ = 0;
+    const char* finish_reason_ = "LEGACY_FRAME_GAP";
 };

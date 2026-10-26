@@ -1,6 +1,7 @@
 #include "sign_runtime.hpp"
 
 #include "temporal_resample.hpp"
+#include "hand_coverage_quality.hpp"
 
 #include <cstddef>
 #include <exception>
@@ -395,6 +396,14 @@ SignRecognitionResult classifyRecording(
     const RuntimeData& runtime
 ) {
     SignRecognitionResult result;
+
+    const auto coverage = assessHandCoverage(frames);
+    if (coverage.incomplete_contact_sequence) {
+        result.recording_stats = analyzeRecordingFrames(frames);
+        result.stage = "INCOMPLETE_TWO_HAND_TRACK";
+        result.error = "Two-hand contact followed by sustained missing-hand observations";
+        return result;
+    }
 
 
     // ========================================================
