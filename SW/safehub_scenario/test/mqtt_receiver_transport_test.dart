@@ -155,6 +155,25 @@ Future<void> _until(bool Function() condition, String reason) async {
 }
 
 void main() {
+  test('wire packet headers preserve sign retry filtering and new utterances', () async {
+    final broker = await _LoopbackBroker.open();
+    final signs = <String>[];
+    final receiver = MqttReceiver(broker: '127.0.0.1', port: broker.port,
+      eventManager: EventManager(), onSignTextReceived: signs.add);
+    addTearDown(() async { receiver.disconnect(); await broker.close(); });
+    await receiver.connect();
+    await _until(() => broker.subscriptions.length == 4, 'subscriptions');
+    const topic = 'safehub/vision/livingroom/translation';
+    const payload = '{"text":"도움"}';
+    broker.publish(topic, payload, qos: 1, id: 71);
+    await _until(() => signs.length == 1, 'first utterance');
+    broker.publish(topic, payload, qos: 1, id: 71, duplicate: true);
+    broker.publish(topic, payload, qos: 1, id: 72);
+    await _until(() => signs.length >= 2, 'new utterance');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(signs, ['도움', '도움']);
+  });
+
   test(
     'disposing during real TCP connect closes a late socket without callbacks',
     () async {
