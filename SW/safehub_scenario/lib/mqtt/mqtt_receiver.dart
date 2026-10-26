@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 
@@ -44,6 +45,9 @@ class _OwnedMqttClient extends MqttServerClient {
 
 class MqttReceiver {
   final Set<String> _signPackets = {};
+  // Bounded process-local FIFO; legacy messages without IDs remain compatible.
+  final Set<String> _seenSafetyMessageIds = {};
+  static const _maxSeenSafetyMessageIds = 2000;
   static const String shortcutCommandTopic =
       'safehub/config/sign_shortcut/command';
 
@@ -171,6 +175,10 @@ class MqttReceiver {
       client.autoReconnect = true;
       _failures = 0;
 
+      _messages = client.updates?.listen((messages) {
+        if (_current(client)) _onMessage(messages);
+      });
+
       // 침실 CSI 이벤트
       client.subscribe('safehub/csi/bedroom/event', MqttQos.atLeastOnce);
 
@@ -180,12 +188,9 @@ class MqttReceiver {
       // 수어 번역 결과
       client.subscribe(
         'safehub/vision/livingroom/translation',
-        MqttQos.atMostOnce,
+        MqttQos.atLeastOnce,
       );
 
-      _messages = client.updates?.listen((messages) {
-        if (_current(client)) _onMessage(messages);
-      });
       client.subscribe(
         'safehub/control/livingroom/aircon/command',
         MqttQos.atLeastOnce,
@@ -254,6 +259,22 @@ class MqttReceiver {
 
       final payload = utf8.decode(message.payload.message);
 
+      handlePayload(
+        topic, payload,
+        packetId: message.variableHeader?.messageIdentifier ?? 0,
+        duplicate: message.header?.duplicate == true,
+      );
+    } catch (e) {
+      print('[MQTT] message decoding failed: $e');
+    }
+  }
+
+  @visibleForTesting
+  void handlePayload(String topic, String payload, {
+    int packetId = 0, bool duplicate = false,
+  }) {
+    if (_disposed) return;
+    try {
       print('[MQTT] received topic=$topic bytes=${payload.length}');
 
       final decoded = jsonDecode(payload);
@@ -266,10 +287,9 @@ class MqttReceiver {
 
       // 수어 번역 결과
       if (topic == 'safehub/vision/livingroom/translation') {
-        final packetId = message.variableHeader?.messageIdentifier ?? 0;
         final key = '$packetId:$payload';
         if (packetId != 0 &&
-            message.header?.duplicate == true &&
+            duplicate &&
             _signPackets.contains(key))
           return;
         if (packetId != 0) {
@@ -304,7 +324,22 @@ class MqttReceiver {
         return;
       }
 
+      final rawId = event['message_id'];
+      String? messageId;
+      if (rawId != null) {
+        if (rawId is! String || rawId.trim().isEmpty) return;
+        messageId = rawId.trim();
+        if (_seenSafetyMessageIds.contains(messageId)) return;
+        event['message_id'] = messageId;
+      }
+
       eventManager.addEvent(event);
+      if (messageId != null) {
+        _seenSafetyMessageIds.add(messageId);
+        if (_seenSafetyMessageIds.length > _maxSeenSafetyMessageIds) {
+          _seenSafetyMessageIds.remove(_seenSafetyMessageIds.first);
+        }
+      }
 
       print(
         '[MQTT] event queued event=${event['event']} '

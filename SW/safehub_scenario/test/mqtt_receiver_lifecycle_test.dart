@@ -31,6 +31,7 @@ class _Client extends MqttServerClient {
   final stream =
       StreamController<List<MqttReceivedMessage<MqttMessage>>>.broadcast();
   final subscriptions = <String>[];
+  final subscriptionQos = <String, MqttQos>{};
   int connects = 0, disconnects = 0;
 
   @override
@@ -48,6 +49,8 @@ class _Client extends MqttServerClient {
 
   @override
   Subscription? subscribe(String topic, MqttQos qosLevel) {
+    expect(stream.hasListener, isTrue, reason: "Register updates before every subscribe");
+    subscriptionQos[topic] = qosLevel;
     subscriptions.add(topic);
     return null;
   }
@@ -122,6 +125,7 @@ void main() {
         'safehub/vision/livingroom/translation',
         'safehub/control/livingroom/aircon/command',
       ]);
+      expect(clients.last.subscriptionQos['safehub/vision/livingroom/translation'], MqttQos.atLeastOnce);
       expect(timers.where((timer) => timer.isActive), isEmpty);
     },
   );

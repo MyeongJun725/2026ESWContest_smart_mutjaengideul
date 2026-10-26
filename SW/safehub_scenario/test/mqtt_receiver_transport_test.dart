@@ -9,7 +9,7 @@ import 'package:safehub_app/mqtt/mqtt_receiver.dart';
 const _expectedSubscriptions = {
   'safehub/csi/bedroom/event': 1,
   'safehub/csi/bathroom/event': 1,
-  'safehub/vision/livingroom/translation': 0,
+  'safehub/vision/livingroom/translation': 1,
   'safehub/control/livingroom/aircon/command': 1,
 };
 
@@ -128,13 +128,13 @@ class _LoopbackBroker {
     return true;
   }
 
-  void publish(String topic, String payload, {int qos = 0, int id = 1}) {
+  void publish(String topic, String payload, {int qos = 0, int id = 1, bool duplicate = false}) {
     final body = <int>[
       ..._stringBytes(topic),
       if (qos == 1) ...[id >> 8, id & 255],
       ...utf8.encode(payload),
     ];
-    sockets.single.add(_packet(0x30 | (qos << 1), body));
+    sockets.single.add(_packet(0x30 | (qos << 1) | (duplicate ? 8 : 0), body));
   }
 
   Future<void> close() async {
