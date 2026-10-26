@@ -15,7 +15,7 @@ ATLAS의 `/etc/permission/atlas_permission.json`에서 이 권한은
 
 ```sh
 busctl --system call com.atlas.AppManager1 /com/atlas/AppManager1 \
-  com.atlas.AppManager1 GetInfo s com.atlas.app.safehub_app
+  com.atlas.AppManager1 GetInfo s com.atlas.app.safehub_scenario_pr7
 ```
 
 사용자 동의는 ATLAS 권한 요청 화면에서 받는다. 아래 `app_user`에는

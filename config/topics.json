@@ -1,12 +1,10 @@
 {
-  "version": "1.1",
-
+  "version": "1.2",
   "broker": {
     "host": "raspberrypi5.local",
     "port": 1883,
     "note": "RPi5에서 Mosquitto Broker를 운영한다. 결선 환경에서는 RPi5 고정 IP 사용을 권장한다."
   },
-
   "topics": {
     "vision_landmarks": {
       "topic": "safehub/vision/livingroom/landmarks",
@@ -15,7 +13,6 @@
       "publisher": "RPi4",
       "subscriber": "RPi5",
       "description": "RPi4에서 OpenCV 및 MediaPipe Hands로 추출한 손 관절 데이터를 RPi5 GRU로 전달한다. 원본 영상은 전송하지 않는다.",
-
       "payload_schema": {
         "device": "string",
         "event": "hand_landmarks",
@@ -25,9 +22,9 @@
             "landmarks": "21개의 [x, y, z] float 좌표"
           }
         ]
-      }
+      },
+      "implementation_status": "legacy GRU path; retained for compatibility, not the current C++ translation path"
     },
-
     "csi_bedroom_event": {
       "topic": "safehub/csi/bedroom/event",
       "qos": 1,
@@ -35,7 +32,6 @@
       "publisher": "ESP32_BEDROOM",
       "subscriber": "RPi5",
       "description": "침실 CSI 기반 이상행동 및 낙상 감지 이벤트",
-
       "payload_schema": {
         "message_id": "string(UUID)",
         "device": "string",
@@ -43,9 +39,9 @@
         "confidence": "float (0~1)",
         "priority": "integer (1~10)",
         "timestamp": "integer (Unix timestamp)"
-      }
+      },
+      "implementation_status": "UI accepts this envelope; SW/wifi_sensing currently provides a local HTTP service and does not publish this topic. End-to-end CSI alarm routing remains pending."
     },
-
     "csi_bathroom_event": {
       "topic": "safehub/csi/bathroom/event",
       "qos": 1,
@@ -53,7 +49,6 @@
       "publisher": "ESP32_BATHROOM",
       "subscriber": "RPi5",
       "description": "화장실 CSI 기반 이상행동 및 낙상 감지 이벤트",
-
       "payload_schema": {
         "message_id": "string(UUID)",
         "device": "string",
@@ -61,9 +56,9 @@
         "confidence": "float (0~1)",
         "priority": "integer (1~10)",
         "timestamp": "integer (Unix timestamp)"
-      }
+      },
+      "implementation_status": "UI accepts this envelope; SW/wifi_sensing currently provides a local HTTP service and does not publish this topic. End-to-end CSI alarm routing remains pending."
     },
-
     "actuator_led_command": {
       "topic": "safehub/actuator/led/command",
       "qos": 1,
@@ -71,16 +66,15 @@
       "publisher": "RPi5",
       "subscriber": "ESP32",
       "description": "비상 LED 제어 명령",
-
       "payload_schema": {
         "message_id": "string(UUID)",
         "device": "rpi5_hub",
         "event": "led_command",
         "action": "string",
         "timestamp": "integer (Unix timestamp)"
-      }
+      },
+      "implementation_status": "UI publishing API exists; PR #10 Uno MQTT/USB consumer is reviewed separately. Delivery/serial echo is not physical action confirmation."
     },
-
     "actuator_bedshaker_command": {
       "topic": "safehub/actuator/bedshaker/command",
       "qos": 1,
@@ -88,7 +82,6 @@
       "publisher": "RPi5",
       "subscriber": "ESP32",
       "description": "베드셰이커 제어 명령",
-
       "payload_schema": {
         "message_id": "string(UUID)",
         "device": "rpi5_hub",
@@ -96,9 +89,9 @@
         "action": "on | off",
         "duration_sec": "integer",
         "timestamp": "integer (Unix timestamp)"
-      }
+      },
+      "implementation_status": "UI publishing API exists; PR #10 Uno MQTT/USB consumer is reviewed separately. Delivery/serial echo is not physical action confirmation."
     },
-
     "system_heartbeat": {
       "topic": "safehub/system/heartbeat",
       "qos": 0,
@@ -106,30 +99,49 @@
       "publisher": "RPi4 / RPi5 / ESP32",
       "subscriber": "RPi5",
       "description": "각 노드의 주기적인 생존 확인",
-
       "payload_schema": {
         "device": "string",
         "event": "heartbeat",
         "status": "online"
       }
+    },
+    "vision_translation": {
+      "topic": "safehub/vision/livingroom/translation",
+      "qos": 1,
+      "retain": false,
+      "publisher": "RPi4 C++ mqtt_translation_publisher",
+      "subscriber": "RPi5 Scenario UI / sign shortcut hub",
+      "payload_schema": {
+        "text": "nonempty string"
+      },
+      "duplicate_handling": "QoS 1 DUP + packet identifier + unchanged payload: bounded 128-packet process-local cache. A new publication may repeat the same text."
+    },
+    "device_control_command": {
+      "topic": "safehub/control/{room}/{device}/command",
+      "qos": 1,
+      "retain": false,
+      "publisher": "RPi5 sign shortcut hub",
+      "subscriber": "device adapter (Uno candidate in PR #10); Scenario UI currently observes livingroom/aircon",
+      "payload_schema": {
+        "source": "string (sign_shortcut; manual_test is a PR #10 extension)",
+        "action": "set_power (stop for curtain in PR #10 only)",
+        "power_on": "boolean"
+      },
+      "implementation_status": "Aircon existing contract; curtain/stop extension reviewed in PR #10 and not adopted by this UI candidate. No physical completion acknowledgement is defined."
     }
   },
-
   "mqtt_policy": {
     "qos": {
       "0": "연속적으로 갱신되어 일부 유실을 허용할 수 있는 데이터에 사용한다.",
       "1": "낙상 이벤트 및 액추에이터 명령처럼 전달 보장이 필요한 메시지에 사용한다.",
       "2": "사용하지 않는다."
     },
-
     "duplicate_handling": {
-      "description": "QoS 1 메시지는 message_id를 사용하여 RPi5 또는 수신 노드에서 중복 실행을 방지한다."
+      "description": "Safety events: trimmed message_id, last 2000 accepted IDs per UI process; no-ID legacy messages accepted without deduplication. Invalid non-string/blank IDs rejected. Reboot clears cache. Translation uses MQTT packet headers, not this incident-ID cache. Absolute device power commands are idempotent; physical completion is not acknowledged."
     },
-
     "retain": {
       "policy": "현재 정의된 모든 Topic은 retain=false로 사용한다."
     },
-
     "priority": {
       "range": "1~10",
       "description": "MQTT 자체 기능이 아니라 RPi5 Event Manager에서 이벤트 처리 순서를 결정하기 위한 필드이다.",
@@ -140,8 +152,7 @@
       }
     }
   },
-
-  "architecture_note": "RPi4는 OpenCV 및 MediaPipe Hands를 수행하고 관절 데이터만 RPi5로 전송한다. RPi5는 GRU 추론, Event Manager, GUI, TTS, 재난 API를 담당한다. RPi5 내부 모듈 간 통신은 본 MQTT 장치 간 통신 규격에 포함하지 않는다.",
-
-  "change_policy": "Topic 이름, JSON Key, QoS, retain 및 데이터 타입 변경 시 팀 합의 후 version을 올린다."
+  "architecture_note": "Current reviewed path: RPi4 C++ sign classification publishes translation text and sends camera frames over TCP. RPi5 runs the Python hub, Scenario Flutter UI, local STT and optional context services. Existing GRU/landmark code and assets are preserved as legacy or user work, not reset. SW/wifi_sensing uses local HTTP; an offline CSI envelope adapter alone is not a live alarm integration. PR #9 and PR #10 are separately reviewed candidates.",
+  "change_policy": "Topic 이름, JSON Key, QoS, retain 및 데이터 타입 변경 시 팀 합의 후 version을 올린다.",
+  "status": "review_candidate_not_a_deployment_claim"
 }
