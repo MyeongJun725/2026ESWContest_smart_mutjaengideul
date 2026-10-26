@@ -5,10 +5,11 @@ import 'package:http/http.dart' as http;
 class HardwareTestDialog extends StatefulWidget {
   const HardwareTestDialog({super.key, required this.connected,
     required this.publishAlert, required this.publishFan, required this.classifierUri,
-    this.client});
+    this.client, this.publishCurtain});
   final bool connected;
   final bool Function(String device, String action) publishAlert;
   final bool Function(bool powerOn) publishFan;
+  final bool Function(String action)? publishCurtain;
   final Uri classifierUri;
   final http.Client? client;
   @override State<HardwareTestDialog> createState() => _HardwareTestDialogState();
@@ -16,7 +17,7 @@ class HardwareTestDialog extends StatefulWidget {
 
 class _HardwareTestDialogState extends State<HardwareTestDialog> {
   final text = TextEditingController(text: '화재가 발생했습니다. 신속히 대피하세요.');
-  String result = '실제 LED·진동·팬을 제어합니다. 커튼은 연결하지 않습니다.';
+  String result = '실제 LED·진동·팬·커튼을 제어합니다.';
   bool busy = false;
   static const accent = Color(0xFF8D2345);
 
@@ -31,6 +32,7 @@ class _HardwareTestDialogState extends State<HardwareTestDialog> {
     final led = widget.publishAlert('led', 'off');
     final vibration = widget.publishAlert('bedshaker', 'off');
     final power = !fan || widget.publishFan(false);
+    if (fan) widget.publishCurtain?.call('stop');
     setState(() => result = led && vibration && power
         ? '${fan ? "팬·LED·진동" : "LED·진동"} 끄기 명령 제출 · 실제 장치를 확인하세요.'
         : '일부 명령 전송 실패 · 연결을 확인하세요.');
@@ -93,13 +95,19 @@ class _HardwareTestDialogState extends State<HardwareTestDialog> {
           button('팬 끄기', () { final sent=widget.publishFan(false); setState(() => result=sent?'팬 끄기 명령 제출':'팬 명령 전송 실패'); }),
           button('LED·진동 끄기', () => stop()),
           button('팬·LED·진동 모두 끄기', () => stop(fan: true)),
+          if (widget.publishCurtain != null)
+            for (final entry in {'up': '커튼 올림', 'down': '커튼 내림', 'stop': '커튼 정지'}.entries)
+              button(entry.value, () {
+                final sent = widget.publishCurtain!(entry.key);
+                setState(() => result = sent ? '${entry.value} 명령 제출 · 이동은 1.5초 제한' : '커튼 명령 전송 실패');
+              }),
         ]),
         const SizedBox(height: 20),
         Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(
           color: const Color(0xFFF4E8EC), borderRadius: BorderRadius.circular(14)),
           child: Text(result, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w600))),
         const SizedBox(height: 12),
-        const Text('창을 닫아도 팬은 유지됩니다. LED·진동은 최대 10초, 팬은 끄기 버튼으로 종료하세요.',
+        const Text('창을 닫아도 팬은 유지됩니다. LED·진동은 최대 10초, 커튼은 1.5초 이동합니다. 팬은 별도로 꺼주세요.',
           style: TextStyle(fontSize: 16, color: Color(0xFF686C73))),
       ]))),
   );

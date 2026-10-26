@@ -376,6 +376,23 @@ class MqttReceiver {
     } catch (_) { return false; }
   }
 
+  bool publishCurtain(String action) {
+    if (!{'up', 'down', 'stop'}.contains(action)) return false;
+    final client = _client;
+    if (_disposed || !_connected || client == null ||
+        client.connectionStatus?.state != MqttConnectionState.connected) return false;
+    try {
+      final builder = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({
+        'source': 'manual_test',
+        'action': action == 'stop' ? 'stop' : 'set_power',
+        'power_on': action == 'up',
+      }));
+      client.publishMessage('safehub/control/livingroom/curtain/command',
+          MqttQos.atLeastOnce, builder.payload!, retain: false);
+      return true;
+    } catch (_) { return false; }
+  }
+
   bool publishShortcutCommand(String payload) {
     final client = _client;
     final cleanPayload = payload.trim();

@@ -15,9 +15,7 @@ def build_device_control_message(
     source: str = "sign_shortcut",
 ) -> DeviceControlMessage:
     if not result.success:
-        raise ValueError(
-            "실패한 ActionResult로 기기 제어 메시지를 만들 수 없습니다."
-        )
+        raise ValueError("실패한 ActionResult로 기기 제어 메시지를 만들 수 없습니다.")
 
     if result.power_on is None:
         raise ValueError(
@@ -41,7 +39,9 @@ def build_device_control_message(
 
     payload_data = {
         "source": clean_source,
-        "action": "set_power",
+        "action": (
+            "stop" if device == "curtain" and result.action == "stop" else "set_power"
+        ),
         "power_on": result.power_on,
     }
 

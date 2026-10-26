@@ -9,7 +9,13 @@ import time
 LED_TOPIC = "safehub/actuator/led/command"
 SHAKER_TOPIC = "safehub/actuator/bedshaker/command"
 AIRCON_TOPIC = "safehub/control/livingroom/aircon/command"
-SUBSCRIPTIONS = ((LED_TOPIC, 1), (SHAKER_TOPIC, 1), (AIRCON_TOPIC, 1))
+CURTAIN_TOPIC = "safehub/control/livingroom/curtain/command"
+SUBSCRIPTIONS = (
+    (LED_TOPIC, 1),
+    (SHAKER_TOPIC, 1),
+    (AIRCON_TOPIC, 1),
+    (CURTAIN_TOPIC, 1),
+)
 
 
 class UnoController:
@@ -22,6 +28,9 @@ class UnoController:
         self.seen = OrderedDict()
         self.wire = None
         self.last_rejection = ""
+        self.curtain_pending = None
+        self.curtain_until = self.curtain_ready = 0.0
+        self.curtain_expires = 0.0
 
     def receive(self, topic, payload, retained=False):
         with self.lock:
@@ -32,6 +41,18 @@ class UnoController:
                 data = json.loads(payload)
                 if not isinstance(data, dict):
                     raise ValueError("command must be an object")
+                if topic == CURTAIN_TOPIC:
+                    if data.get("source") not in {"sign_shortcut", "manual_test"}:
+                        raise ValueError("invalid curtain source")
+                    action = data.get("action")
+                    if action == "set_power" and type(data.get("power_on")) is bool:
+                        self.curtain_pending = b"u" if data["power_on"] else b"j"
+                    elif action == "stop":
+                        self.curtain_pending = b"s"
+                    else:
+                        raise ValueError("invalid curtain action")
+                    self.curtain_expires = self.monotonic() + 2
+                    return True
                 if topic == AIRCON_TOPIC:
                     # Existing payload has no ID or timestamp. Absolute state
                     # is idempotent; never interpret it as another toggle.
@@ -92,6 +113,8 @@ class UnoController:
     def disconnected(self):
         with self.lock:
             self.wire = None
+            self.curtain_pending = None
+            self.curtain_until = self.curtain_ready = 0.0
 
     def tick(self, write):
         with self.lock:
@@ -108,16 +131,34 @@ class UnoController:
                 )
                 if previous is None or previous[index] != state
             )
+            pending = self.curtain_pending
+            until, ready = self.curtain_until, self.curtain_ready
+            if pending is not None:
+                if now > self.curtain_expires:
+                    pending = None
+                elif pending == b"s" or now < until:
+                    commands += b"s"
+                    until, ready = 0.0, now + 0.25
+                    if pending == b"s":
+                        pending = None
+                elif now >= ready:
+                    commands += pending
+                    pending, until = None, now + 1.5
+                    ready = until + 0.25
             if commands:
                 written = write(commands)
                 if written is not None and written != len(commands):
                     raise OSError("Incomplete Uno serial write")
             # Only a successful write advances the sent state.
             self.wire = desired
+            self.curtain_pending = pending
+            self.curtain_until, self.curtain_ready = until, ready
             return commands
 
     def shutdown(self, write):
         with self.lock:
             self.fan_on = False
             self.led_until = self.shaker_until = 0
+            self.curtain_pending = b"s"
+            self.curtain_expires = self.monotonic() + 2
             self.tick(write)

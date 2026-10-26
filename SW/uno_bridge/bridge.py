@@ -1,6 +1,7 @@
 """Independent MQTT/USB process. Does not access camera, CSI or sign models."""
 
 import argparse
+from collections import deque
 import logging
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ import time
 import paho.mqtt.client as mqtt
 import serial
 
-from controller import SUBSCRIPTIONS, UnoController
+from controller import SUBSCRIPTIONS, CURTAIN_TOPIC, UnoController
 
 LOG = logging.getLogger("safehub.uno")
 
@@ -53,6 +54,7 @@ def main():
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
     controller = UnoController()
+    recent_curtain_packets = deque(maxlen=128)
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -72,6 +74,11 @@ def main():
         LOG.info("Subscribed to existing actuator/aircon topics")
 
     def message(client, userdata, msg):
+        if msg.topic == CURTAIN_TOPIC and msg.mid:
+            key = (msg.mid, bytes(msg.payload))
+            if msg.dup and key in recent_curtain_packets:
+                return
+            recent_curtain_packets.append(key)
         previous_fan = controller.fan_on
         accepted = controller.receive(msg.topic, msg.payload, msg.retain)
         if accepted and (
@@ -139,7 +146,7 @@ def main():
                                 verified = True
                                 LOG.info("Uno command handler verified by F/V/L echoes")
                 if now >= ready_at and not probe_sent:
-                    port.write(b"FVL")
+                    port.write(b"FVLs")
                     probe_sent = True
                 if probe_sent and not verified and now > ready_at + 5:
                     raise OSError(

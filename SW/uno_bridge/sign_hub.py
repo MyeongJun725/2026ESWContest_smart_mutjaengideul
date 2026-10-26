@@ -37,6 +37,7 @@ def main():
         client.subscribe(SIGN_TRANSLATION_TOPIC, qos=1)
         client.subscribe(SHORTCUT_COMMAND_TOPIC, qos=1)
         client.subscribe("safehub/control/livingroom/aircon/command", qos=1)
+        client.subscribe("safehub/control/livingroom/curtain/command", qos=1)
         print("Existing sign shortcut topics connected", flush=True)
 
     def message(client, userdata, msg):
@@ -47,7 +48,10 @@ def main():
             if msg.dup and key in recent_sign_packets:
                 return
             recent_sign_packets.append(key)
-        if msg.topic == "safehub/control/livingroom/aircon/command":
+        if msg.topic in {
+            "safehub/control/livingroom/aircon/command",
+            "safehub/control/livingroom/curtain/command",
+        }:
             try:
                 data = json.loads(msg.payload)
                 if not isinstance(data, dict):
@@ -56,9 +60,12 @@ def main():
                     data.get("source") in {"sign_shortcut", "manual_test"}
                     and data.get("action") == "set_power"
                 ):
-                    application.action_executor.sync_livingroom_aircon_power(
-                        data["power_on"]
+                    sync = (
+                        application.action_executor.sync_livingroom_curtain_power
+                        if "/curtain/" in msg.topic
+                        else application.action_executor.sync_livingroom_aircon_power
                     )
+                    sync(data["power_on"])
             except (ValueError, KeyError, TypeError):
                 logging.warning("Invalid absolute power state ignored")
             return

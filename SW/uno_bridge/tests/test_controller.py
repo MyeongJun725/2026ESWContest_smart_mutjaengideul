@@ -4,7 +4,13 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from controller import AIRCON_TOPIC, LED_TOPIC, SHAKER_TOPIC, UnoController
+from controller import (
+    AIRCON_TOPIC,
+    CURTAIN_TOPIC,
+    LED_TOPIC,
+    SHAKER_TOPIC,
+    UnoController,
+)
 
 
 class ControllerTests(unittest.TestCase):
@@ -125,6 +131,61 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.controller.tick(broken)
         self.assertEqual(self.tick(), b"FVL")
+
+    def curtain(self, action="set_power", power_on=True):
+        return self.controller.receive(
+            CURTAIN_TOPIC,
+            json.dumps(
+                dict(source="manual_test", action=action, power_on=power_on)
+            ).encode(),
+        )
+
+    def test_curtain_reverse_stops_then_waits_before_changing_direction(self):
+        self.tick()
+        self.assertTrue(self.curtain())
+        self.assertEqual(self.tick(), b"u")
+        self.now += 0.1
+        self.curtain(power_on=False)
+        self.assertEqual(self.tick(), b"s")
+        self.now += 0.1
+        self.assertEqual(self.tick(), b"")
+        self.now += 0.16
+        self.assertEqual(self.tick(), b"j")
+        self.curtain(action="stop")
+        self.assertEqual(self.tick(), b"s")
+
+    def test_curtain_old_or_disconnected_request_is_not_replayed(self):
+        self.tick()
+        self.curtain()
+        self.now += 3
+        self.assertEqual(self.tick(), b"")
+        self.curtain()
+        self.controller.disconnected()
+        self.assertEqual(self.tick(), b"FVL")
+
+    def test_curtain_stop_does_not_turn_off_running_fan(self):
+        self.controller.receive(
+            AIRCON_TOPIC,
+            json.dumps(
+                dict(source="manual_test", action="set_power", power_on=True)
+            ).encode(),
+        )
+        self.tick()
+        self.curtain()
+        self.tick()
+        self.curtain(action="stop")
+        self.assertEqual(self.tick(), b"s")
+        self.assertTrue(self.controller.fan_on)
+
+    def test_curtain_restart_waits_for_firmware_auto_stop_cooldown(self):
+        self.tick()
+        self.curtain()
+        self.tick()
+        self.now += 1.6
+        self.curtain(power_on=False)
+        self.assertEqual(self.tick(), b"")
+        self.now += 0.16
+        self.assertEqual(self.tick(), b"j")
 
 
 if __name__ == "__main__":

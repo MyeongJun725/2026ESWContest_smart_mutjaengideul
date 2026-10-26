@@ -92,7 +92,7 @@ class HouseStatusCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     service.scenarioTestMode
-                        ? '시연 모드 · 실제 장치는 작동하지 않아요.'
+                        ? (service.scenarioActuators ? '시연 입력 · 실제 LED·진동 연동' : '화면 테스트 · 실제 장치 작동 없음')
                         : detail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -196,6 +196,7 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
   HouseScenario kind = HouseScenario.broadcast;
   late final text = TextEditingController(text: presets[kind]);
   String error = '';
+  bool actuate = true;
   @override
   void dispose() {
     text.dispose();
@@ -213,7 +214,7 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              '화면·응답 흐름만 시험합니다. MQTT 전송, 실제 재난 등록, CSI 기록·학습은 하지 않습니다.',
+              '선택한 상황으로 경고 화면과 LED·진동을 함께 시험합니다. 실제 재난 접수·CSI 검출·119 신고는 아닙니다.',
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<HouseScenario>(
@@ -242,6 +243,13 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
               },
             ),
             const SizedBox(height: 16),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('실제 LED·진동 연동'),
+              subtitle: const Text('켜면 선택 즉시 장치 작동 · 끄면 화면만 시험'),
+              value: actuate,
+              onChanged: (value) => setState(() => actuate = value),
+            ),
             TextField(
               controller: text,
               maxLines: 4,
@@ -274,13 +282,13 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
             setState(() => error = '입력 문장을 적어주세요.');
             return;
           }
-          if (!widget.service.startScenarioTest(kind, text.text.trim())) {
+          if (!widget.service.startScenarioTest(kind, text.text.trim(), actuate: actuate)) {
             setState(() => error = '실제 알림이 있습니다. 먼저 확인한 뒤 테스트를 시작하세요.');
             return;
           }
           Navigator.pop(context);
         },
-        child: const Text('화면 테스트 실행'),
+        child: Text(actuate ? '화면·장치 함께 실행' : '화면만 실행'),
       ),
     ],
   );

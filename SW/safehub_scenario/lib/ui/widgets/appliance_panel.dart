@@ -4,7 +4,7 @@ import '../../core/appliance_controls.dart';
 import '../../services/shortcut_store.dart';
 import '../theme/app_theme.dart';
 
-/// No hardware commands are published. Hub commands are observed by the parent.
+/// Commands and observed hub state stay separate from physical state feedback.
 class AppliancePanel extends StatefulWidget {
   final ApplianceControls controls;
   final bool connected;
@@ -13,6 +13,7 @@ class AppliancePanel extends StatefulWidget {
   final bool loadShortcuts;
   final bool allowPreview;
   final bool Function(String payload)? publishShortcutCommand;
+  final bool Function(String device, String action)? publishDeviceCommand;
 
   const AppliancePanel({
     super.key,
@@ -23,6 +24,7 @@ class AppliancePanel extends StatefulWidget {
     this.loadShortcuts = true,
     this.allowPreview = true,
     this.publishShortcutCommand,
+    this.publishDeviceCommand,
   });
   @override
   State<AppliancePanel> createState() => _AppliancePanelState();
@@ -35,8 +37,8 @@ class _AppliancePanelState extends State<AppliancePanel> {
 
   static const List<String> _shortcutSigns = ['에어컨', '점등', '소등', '꺼지다', '감사'];
 
-  static const String _device = 'aircon';
-  static const String _action = 'toggle';
+  String _device = 'aircon';
+  String _action = 'toggle';
 
   String? _selectedSign = '에어컨';
   String? _editing;
@@ -179,7 +181,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
 
   String _actionLabel(String device, String action) =>
       device == 'curtain'
-          ? {'on': '열기', 'off': '닫기', 'toggle': '열기/닫기 전환'}[action]!
+          ? {'on': '올림', 'off': '내림', 'toggle': '열기/닫기 전환', 'stop': '정지'}[action]!
           : ApplianceControls.actions[action]!;
 
   Widget _deviceCard(String id, String label) {
@@ -239,12 +241,16 @@ class _AppliancePanelState extends State<AppliancePanel> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final action in ['on', 'off'])
+              for (final action in ['on', 'off', if (id == 'curtain' && !_preview) 'stop'])
                 OutlinedButton(
                   onPressed:
                       _preview
                           ? () => setState(() => model.applyPreview(id, action))
-                          : null,
+                          : widget.connected && widget.publishDeviceCommand != null && id != 'light'
+                          ? () {
+                            final sent = widget.publishDeviceCommand!(id, action);
+                            setState(() => _message = sent ? '$label ${_actionLabel(id, action)} 명령 제출 · 실제 장치 확인 필요' : '명령 전송 실패');
+                          } : null,
                   child: Text(_actionLabel(id, action)),
                 ),
             ],
@@ -274,7 +280,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
                   Text(
                     widget.allowPreview
                         ? '버튼 테스트와 허브 명령 확인을 분리했습니다. 실제 가전은 작동하지 않습니다.'
-                        : '허브에서 받은 명령을 표시합니다. 수동 가전 제어 버튼은 아직 연동되지 않았습니다.',
+                        : '팬과 커튼을 직접 제어할 수 있어요. 표시는 명령 상태이며 실제 위치·회전 피드백은 아닙니다.',
                   ),
                   if (widget.allowPreview)
                     SwitchListTile(
@@ -379,6 +385,25 @@ class _AppliancePanelState extends State<AppliancePanel> {
                     ),
                   ],
                   const SizedBox(height: 18),
+                  DropdownButtonFormField<String>(
+                    value: _device,
+                    decoration: const InputDecoration(labelText: '수어로 제어할 기기'),
+                    items: [for (final entry in ApplianceControls.devices.entries)
+                      DropdownMenuItem(value: entry.key, child: Text(entry.value))],
+                    onChanged: _saving ? null : (value) => setState(() {
+                      _device = value!;
+                      _action = value == 'curtain' ? 'on' : 'toggle';
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _action,
+                    decoration: const InputDecoration(labelText: '실행 동작'),
+                    items: [for (final action in ['on', 'off', 'toggle', if (_device == 'curtain') 'stop'])
+                      DropdownMenuItem(value: action, child: Text(_actionLabel(_device, action)))],
+                    onChanged: _saving ? null : (value) => setState(() => _action = value!),
+                  ),
+                  const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -395,7 +420,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '거실 에어컨',
+                                '수어 이름과 기기·동작을 연결하세요',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
@@ -403,7 +428,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
                               ),
                               SizedBox(height: 4),
                               Text(
-                                '수어를 인식할 때마다 켜기/끄기 전환',
+                                '에어컨은 팬, 커튼은 올림·내림·정지에 연결됩니다.',
                                 style: TextStyle(
                                   color: _secondary,
                                   fontSize: 15,
@@ -498,6 +523,8 @@ class _AppliancePanelState extends State<AppliancePanel> {
                                         : () => setState(() {
                                           _editing = b.sign;
                                           _selectedSign = b.sign;
+                                          _device = b.device;
+                                          _action = b.action;
                                           _message = '위 등록 양식에서 수정하세요.';
                                         }),
                                 child: const Text('수정'),

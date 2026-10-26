@@ -194,8 +194,10 @@ class SituationService extends ChangeNotifier {
   final liveFlow = HouseScenarioFlow();
   final testFlow = HouseScenarioFlow(simulated: true);
   bool scenarioTestMode = false;
+  bool scenarioActuators = false;
   HouseScenarioFlow get flow => scenarioTestMode ? testFlow : liveFlow;
   VoidCallback? onScenarioAlert;
+  VoidCallback? onScenarioTestChanged;
   String? _presentedIncident;
 
   void _newRealIncident(bool created) {
@@ -235,11 +237,12 @@ class SituationService extends ChangeNotifier {
     _newRealIncident(liveFlow.assistance(id, text));
   }
 
-  bool startScenarioTest(HouseScenario kind, String text) {
+  bool startScenarioTest(HouseScenario kind, String text, {bool actuate = false}) {
     if (liveFlow.active != null) return false;
     _generation++;
     _client?.close();
     scenarioTestMode = true;
+    scenarioActuators = actuate;
     voiceChatEnabled = false;
     _requestedVoice = null;
     _voiceVersion++;
@@ -267,7 +270,8 @@ class SituationService extends ChangeNotifier {
         testFlow.assistance('test', text);
         break;
     }
-    status = '테스트 상황 · 실제 장치 명령 없음';
+    status = actuate ? '시나리오 시연 · 실제 LED·진동 연동' : '화면 테스트 · 실제 장치 명령 없음';
+    onScenarioTestChanged?.call();
     _notify();
     requestAssessment(immediate: true);
     return true;
@@ -275,6 +279,7 @@ class SituationService extends ChangeNotifier {
 
   void endScenarioTest() {
     scenarioTestMode = false;
+    scenarioActuators = false;
     _generation++;
     _client?.close();
     assessment = null;
@@ -286,6 +291,7 @@ class SituationService extends ChangeNotifier {
     deferredHelp = false;
     _signTurns.clear();
     testFlow.reset();
+    onScenarioTestChanged?.call();
     _notify();
     requestAssessment();
   }
