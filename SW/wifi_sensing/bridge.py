@@ -40,7 +40,7 @@ def export_model_bundle(model, output):
 
 
 class Controller:
-    def __init__(self, data_dir, allow_training=False, allow_dummy=True, passive_receiver=False):
+    def __init__(self, data_dir, allow_training=False, allow_dummy=True, passive_receiver=False, inference_only=False):
         # Configure isolated storage before the processing engine is imported.
         os.environ['WIFI_SENSING2_DATA_DIR'] = str(Path(data_dir).resolve())
         import server
@@ -59,7 +59,8 @@ class Controller:
             self.stream.error = 'ESP32 수신기를 연결하고 USB 포트를 선택하세요.'
         self.recognition = Recognition()
         self.lock = threading.RLock()
-        self.allow_training = allow_training
+        self.inference_only = inference_only
+        self.allow_training = allow_training and not inference_only
         self.capture = None
         self.capture_key = None
         self.capture_saved = False
@@ -329,6 +330,8 @@ class Controller:
         with self.lock:
             if self.closed:
                 raise ValueError('센싱 서비스가 종료 중입니다. 다시 실행하세요.')
+            if self.inference_only and action not in {'connect', 'disconnect', 'select_model', 'recognize', 'stop_recognition'}:
+                raise ValueError('제품 모드는 상태·추론 전용입니다. 수집·학습은 개발 서비스에서 실행하세요.')
             if action == 'connect':
                 if payload['mode'] == 'dummy' and not self.allow_dummy:
                     raise ValueError('실제 장비 연결 모드에서는 모의 신호를 사용할 수 없습니다.')
@@ -537,6 +540,8 @@ def main():
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--data-dir', type=Path, default=Path.home() / 'SafeHubData' / 'csi')
     parser.add_argument('--allow-training', action='store_true')
+    parser.add_argument('--inference-only', action='store_true',
+                        help='Product mode: reject capture, training and data/model editing commands.')
     parser.add_argument('--real-only', action='store_true',
                         help='Disable synthetic input; only accept a real serial device.')
     parser.add_argument('--passive-receiver', action='store_true',
@@ -547,9 +552,11 @@ def main():
     parser.add_argument('--receiver-baud', type=int, default=921600,
                         choices=(115200, 460800, 921600))
     args = parser.parse_args()
+    if args.inference_only and args.allow_training:
+        parser.error("--inference-only cannot be combined with --allow-training")
     controller = Controller(args.data_dir, args.allow_training,
                             allow_dummy=not args.real_only,
-                            passive_receiver=args.passive_receiver)
+                            passive_receiver=args.passive_receiver, inference_only=args.inference_only)
     server = None
     try:
         server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
