@@ -4,6 +4,7 @@
 #include <iostream>
 #include <utility>
 #include <cmath>
+#include <algorithm>
 
 LiveSignSession::LiveSignSession(
     std::size_t minimum_hand_frames,
@@ -164,6 +165,14 @@ std::optional<sign_engine::VisionRecordingDetections> LiveSignSession::push(
     bool recovering_second_hand) {
     if (!std::isfinite(capture_ms) || capture_ms < last_capture_ms_)
         throw std::invalid_argument("Non-monotonic sign capture time");
+    // Estimate cadence before a missing run, then freeze it during that run.
+    // A long absence must not inflate its own timeout. The 1500ms cap bounds
+    // the sampling allowance to 2250ms even after a camera/worker stall.
+    if (last_capture_ms_ >= 0 && first_empty_ms_ < 0 &&
+        capture_ms > last_capture_ms_) {
+        capture_intervals_ms_[capture_interval_index_++ % capture_intervals_ms_.size()] =
+            std::min(1500.0, capture_ms - last_capture_ms_);
+    }
     last_capture_ms_ = capture_ms;
     const bool has_hands = !frame.empty();
     if (state_ == State::AwaitRelease) {
@@ -177,9 +186,10 @@ std::optional<sign_engine::VisionRecordingDetections> LiveSignSession::push(
     }
 
     std::optional<sign_engine::VisionRecordingDetections> completed;
-    // A recovery grace applies only to a recent real two-hand loss. A gap
-    // beyond 650ms splits the actions even if a new hand is visible now.
-    const double gap_limit = recovering_second_hand ? 650 : 350;
+    // Keep the original fast-camera limits, but allow one missed observation
+    // at a slow irregular inference cadence without fabricating hand frames.
+    const double cadence = *std::max_element(capture_intervals_ms_.begin(), capture_intervals_ms_.end());
+    const double gap_limit = std::max(recovering_second_hand ? 650.0 : 350.0, 1.5 * cadence);
     if (state_ == State::Recording && first_empty_ms_ >= 0 &&
         capture_ms - first_empty_ms_ >= gap_limit) {
         recording_.resize(recording_.size() - empty_streak_);

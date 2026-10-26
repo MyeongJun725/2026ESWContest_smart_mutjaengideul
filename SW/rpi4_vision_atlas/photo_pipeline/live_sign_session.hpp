@@ -3,6 +3,7 @@
 #include "vision_frame_hands.hpp"
 
 #include <cstddef>
+#include <array>
 #include <optional>
 
 class LiveSignSession {
@@ -61,5 +62,7 @@ private:
     double first_empty_ms_ = -1;
     double last_capture_ms_ = -1;
     double release_start_ms_ = -1;
+    std::array<double, 8> capture_intervals_ms_{};
+    std::size_t capture_interval_index_ = 0;
     const char* finish_reason_ = "LEGACY_FRAME_GAP";
 };

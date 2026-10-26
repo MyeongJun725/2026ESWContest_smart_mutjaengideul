@@ -4,6 +4,36 @@
 #include <stdexcept>
 
 int main() {
+    // Slow inference is not evidence that hands disappeared between captures.
+    for(bool recovering : {false,true}) {
+        LiveSignSession slow;
+        double t=0;
+        for(int i=0;i<30;++i) {
+            t += (i%3==0 ? 800 : i%3==1 ? 1500 : 1100);
+            assert(!slow.push({{}},t,recovering));
+        }
+        auto continuous=slow.flush();
+        assert(continuous && continuous->size()==30);
+
+        LiveSignSession missed;
+        t=0;
+        for(int i=0;i<30;++i) {
+            t += (i%3==0 ? 800 : i%3==1 ? 1500 : 1100);
+            assert(!missed.push(i==12 ? sign_engine::VisionFrameDetections{} :
+                sign_engine::VisionFrameDetections{{}},t,recovering));
+        }
+        auto isolated_miss=missed.flush();
+        assert(isolated_miss && isolated_miss->size()==30);
+
+        // Sustained observed absence still closes the segment at slow cadence.
+        LiveSignSession bounded;
+        t=0;
+        for(int i=0;i<20;++i) { bounded.push({{}},t,recovering);t+=1500; }
+        assert(!bounded.push({},t,recovering));
+        assert(!bounded.push({},t+1500,recovering));
+        auto ended=bounded.push({},t+3000,recovering);
+        assert(ended && ended->size()==20 && !bounded.isRecording());
+    }
     for(double fps : {5.0,15.0,30.0}) {
         LiveSignSession session;
         double now=0;

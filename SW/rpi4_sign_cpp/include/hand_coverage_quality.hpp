@@ -6,7 +6,7 @@
 namespace sign_engine {
 struct HandCoverageQuality {
     std::size_t paired = 0, contact = 0, longest_pair_streak = 0;
-    std::size_t trailing_single = 0, observed = 0;
+    std::size_t trailing_single = 0, longest_single_after_contact = 0, observed = 0;
     bool incomplete_contact_sequence = false;
 };
 
@@ -42,14 +42,18 @@ inline HandCoverageQuality assessHandCoverage(const RecordingFrames& frames) {
         } else {
             streak=0;
             ++quality.trailing_single;
+            if (quality.contact>=3 && quality.longest_pair_streak>=3)
+                quality.longest_single_after_contact=std::max(
+                    quality.longest_single_after_contact, quality.trailing_single);
         }
     }
     // A brief, distant supporting hand is not a reason to reject one-hand
     // signs. Require sustained two-hand contact followed by severe loss.
     // Do not override established long paired sequences or the existing TEMP
     // rescue route. This guard addresses clips with insufficient paired data.
+    // A single reacquired pair must not erase a preceding severe loss run.
     quality.incomplete_contact_sequence = quality.paired<20 && quality.longest_pair_streak>=3 &&
-        quality.contact>=3 && quality.trailing_single>=8 && quality.observed>0 &&
+        quality.contact>=3 && quality.longest_single_after_contact>=8 && quality.observed>0 &&
         double(quality.paired)/quality.observed < .35;
     return quality;
 }

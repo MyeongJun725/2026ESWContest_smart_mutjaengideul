@@ -21,6 +21,18 @@ RecordingFrames clip(int paired, int tail, bool contact) {
     return frames;
 }
 int main() {
+    auto reacquired=clip(8,22,true);
+    reacquired.push_back(pair(true));
+    assert(assessHandCoverage(reacquired).incomplete_contact_sequence);
+    assert(classifyRecording(reacquired,RuntimeData{}).stage=="INCOMPLETE_TWO_HAND_TRACK");
+    ActiveTargetDiagnostics reacquired_diag;
+    assert(!classifyWithActiveTargets(reacquired,RuntimeData{},ActiveTargetModel{},reacquired_diag).valid);
+    assert(reacquired_diag.reason=="INCOMPLETE_TWO_HAND_TRACK");
+    reacquired.insert(reacquired.end(),11,pair(true));
+    assert(!assessHandCoverage(reacquired).incomplete_contact_sequence);
+    auto loss_before_contact=clip(0,22,false);
+    loss_before_contact.insert(loss_before_contact.end(),8,pair(true));
+    assert(!assessHandCoverage(loss_before_contact).incomplete_contact_sequence);
     // Synthetic shapes/counts; these are NOT the user's missing coordinate files.
     for(auto counts : {std::pair<int,int>{9,23},{4,42}}) {
         auto frames=clip(counts.first,counts.second,true);
