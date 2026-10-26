@@ -1,5 +1,8 @@
 # PR #9 후속 보완 검증 — 2026-10-26
 
+아래 ARM64 보류 기록 이후 사용자가 빌드를 재개 요청했다.
+최신 빌드 및 정적 ABI 검증은 [portable 후보 빌드 보고서](word1229-portable-build.md)를 참조한다.
+
 ## 기준과 작업 범위
 
 - PR: https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/9 (Draft).

@@ -1,0 +1,165 @@
+{
+  "candidate_sha256": "5c14f1fc0d7741417b46299b8ad010054ee509167eeda16c7a9b7a48e34d775c",
+  "interpreter": "/lib/ld-linux-aarch64.so.1",
+  "needed": [
+    "libonnxruntime.so.1",
+    "libopencv_imgproc.so.409",
+    "libopencv_core.so.409",
+    "libpaho-mqtt3c.so.1",
+    "ld-linux-aarch64.so.1",
+    "libstdc++.so.6",
+    "libm.so.6",
+    "libgcc_s.so.1",
+    "libc.so.6"
+  ],
+  "dependency_closure": [
+    "ld-linux-aarch64.so.1",
+    "libc.so.6",
+    "libgcc_s.so.1",
+    "libm.so.6",
+    "libonnxruntime.so.1",
+    "libopencv_core.so.409",
+    "libopencv_imgproc.so.409",
+    "libpaho-mqtt3c.so.1",
+    "libstdc++.so.6",
+    "libz.so.1"
+  ],
+  "target_hash_checks": [
+    {
+      "path": "/data/safehub/lib/libonnxruntime.so.1",
+      "sha256": "9e107b8c44196e314d4c4fdf17dc6743c76a1adca15339f6ba2809368f50079e",
+      "matches_device": true
+    },
+    {
+      "path": "/data/safehub/lib/libopencv_core.so.409",
+      "sha256": "1b88fa7f034b7f323bfaf38ca227627f557d6dfbbeafbd35b3e6a0d4c6c4f4a3",
+      "matches_device": true
+    },
+    {
+      "path": "/data/safehub/lib/libopencv_imgproc.so.409",
+      "sha256": "1b4e4f54450618b6fa6f1561daf8d9468d396958f0c5e4c7a2326fab5b1744b6",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/ld-linux-aarch64.so.1",
+      "sha256": "83e39b8e85e76e56c3bd6ee65cea86e163f8e32e14279affd9aa4f780fa364a7",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/libc.so.6",
+      "sha256": "9e430e93ce1447a0ec223a9bfa445f370951aa67c198bd121a6d48044ddf0007",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/libgcc_s.so.1",
+      "sha256": "6fc7c07b4d8b6956b52de2f963003191cfe0e8d6d253a3580e0b9a7e2879da4a",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/libm.so.6",
+      "sha256": "041ed59f8caf42c446593f212348cea954539868e818d2f307a9eb6d3b7d0bc0",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/libpaho-mqtt3c.so.1.3.13",
+      "sha256": "79618df302280ce175b9c9b31d00a60c43e7608ccf65045ed72b6004ece26def",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/libpthread.so.0",
+      "sha256": "587a126278d82425a6f756dffa362276d899df6b326bb3fc27e825657d1934b7",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/libstdc++.so.6.0.32",
+      "sha256": "221058ac841022b2097d67598609650617bbc43edba5068a3f1b57a2cfd35604",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/libz.so.1.3.1",
+      "sha256": "ac42b71621da6b80954f4155793581d7fa9373af0cd7d75039c41b0f6a534670",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/libdl.so.2",
+      "sha256": "cd47345bdcfa14581b424fcabe413a649f547faa53ce410ae1de4d9686fd5de1",
+      "matches_device": true
+    },
+    {
+      "path": "/usr/lib/librt.so.1",
+      "sha256": "99d778d45328a3b612d043996914f9f4f74e32a195c5693ba723475ad6c99f6d",
+      "matches_device": true
+    }
+  ],
+  "symbol_checks": [
+    {
+      "file": "vision_word1229_candidate",
+      "required_global_symbols": 182,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "ld-linux-aarch64.so.1",
+      "required_global_symbols": 0,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libc.so.6",
+      "required_global_symbols": 22,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libgcc_s.so.1",
+      "required_global_symbols": 12,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libm.so.6",
+      "required_global_symbols": 11,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libstdc++.so.6",
+      "required_global_symbols": 182,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libpaho-mqtt3c.so.1",
+      "required_global_symbols": 87,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libopencv_core.so.409",
+      "required_global_symbols": 232,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libz.so.1",
+      "required_global_symbols": 18,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libopencv_imgproc.so.409",
+      "required_global_symbols": 336,
+      "missing": [],
+      "aarch64_elf64_le": true
+    },
+    {
+      "file": "libonnxruntime.so.1",
+      "required_global_symbols": 401,
+      "missing": [],
+      "aarch64_elf64_le": true
+    }
+  ],
+  "target_execution_performed": false,
+  "deployed": false,
+  "passed": true
+}
