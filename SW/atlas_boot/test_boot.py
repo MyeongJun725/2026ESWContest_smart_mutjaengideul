@@ -40,6 +40,10 @@ class BootTests(unittest.TestCase):
             "--no-block start safehub-mqtt.service safehub-csi.service safehub-ui.service",
             "show --property=LoadState --value safehub-stt.service",
             "--no-block start safehub-stt.service",
+            "show --property=LoadState --value safehub-fasttext.service",
+            "--no-block start safehub-fasttext.service",
+            "show --property=LoadState --value safehub-sign-control.service",
+            "--no-block start safehub-sign-control.service",
         ])
 
     def test_external_server_configuration_needs_no_local_unit(self):

@@ -6,6 +6,8 @@ systemctl --no-block start safehub-mqtt.service safehub-csi.service safehub-ui.s
 # Resolve installed units through systemd after the /data mount and reload.
 # This also respects an /etc override instead of assuming one unit-file path.
 # External STT configurations need no local unit.
-if [ "$(systemctl show --property=LoadState --value safehub-stt.service 2>/dev/null || true)" = loaded ]; then
-    systemctl --no-block start safehub-stt.service
-fi
+for unit in safehub-stt.service safehub-fasttext.service safehub-sign-control.service; do
+    if [ "$(systemctl show --property=LoadState --value "$unit" 2>/dev/null || true)" = loaded ]; then
+        systemctl --no-block start "$unit"
+    fi
+done

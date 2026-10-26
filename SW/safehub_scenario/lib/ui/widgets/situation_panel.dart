@@ -370,9 +370,9 @@ class SituationResponse extends StatelessWidget {
               if (service.scenarioTestMode)
                 Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        '테스트 · 실제 장치 명령과 신고 전송 없음',
+                        service.scenarioActuators ? '시연 입력 · 실제 LED·진동 작동 / 신고 전송 없음' : '테스트 · 실제 장치 명령과 신고 전송 없음',
                         style: TextStyle(
                           color: Color(0xFF8C5300),
                           fontWeight: FontWeight.bold,

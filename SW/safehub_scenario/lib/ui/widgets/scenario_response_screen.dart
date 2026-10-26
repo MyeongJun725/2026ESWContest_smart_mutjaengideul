@@ -494,7 +494,9 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
                                           const SizedBox(width: 10),
                                           Expanded(
                                             child: text(
-                                              '시연 모드 · 실제 장치와 신고는 작동하지 않아요.',
+                                              service.scenarioActuators
+                                                ? '시연 입력 · 실제 LED·진동 작동 / 119 신고 없음'
+                                                : '화면 테스트 · 실제 장치와 신고는 작동하지 않아요.',
                                               size: 18,
                                               color: const Color(0xFF513A12),
                                             ),

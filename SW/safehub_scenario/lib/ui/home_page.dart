@@ -10,6 +10,7 @@ import '../core/alert_coordinator.dart';
 import '../core/house_scenario.dart';
 import 'widgets/house_status_card.dart';
 import 'widgets/editable_dashboard.dart';
+import 'widgets/hardware_test_dialog.dart';
 import 'widgets/scenario_event_overlay.dart';
 import '../core/appliance_controls.dart';
 import '../core/event_manager.dart';
@@ -54,6 +55,25 @@ class SafeHubHomePage extends StatefulWidget {
 class _SafeHubHomePageState extends State<SafeHubHomePage>
     with SingleTickerProviderStateMixin {
   bool _layoutEditing = false;
+  bool _hardwareTestOpen = false;
+  void _closeHardwareTestForAlert() {
+    if (_hardwareTestOpen && mounted) {
+      _hardwareTestOpen = false;
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+    }
+  }
+  void _openHardwareTest() {
+    if (_hardwareTestOpen) return;
+    _hardwareTestOpen = true;
+    showDialog<void>(context: context,
+    builder: (_) => HardwareTestDialog(connected: _mqttConnected && !AppConfig.localPreview,
+      publishAlert: _mqttReceiver.publishAlertSignal,
+      publishFan: _mqttReceiver.publishHardwareTestFan,
+      publishCurtain: _mqttReceiver.publishCurtain,
+      classifierUri: Uri.parse(_situation.settings.endpoint).replace(path: '/classify')))
+      .whenComplete(() => _hardwareTestOpen = false);
+  }
   final EventManager _eventManager = EventManager();
   final ApplianceControls _appliances = ApplianceControls();
   final DisasterService _disasterService = DisasterService();
@@ -123,13 +143,25 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
     _situation.onAnnouncement = () {
       if (!mounted) return;
+      _closeHardwareTestForAlert();
       _interruptNormalSpeech();
       _sendScenarioSignal();
     };
     _situation.onScenarioAlert = () {
       if (!mounted) return;
+      _closeHardwareTestForAlert();
       _interruptNormalSpeech();
       _sendScenarioSignal();
+    };
+    _situation.onScenarioTestChanged = () {
+      if (!mounted) return;
+      if (!_situation.scenarioTestMode && _situation.liveFlow.active != null) {
+        _activeLedOff = null;
+        _shakerSent = false;
+        return;
+      }
+      _stopScenarioSignal();
+      if (_situation.scenarioTestMode) _sendScenarioSignal();
     };
     _situation.onConversation = (input, reply, sign) {
       if (!mounted || _situation.scenarioTestMode) return;
@@ -375,6 +407,12 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       _mqttConnected = connected;
       _connectionStatus = connected ? '연결됨' : '재연결 중';
     });
+    // Deliver an alert that arrived while the broker was unavailable.
+    final incident = _situation.flow.active;
+    if (connected && incident != null &&
+        DateTime.now().difference(incident.receivedAt) < const Duration(seconds: 30)) {
+      _sendScenarioSignal();
+    }
   }
 
   void _handleSignText(String text) {
@@ -578,12 +616,20 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
   void _sendScenarioSignal() {
     final settings = _situation.settings;
-    if (_situation.scenarioTestMode) {
+    if (_situation.scenarioTestMode && !_situation.scenarioActuators) {
       _situation.flow.setDelivery('테스트: 화면·LED·진동 표시 확인 · 실제 명령 없음');
       return;
     }
     if (AppConfig.localPreview || !settings.actuatorsEnabled) {
-      _situation.liveFlow.setDelivery('화면 안내 중 · LED·진동 명령 전송 꺼짐');
+      _situation.flow.setDelivery('화면 안내 중 · LED·진동 명령 전송 꺼짐');
+      return;
+    }
+    final incident = _situation.flow.active;
+    if (incident == null) return;
+    if (!_situation.scenarioTestMode && incident.kind == HouseScenario.disaster &&
+        settings.homeRegion.trim().isEmpty &&
+        !(incident?.evidence.contains('지역: 전국') ?? false)) {
+      _situation.liveFlow.setDelivery('집 지역 미설정 · 지역 확인 후 자동 장치 알림을 사용하세요. 장치 테스트는 가능해요.');
       return;
     }
     final shaker = _mqttReceiver.publishAlertSignal('bedshaker', 'on');
@@ -600,7 +646,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
             : settings.ledOnAction.isEmpty
             ? '미설정'
             : '전송 실패'} · 실제 동작 미확인';
-    _situation.liveFlow.setDelivery(_situation.actuatorStatus);
+    _situation.flow.setDelivery(_situation.actuatorStatus);
   }
 
   void _stopScenarioSignal() {
@@ -815,6 +861,12 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                                         allowPreview: AppConfig.localPreview,
                                         connected: _mqttConnected,
                                         latestSign: _signText,
+                                        publishDeviceCommand: AppConfig.localPreview ? null : (device, action) {
+                                          if (device == 'aircon') return _mqttReceiver.publishHardwareTestFan(action == 'on');
+                                          if (device == 'curtain') return _mqttReceiver.publishCurtain(
+                                              action == 'on' ? 'up' : action == 'off' ? 'down' : 'stop');
+                                          return false;
+                                        },
                                         publishShortcutCommand:
                                             _mqttReceiver
                                                 .publishShortcutCommand,
@@ -942,7 +994,11 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                   onAcknowledge: () {
                     final simulated = _situation.scenarioTestMode;
                     _situation.acknowledge();
-                    if (simulated) return;
+                      if (simulated) {
+                        if (_situation.flow.active == null) _stopScenarioSignal();
+                        else _sendScenarioSignal();
+                        return;
+                      }
                     if (_situation.liveFlow.active != null) {
                       _sendScenarioSignal();
                       return;
