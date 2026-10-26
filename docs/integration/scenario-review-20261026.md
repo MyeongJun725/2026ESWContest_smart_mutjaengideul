@@ -4,6 +4,7 @@
 사용자가 확인한 RPi5 기준은 PR #8 기반 **1.2.0**, 앱 ID는
 `com.atlas.app.safehub_scenario_pr7`이다. ID의 `pr7`로 소스 버전을 추론하지 않는다.
 새 장치 테스트 창은 현재 사용자 기준에 미적용이며 이 후보에 포함하지 않았다.
+검토용 [Draft PR #11](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11)을 생성했다.
 
 ## 작업 환경과 보존
 
@@ -23,13 +24,11 @@
 
 ## 고정한 Git/PR 상태
 
-Git ref와 GitHub 웹 페이지를 대조했다. #6/#8/#9/#10은 모두 open Draft,
-base `develop`이다. 웹 페이지 Reviewers에는 `No reviews`가 표시됐다.
-CI/required-check 상세는 GitHub API의 네트워크 거부 때문에 확인하지 못했다.
-`Checks` 탭의 존재나 작성자의 테스트 설명을 CI 성공으로 간주하지 않는다.
-제출 준비 직전 다시 받은 열린 목록과 Git ref에서 위 SHA들의 추가 변경은 없었다.
-#6 Checks 웹 페이지는 `There are no checks for this commit`를 표시했다.
-#8/#9/#10 Checks 정적 응답에서는 신뢰할 수 있는 실행 결론을 얻지 못했다.
+Git ref, GitHub 웹 페이지 및 복구된 API를 대조했다. #6/#8/#9/#10은 모두
+open Draft, base `develop`이다. 각 PR은 리뷰 0개, check run 0개,
+commit-status context 0개다. combined state `pending`은 실행 중 CI가 있다는
+증거가 아니며, 자동 검증 성공으로 기록하지 않는다. 제출 준비 때 열린 목록과
+Git ref를 재조회했으며 인계 문서의 #6/#8/#9 SHA 이후 추가 커밋은 없었다.
 
 | 대상 | 검토 SHA | 문서 이후 차이 / 결정 |
 |---|---|---|
@@ -53,11 +52,11 @@ CI/required-check 상세는 GitHub API의 네트워크 거부 때문에 확인�
 | 재현 소스 | `SW/safehub_scenario` 유지. 기존 runner를 이 경로에 복사하고 ID/entry/CMake를 일치시킴 | 기존 템플릿 출처 명시. 실제 설치 IPK와 일치 확인은 미완료 |
 | 버전/추적 | pubspec `1.2.0+1`, manifest `1.2.0`, 새 `lib`/record plugin ignore 예외 | 번호는 사용자 기준과 정렬한 후보 표기. 설치본 재현 증거가 아님 |
 | STT | reload 뒤 systemd `LoadState=loaded`인 로컬 unit 시작 | `/data` 고정 경로 대신 systemd의 실제 탐색/override를 따름. stub 4개 통과 |
-| MQTT | 안전 ID FIFO 최대 2000, 공백 정규화, 잘못된 ID/JSON 복구, no-ID 호환; listener→subscribe, 수어 QoS 1 | #8의 packet-header 기반 수어 재전송 억제/lifecycle 보존. 새 Dart 회귀는 SDK 확보 후 실행 필요 |
-| 카메라 | 연결 상태마다 generation 갱신, 비연결 프레임 거절, 늦은 decode 폐기, decoder 주입 | ValueNotifier와 contain 화면 유지. 단절/재연결/dispose 회귀 작성, 실행 대기 |
+| MQTT | 안전 ID FIFO 최대 2000, 공백 정규화, 잘못된 ID/JSON 복구, no-ID 호환; listener→subscribe, 수어 QoS 1 | #8의 packet-header 기반 수어 재전송 억제/lifecycle 보존. 새 Dart 회귀 및 전체 suite 통과 |
+| 카메라 | 연결 상태마다 generation 갱신, 비연결 프레임 거절, 늦은 decode 폐기, decoder 주입 | ValueNotifier와 contain 화면 유지. 단절/재연결/dispose 및 per-frame 홈 갱신 격리 회귀 통과 |
 | 오디오 | 첫 재생까지 native player 생성 지연, stop/play/dispose 대기 제한, dispose 중 늦은 play 거절 | Future timeout은 native 동기 호출을 취소하지 않음. ATLAS 응답성/권한 실기 필요 |
 | 실행 도구 | 시작/설치 전제의 기본 ID 및 Windows 원본 경로를 Scenario로 정렬; 기존 앱 ID는 환경변수로 선택 가능 | 배포 스크립트는 실행하지 않음. Windows 호스트 도구 11개 통과 |
-| 테스트 | 옛 119 모달/문구 테스트를 현재 도움 화면/미전송 문안에 맞춤 | 안전 우선순위·취소·중복·사건 초기화 검사를 유지. 실행 통과로 표시하지 않음 |
+| 테스트 | 옛 119 모달/문구 테스트를 현재 도움 화면/미전송 문안에 맞춤 | 안전 우선순위·취소·중복·사건 초기화 검사를 유지. 현재 화면 기반 테스트로 실행 통과 |
 | CSI adapter | #6 offline adapter는 **보류** | 독립 Python 8개 통과. 모델/serial/MQTT 발행/사건 확인을 연결하지 않는 오프라인 봉투 변환기임 |
 | #6 서식 변경 | 채택 제외 | manifest/hurt expected/ranking 3개 JSON의 파싱 값이 같음을 이번에 재확인. 모델 변경 아님 |
 | 중복/옛 코드 | 유지 | 구 앱/GRU/실험 폴더는 남은 도구·문서 의존성과 사용자 자산 대응이 확정되지 않아 삭제하지 않음 |
@@ -84,22 +83,42 @@ live CSI 낙상 경보 통합 또는 장치 물리 확인이 완료됐다는 뜻
 클라우드 로그는 `/workspace/.cloud-setup/`의 `pr9-cmake-*.log`,
 `pr9-sign-ctest.log`, `pr9-sign-ctest.xml`, `pr10-uno-tests.log`,
 `windows-tools-tests.log`에 보존했다. 이전 onboarding의 CSI 52개 통과는
-이 표에 합산하지 않았다. 서로 다른 PR/환경의 검사 수를 하나의 통합 통과 수로 합치지 않는다.
+이 표에 합산하지 않았다. Flutter 실행 결과는 아래에서 별도로 기록한다. 서로 다른 PR/환경의 검사 수를 하나의 통합 통과 수로 합치지 않는다.
 추적 파일만 가져온 새 로컬 clone에서도 source packaging 3개를 통과했다.
 PR #8이 추가한 OFL 라이선스의 끝 공백 1개를 제거해 전체 후보 diff 검사를 통과시킨다.
 라이선스 문구·폰트는 변경하지 않았다.
 
-### 아직 실행하지 못한 필수 확인
+### Flutter 검증과 남은 필수 확인
 
-- Flutter SDK가 없고 공식 SDK 서버 `storage.googleapis.com`이 네트워크 정책에서
-  거부된다. 새/기존 Scenario Dart 테스트, formatter, analyzer 및 앱 빌드는
-  **이번 실행 미검증**이다. 정적 분석 warning/info/error 개수도 측정하지 않았다.
-  SDK 접근을 확보한 후 새 host 폴더에서 전체 suite를 실행해 미해명 실패를 해결해야 한다.
-- 앱 ID만으로 배포 소스 대응을 확정할 수 없다. 실제 1.2.0 소스/runner/manifest,
-  빌드 인자·SDK, IPK/ELF 해시, 실행 계정 배치와 `.previous`, drop-in은 미확보다.
-  `defaultDashboardLayout()`은 #8 값으로 유지했으며 이를 승인된 실제 배치라고 부르지 않는다.
-- GitHub API `api.github.com` 접속 거부로 상세 CI와 Draft PR 생성은 외부 전제다.
-  API와 SDK 도메인 허용 초안은 저장했지만, 설정 저장/런타임 적용이나 게시를 했다고 주장하지 않는다.
+- 공식 릴리스 아카이브/목록은 404였지만 공식 Flutter Git 태그 **3.35.7**
+  (`adc901062556672b4138e18a4dc62a4be8f4b3c2`)와 SDK 자체 bootstrap으로 준비했다.
+  Dart **3.9.2**, engine revision `035316565ad77281a75305515e4682e6c4c6f7ca`다.
+  TLS/패키지 검증을 끄지 않았다. 호스트 lock은 `scenario-host-pubspec.lock`에 보존했다.
+- 첫 전체 suite는 230 pass / 13 fail / 1 skip이었다. 옛 화면 선택자와 옛 도움 모달
+  기대를 현재 경로로 바꾸고, 도움 수어와 일반 대화 수어의 테스트 목적을 구분했다.
+  MQTT fixture의 의도적 클라이언트 종료에서 read stream과 별도로 남는 write-sink
+  future의 특정 connection-reset 오류를 처리했다. 다른 오류와 메시지/재시도 검사는 유지한다.
+- 최종 전체 Flutter suite: **243 pass / 0 fail / 1 skip**, exit **0**.
+  skip은 기존 opt-in `SAFEHUB_LIVE_LLM_TEST != 1` 한 개이며 실제 LLM 결과가 아니다.
+  1920×1080, 1024×600, 800×480, 600×800 홈 탐색, 큰 글자 알림,
+  레이아웃 저장/재로딩, 위험 보존/도움 즉시 표시, MQTT QoS·중복·구독 중 수신,
+  카메라 단절·재연결·dispose, 오디오 timeout, 자막/가전/CSI 회귀를 포함한다.
+- `flutter analyze --no-pub`: **error 0 / warning 11 / info 93**, exit **1**.
+  동일 SDK/동결 의존성으로 PR #8 원본을 분석해 같은 수를 확인했고, 경고·오류의
+  path/rule/message 비교에서도 추가 항목은 0개다. 분석이 깨끗하게 통과했다고 표시하지 않는다.
+  남은 것은 기존 unused UI helper, extension의 protected setState, print/서식/deprecation 등이다.
+  사용·의존성 확정 전 구 UI helper를 삭제해 경고만 없애지 않았다.
+- 현재 소스로 만든 격리 web host에서 **release 웹 빌드 통과**, exit **0**.
+  두 ATLAS plugin 제거 및 기존 preview adapter의 web 환경 처리만 사본에 적용한다.
+  실제 ATLAS runner/link/IPK 빌드나 브라우저 실기 검증은 아니다.
+- [후보 홈](scenario-host-captures/demo-home.png)과
+  [미전송 도움 문안](scenario-host-captures/scenario-response.png)은 Flutter host widget
+  테스트에서 생성한 캡처다. 모의/미설정 화면이며 장치 화면이 아니다. 캡처 시계는 호스트 UTC다.
+- 실제 1.2.0 소스/runner/manifest, 빌드 인자·SDK, IPK/ELF 해시, 실행 계정 배치와
+  `.previous`, drop-in은 미확보다. `defaultDashboardLayout()`은 #8 값으로 유지했으며
+  이를 승인된 실제 배치라고 부르지 않는다. ATLAS UI 빌드·기기 검증은 별도 전제다.
+- GitHub API 접근은 복구됐고 Draft PR #11 생성/검토에 사용했다. 네트워크 초안 저장을
+  환경 게시나 새 task 복원 검증으로 간주하지 않는다.
 
 ## #9 ARM64 결과 해석
 

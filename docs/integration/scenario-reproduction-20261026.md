@@ -3,6 +3,28 @@
 모든 아래 호스트 검사는 **Debian 클라우드/별도 worktree** 기준이다.
 장치 적용은 사용자의 후속 지시 전에는 실행하지 않는다.
 
+## Flutter 도구 확보와 고정
+
+기존 `/workspace/.cloud-setup/flutter-sdk`가 있으면 먼저 버전을 확인하고 재사용한다.
+없을 때 공식 저장소의 3.35.7 태그를 새 SDK 캐시 폴더로 clone한다.
+이번에 확인한 framework SHA는 `adc901062556672b4138e18a4dc62a4be8f4b3c2`,
+engine revision은 `035316565ad77281a75305515e4682e6c4c6f7ca`, Dart는 3.9.2다.
+공식 tar/목록 경로가 404여서 SDK 자체 bootstrap으로 준비했으며 검증을 끄지 않았다.
+
+```sh
+git clone --depth 1 --branch 3.35.7 https://github.com/flutter/flutter.git /workspace/.cloud-setup/flutter-sdk
+export PATH=/workspace/.cloud-setup/flutter-sdk/bin:$PATH
+export XDG_CONFIG_HOME=/workspace/.cloud-setup/flutter-config
+export XDG_CACHE_HOME=/workspace/.cloud-setup/flutter-cache
+export PUB_CACHE=/workspace/.cloud-setup/pub-cache
+export CI=true FLUTTER_SUPPRESS_ANALYTICS=true
+flutter --version
+```
+
+SDK 명령은 readonly home 대신 위 설정·패키지 캐시를 사용한다. standalone Dart
+formatter가 home에 analytics 파일을 만들려 하면 값 변경 없이 그 자식 프로세스에만
+`env -u HOME`을 적용할 수 있다. SDK를 설치했다고 ATLAS plugin/sysroot가 생기는 것은 아니다.
+
 ## UI 호스트 검사
 
 ```sh
@@ -12,9 +34,10 @@ python3 SW/safehub_scenario/tool/test_reproduction.py
 python3 -m unittest discover -s SW/windows_preview -p 'test_*.py' -v
 python3 SW/safehub_scenario/tool/run_ui_preview.py --check-only
 python3 SW/safehub_scenario/tool/prepare_host_tests.py /tmp/safehub-scenario-host-new
+cp docs/integration/scenario-host-pubspec.lock /tmp/safehub-scenario-host-new/pubspec.lock
 cd /tmp/safehub-scenario-host-new
 flutter --version
-flutter pub get
+flutter pub get --enforce-lockfile
 flutter analyze
 flutter test --reporter expanded
 ```
@@ -23,7 +46,10 @@ flutter test --reporter expanded
 **사본의** `audioplayers_atlas`, `record_atlas` path 의존성만 제외한다.
 ATLAS 원본 pubspec, lock, plugin 및 소스를 덮어쓰지 않는다. SDK 버전과 host에서
 해결한 lock을 검증 기록에 보존한다. host plugin 제외 검사와 실제 ATLAS 빌드를 구분한다.
-현재 네트워크 전제가 해결되기 전 위 Flutter 명령들은 실행 완료가 아니다.
+이번에는 위 흐름의 의존성 해결과 Flutter 검사를 직접 실행했다.
+전체 테스트는 243 pass / 1 opt-in live LLM skip / 0 fail이다. analyzer는
+0 error / 11 warning / 93 info로 exit 1이며, 같은 SDK/lock의 PR #8 원본과 동일하고
+새 warning/error signature는 0개다. 경고를 없애려고 legacy helper를 삭제하지 않았다.
 
 전체 Flutter suite에서 카메라 decode 지연/재연결/dispose, MQTT transport/lifecycle,
 중복 사건·수어 반복, audio timeout/dispose, 레이아웃 저장/재생성, 800×480 화면과
@@ -37,6 +63,32 @@ opt-in live LLM 검사 skip과 일반 회귀 실패는 별도로 기록한다.
 ATLAS ARM64 패키징에는 해당 장치와 맞는 Flutter-ATLAS SDK, sysroot, plugin 경로가
 추가로 필요하다. runner의 [출처와 한계](../../SW/safehub_scenario/atlas/PROVENANCE.md)를
 먼저 확인한다. 이를 확보하지 않고 배포용 IPK가 빌드됐다고 기록하지 않는다.
+
+## 검토용 웹 빌드와 화면
+
+아래는 preview adapter를 쓰는 **격리 사본** 빌드이며 ATLAS 패키징이 아니다.
+이번 호스트에서 release 빌드 exit 0을 확인했다.
+
+```sh
+cd /workspace/safehub-integration
+python3 - <<'WEBHOST'
+from pathlib import Path
+import sys
+sys.path.insert(0, 'SW/safehub_scenario/tool')
+from run_ui_preview import prepare_host
+prepare_host(Path('/tmp/safehub-scenario-web-new'))
+WEBHOST
+cp docs/integration/scenario-host-pubspec.lock /tmp/safehub-scenario-web-new/pubspec.lock
+cd /tmp/safehub-scenario-web-new
+flutter pub get --enforce-lockfile
+flutter build web --release --dart-define=APP_LOCAL_PREVIEW=true --no-web-resources-cdn
+```
+
+이번 산출물은 `/workspace/.cloud-setup/scenario-web-host/build/web`에 있다.
+검토용 widget 캡처는 [후보 홈](scenario-host-captures/demo-home.png),
+[미전송 도움 문안](scenario-host-captures/scenario-response.png)이다. 장치 화면·실제 카메라나
+승인된 장치 배치를 확보한 사진이 아니다. 캡처에는 호스트 UTC 시계와 debug 표시가 있다.
+`SCENARIO_SCREENSHOTS=<출력폴더>`로 Flutter 테스트의 캡처를 다시 생성할 수 있다.
 
 ## PR별 호스트 재현
 

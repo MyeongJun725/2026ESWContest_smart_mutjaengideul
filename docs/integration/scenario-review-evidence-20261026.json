@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-10-26T13:31:23.131802+00:00",
+  "recorded_at": "2026-10-26T14:00:14.878690+00:00",
   "refs": {
     "main": "40551d781e19a8e7974be47334ef4132d1ed4d1d",
     "develop": "3ecfa82eff1d2c96118d5015697ac34455ec95a3",
@@ -46,10 +46,30 @@
     },
     "pr10_context_rules": {
       "passed": 6
+    },
+    "scenario_flutter": {
+      "passed": 243,
+      "failed": 0,
+      "skipped": 1,
+      "exit_code": 0,
+      "skip_reason": "existing opt-in live LLM test; SAFEHUB_LIVE_LLM_TEST not 1"
+    },
+    "scenario_web_release": {
+      "passed": true,
+      "exit_code": 0,
+      "local_preview": true,
+      "atlas_build": false
+    },
+    "scenario_analyze": {
+      "errors": 0,
+      "warnings": 11,
+      "info": 93,
+      "exit_code": 1,
+      "baseline_pr8_same_counts": true,
+      "new_warning_error_signatures": 0
     }
   },
   "not_run": [
-    "Scenario Flutter tests/analyzer/formatter/build (SDK unavailable; download blocked)",
     "ATLAS UI ARM64 package build",
     "PR9 independent ARM64 portable build/static ABI rerun (target collection and candidate absent)",
     "PR9 optional OpenCV/ORT geometry tests and extra live vision translation-unit build",
@@ -75,5 +95,24 @@
     "existing_pr_closed_or_merged": false,
     "device_execution_replaced": false,
     "firmware_flash": false
+  },
+  "draft_pr": {
+    "number": 11,
+    "url": "https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11",
+    "draft": true,
+    "base": "develop"
+  },
+  "flutter_sdk": {
+    "version": "3.35.7",
+    "framework_commit": "adc901062556672b4138e18a4dc62a4be8f4b3c2",
+    "engine_revision": "035316565ad77281a75305515e4682e6c4c6f7ca",
+    "dart_version": "3.9.2",
+    "provenance": "official Git tag and SDK bootstrap; no TLS/checksum verification bypass"
+  },
+  "pr_api_state": {
+    "review_count_each": 0,
+    "check_runs_each": 0,
+    "status_contexts_each": 0,
+    "combined_state": "pending; no statuses present, not a running-CI claim"
   }
 }
