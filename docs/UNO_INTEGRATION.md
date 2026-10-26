@@ -63,7 +63,7 @@ USB를 열면 Uno가 리셋될 수 있다. 어댑터는 2.5초 기다리고 `F/V
 - Pi5: `/data/safehub-sign-control/{packages,app/hub,state}`, `safehub-sign-control.service`.
 - Pi5 fastText: `/data/safehub/fasttext/{venv,app,fire_screen_model.bin}`, `safehub-fasttext.service`.
 - Python 의존성: `paho-mqtt==2.1.0`, `pyserial==3.5`. 학습 패키지는 추가하지 않는다.
-- ATLAS의 `/etc`가 읽기 전용이므로 `/data/share/usr/lib/systemd/system/multi-user.target.wants/`에 서비스 링크를 만들었다. `list-dependencies multi-user.target`로 의존성은 확인했으나 이번 작업에서 실제 재부팅 시험은 하지 않았다. `is-enabled`만으로 이 구성을 판단하지 않는다.
+- ATLAS의 `/etc`가 읽기 전용이므로 `/data/share/usr/lib/systemd/system/multi-user.target.wants/`에 서비스 링크를 만들었다. 전원 복구 뒤 Pi5 fastText가 시작되지 않은 것을 확인해 기존 `/opt/safehub-system/boot.sh`에 STT·fastText·수어 제어 라우터의 선택적 시작을 추가했다. 이 스크립트는 `/data` mount 뒤 daemon-reload를 수행한다. 변경 뒤 실제 재부팅 시험은 하지 않았다. `is-enabled`만으로 이 구성을 판단하지 않는다. Pi4의 기존 비전 부팅 경로는 변경하지 않았다.
 
 Pi5 새 UI 앱 ID는 `com.atlas.app.safehub_scenario_pr7`, 패키지 버전은 **1.4.0**이다. ID의 pr7은 호환성 때문에 유지한다. PackageManager 갱신으로 배치·주소·연결 설정을 보존했다. 설치 후 배치 파일 SHA256이 설치 전과 같았다. 기존 앱 제거 또는 ClearAppData를 실행하지 않는다.
 
@@ -91,7 +91,7 @@ busctl --system call com.atlas.AppManager1 /com/atlas/AppManager1 com.atlas.AppM
 | Uno·단축키 합성 단위 검사 | 14개 통과: 타이머, 중복, 재접속, 팬 보존, 커튼 역방향·재시작 대기·만료·정지, 단축키 메시지 |
 | fastText 문맥 규칙 합성 검사 | 6개 통과. 실제 학습 모델 정확도 검사가 아님 |
 | 기존 허브 검사 | 외부 브로커 연결 전용 스크립트를 제외한 14개 스크립트 통과. 수동 전원 동기화 회귀도 추가 확인 |
-| 부팅 스크립트 | 실제 Pi5에서 systemctl을 임시 stub으로 바꾼 3개 검사 통과. Windows는 sh 부재로 실행 불가 |
+| 부팅 스크립트 | 실제 Pi5에서 systemctl을 임시 stub으로 바꾼 4개 검사 통과. Windows는 sh 부재로 실행 불가 |
 | 실제 명령 전달 | 21:23 KST MQTT → Pi4 → Uno UART의 f/v/l/L/V/F 응답 확인. 경보 OFF 후 팬 유지, 마지막 팬 OFF 확인 |
 | 실제 커튼 명령 | 22:01 KST UP→STOP→DOWN→STOP UART 응답 확인. 각 이동 약 355ms 후 정지. 실물 움직임의 육안 확인은 별도 |
 | UI | Pi5 1.4.0 Running·window active, 배치 SHA 보존. Windows 실행본도 다시 빌드 |

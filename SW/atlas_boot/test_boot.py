@@ -8,13 +8,16 @@ import unittest
 
 
 class BootTests(unittest.TestCase):
-    def run_boot(self, *, local_stt=False, reload_fails=False):
+    def run_boot(self, *, local_stt=False, reload_fails=False, optional_services=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             unit_dir = root / "data/share/usr/lib/systemd/system"
             unit_dir.mkdir(parents=True)
             if local_stt:
                 (unit_dir / "safehub-stt.service").touch()
+            if optional_services:
+                for unit in ('safehub-fasttext.service', 'safehub-sign-control.service'):
+                    (unit_dir / unit).touch()
             calls = root / "calls"
             systemctl = root / "systemctl"
             systemctl.write_text(
@@ -58,6 +61,14 @@ class BootTests(unittest.TestCase):
         code, calls = self.run_boot(local_stt=True, reload_fails=True)
         self.assertNotEqual(code, 0)
         self.assertEqual(calls, ["daemon-reload"])
+
+    def test_context_and_device_router_start_after_persistent_units_reload(self):
+        code, calls = self.run_boot(optional_services=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(calls[-2:], [
+            '--no-block start safehub-fasttext.service',
+            '--no-block start safehub-sign-control.service',
+        ])
 
 
 if __name__ == "__main__":
