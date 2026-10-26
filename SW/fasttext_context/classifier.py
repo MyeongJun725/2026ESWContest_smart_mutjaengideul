@@ -5,7 +5,7 @@ import re
 NEGATED_FIRE = re.compile(
     r"화재[^.!?\n]{0,18}(발생하지\s*않|아니|없[습음어요])|불이?\s*나지\s*않|대피(하지\s*않|[^.!?\n]{0,8}필요[가\s]*없)"
 )
-DRILL = re.compile(r"훈련|연습|테스트|시연|예시|예방|오보|취소|해제")
+DRILL = re.compile(r"훈련|연습|테스트|시연|시나리오|가정|실험|예시|예방|오보|취소|해제")
 EXPLICIT = re.compile(
     r"화재가?\s*(발생|났)|불이\s*났|가스\s*누출|대피(하|해|\s*바랍)|비상[^.!?\n]{0,12}대피"
 )
@@ -31,8 +31,6 @@ class FireTextClassifier:
             hazard, reason = False, "negated_fire"
         elif DRILL.search(text):
             hazard, reason = False, "drill_or_reference"
-        elif EXPLICIT.search(text):
-            hazard, reason = True, "explicit_announcement"
         else:
             hazard, reason = False, "insufficient_explicit_evidence"
         return dict(

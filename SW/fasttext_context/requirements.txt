@@ -1,0 +1,3 @@
+# Host CPython 3.12 import verified; target ARM64/model compatibility needs validation.
+fasttext==0.9.3
+numpy==1.26.4

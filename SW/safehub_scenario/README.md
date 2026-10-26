@@ -1,8 +1,7 @@
-> 검토용 1.2.0 후보: 앱 ID는 `com.atlas.app.safehub_scenario_pr7`로 유지합니다.
-> `atlas/` runner와 버전 표기는 재현 후보이며 설치 IPK와의 대응은 아직 확인되지 않았습니다.
-> [이번 선별·검증 기록](../../docs/integration/scenario-review-20261026.md)과
-> [호스트 검사·적용/복원 준비](../../docs/integration/scenario-reproduction-20261026.md)를 먼저 읽으세요.
-> 새 장치 테스트 창/PR #9·#10의 실제 장비 적용은 이 후보에 포함하지 않습니다.
+> 현재 검토 기준은 PR #10 + #6 안정화 + #9 미배포 소스 후보입니다.
+> 1.2.0은 과거 사용자 확인, 1.4.0 설치는 #10 작성자 보고이며 현재 장치 버전은 직접 확인하지 못했습니다.
+> 보관본과 실제 배치·manifest·IPK는 현재 클라우드에서 **미확인/미확보**입니다.
+> [최신 통합 기록](../../docs/integration/pr10-addendum-review.md)을 먼저 읽으세요.
 
 # SafeHub Scenario
 

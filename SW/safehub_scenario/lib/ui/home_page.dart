@@ -628,7 +628,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     if (incident == null) return;
     if (!_situation.scenarioTestMode && incident.kind == HouseScenario.disaster &&
         settings.homeRegion.trim().isEmpty &&
-        !(incident?.evidence.contains('지역: 전국') ?? false)) {
+        !incident.evidence.contains('지역: 전국')) {
       _situation.liveFlow.setDelivery('집 지역 미설정 · 지역 확인 후 자동 장치 알림을 사용하세요. 장치 테스트는 가능해요.');
       return;
     }

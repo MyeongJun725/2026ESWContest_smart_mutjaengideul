@@ -66,12 +66,14 @@ void main() {
             ? '화재가 발생했습니다. 안내방송을 확인해 주세요.'
             : '직접 입력한 상황을 확인해 주세요.',
       );
-      await t.tap(find.text('화면 테스트 실행'));
+      await t.tap(find.byType(Switch));
+      await t.pumpAndSettle();
+      await t.tap(find.text('화면만 실행'));
       await t.pumpAndSettle();
       final incident = service.flow.active!;
       expect(incident.kind, kind);
       expect(incident.delivery, contains('실제 명령 없음'));
-      expect(find.text('시연 모드 · 실제 장치와 신고는 작동하지 않아요.'), findsOneWidget);
+      expect(find.text('화면 테스트 · 실제 장치와 신고는 작동하지 않아요.'), findsOneWidget);
       if (kind != HouseScenario.assistance) {
         await t.tap(find.text('도움이 필요해요'));
         await t.pumpAndSettle();

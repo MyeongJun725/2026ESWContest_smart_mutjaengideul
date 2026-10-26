@@ -6,6 +6,17 @@ import 'package:http/testing.dart';
 import 'package:safehub_app/ui/widgets/hardware_test_dialog.dart';
 
 void main() {
+  testWidgets('all off reports a failed curtain stop', (t) async {
+    t.view.physicalSize=const Size(1280,900);t.view.devicePixelRatio=1;
+    addTearDown(t.view.resetPhysicalSize);addTearDown(t.view.resetDevicePixelRatio);
+    await t.pumpWidget(MaterialApp(home:Scaffold(body:HardwareTestDialog(
+      connected:true,classifierUri:Uri.parse('http://localhost/classify'),
+      publishAlert:(_,__)=>true,publishFan:(_)=>true,publishCurtain:(_)=>false))));
+    await t.ensureVisible(find.text('팬·LED·진동 끄고 커튼 정지'));
+    await t.tap(find.text('팬·LED·진동 끄고 커튼 정지'));await t.pump();
+    expect(find.textContaining('일부 명령 전송 실패'),findsOneWidget);
+  });
+
   testWidgets('manual fan and alarm stop are independent; no curtain controls', (tester) async {
     tester.view.physicalSize=const Size(1280,900);tester.view.devicePixelRatio=1;
     addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);

@@ -4,7 +4,7 @@
     "name": "SafeHub Scenario",
     "description": "SafeHub scenario integration candidate",
     "entry": "safehub_app --bundle=./ --fullscreen -a com.atlas.app.safehub_scenario_pr7",
-    "version": "1.2.0",
+    "version": "1.4.0",
     "required_permissions": {
         "user_consent": [
             "com.atlas.permission.user_consent.mediaplayer"

@@ -6,7 +6,8 @@ manifest ID/entry, display name and manifest version are adapted for the
 user-confirmed Scenario app. The Dart package and executable remain `safehub_app`;
 the installed app ID remains `com.atlas.app.safehub_scenario_pr7`.
 
-The version `1.2.0` records the user's installed-version baseline. It does not
+The candidate version `1.4.0` follows the PR #10 author report. The earlier
+user observation was 1.2.0; the current installed version is unconfirmed. It does not
 prove that this runner, its permissions/plugins or the source layout match the
 installed IPK. Obtain the actual 1.2.0 manifest, runner, source changes, build
 arguments/tool versions and IPK/ELF hashes before declaring that correspondence.

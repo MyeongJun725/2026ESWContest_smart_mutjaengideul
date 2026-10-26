@@ -127,7 +127,7 @@
         "action": "set_power (stop for curtain in PR #10 only)",
         "power_on": "boolean"
       },
-      "implementation_status": "Aircon existing contract; curtain/stop extension reviewed in PR #10 and not adopted by this UI candidate. No physical completion acknowledgement is defined."
+      "implementation_status": "Aircon and curtain/stop extensions adopted from PR #10 into review candidate; no physical completion acknowledgement."
     }
   },
   "mqtt_policy": {
@@ -152,7 +152,7 @@
       }
     }
   },
-  "architecture_note": "Current reviewed path: RPi4 C++ sign classification publishes translation text and sends camera frames over TCP. RPi5 runs the Python hub, Scenario Flutter UI, local STT and optional context services. Existing GRU/landmark code and assets are preserved as legacy or user work, not reset. SW/wifi_sensing uses local HTTP; an offline CSI envelope adapter alone is not a live alarm integration. PR #9 and PR #10 are separately reviewed candidates.",
+  "architecture_note": "Current reviewed path: RPi4 C++ sign classification publishes translation text and sends camera frames over TCP. RPi5 runs the Python hub, Scenario Flutter UI, local STT and optional context services. Existing GRU/landmark code and assets are preserved as legacy or user work, not reset. SW/wifi_sensing uses local HTTP; an offline CSI envelope adapter alone is not a live alarm integration. PR #9 and PR #10 sources are included as undeployed review candidates.",
   "change_policy": "Topic 이름, JSON Key, QoS, retain 및 데이터 타입 변경 시 팀 합의 후 version을 올린다.",
   "status": "review_candidate_not_a_deployment_claim"
 }

@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-10-26T14:00:14.878690+00:00",
+  "recorded_at": "2026-10-26T14:21:30.017729+00:00",
   "refs": {
     "main": "40551d781e19a8e7974be47334ef4132d1ed4d1d",
     "develop": "3ecfa82eff1d2c96118d5015697ac34455ec95a3",
@@ -9,13 +9,14 @@
     "pr10": "da7248fac4c00f92f7a9a4fa265c733c9e73f765"
   },
   "ui_baseline": {
-    "source_pr": 8,
-    "reported_installed_version": "1.2.0",
-    "candidate_pubspec_version": "1.2.0+1",
+    "previous_user_observation": "1.2.0",
+    "author_reported_install": "1.4.0",
+    "current_device_version": null,
+    "artifact_archives": "미확인/미확보; absence not established",
+    "candidate_pubspec_version": "1.4.0+1",
     "app_id": "com.atlas.app.safehub_scenario_pr7",
-    "device_test_window_included": false,
-    "installed_package_source_correspondence_verified": false,
-    "approved_device_layout_available": false
+    "device_test_window_included": true,
+    "installed_package_source_correspondence": "미확인"
   },
   "direct_runs": {
     "bootstrap_stub": {
@@ -45,14 +46,15 @@
       "passed": 14
     },
     "pr10_context_rules": {
-      "passed": 6
+      "passed": 8,
+      "includes": "HTTP malformed shapes and clause scope; fake model"
     },
     "scenario_flutter": {
-      "passed": 243,
+      "passed": 265,
       "failed": 0,
       "skipped": 1,
       "exit_code": 0,
-      "skip_reason": "existing opt-in live LLM test; SAFEHUB_LIVE_LLM_TEST not 1"
+      "skip_reason": "existing opt-in live LLM"
     },
     "scenario_web_release": {
       "passed": true,
@@ -63,10 +65,20 @@
     "scenario_analyze": {
       "errors": 0,
       "warnings": 11,
-      "info": 93,
-      "exit_code": 1,
-      "baseline_pr8_same_counts": true,
-      "new_warning_error_signatures": 0
+      "info": 100,
+      "exit_code": 1
+    },
+    "hub_scripts": {
+      "scripts_passed": 11,
+      "runner": "each Python assertion script; not unittest count"
+    },
+    "fasttext_import": {
+      "passed": true,
+      "host": "x86_64 CPython3.12",
+      "fasttext": "0.9.3",
+      "numpy": "1.26.4",
+      "compiler": "GCC 14.2; CC=gcc CXX=g++",
+      "real_model_loaded": false
     }
   },
   "not_run": [
@@ -86,7 +98,7 @@
   },
   "pr10": {
     "received": true,
-    "adopted_into_ui_candidate": false,
+    "adopted_into_ui_candidate": true,
     "uno_sketch_received": false,
     "publisher_ack_is_physical_completion": false
   },
@@ -114,5 +126,11 @@
     "check_runs_each": 0,
     "status_contexts_each": 0,
     "combined_state": "pending; no statuses present, not a running-CI claim"
+  },
+  "current_review": "pr10-addendum-review.md",
+  "pr9_source_integration": {
+    "included": true,
+    "deployed": false,
+    "host_cpp_passed": 19
   }
 }

@@ -59,7 +59,7 @@ void main() {
       expect(find.text('SafeHub 홈'), findsOneWidget);
       expect(find.text('화재 관련 안내방송'), findsOneWidget);
       expect(find.text('화재가 발생했습니다. 대피하세요.'), findsOneWidget);
-      expect(find.text('시연 모드 · 실제 장치와 신고는 작동하지 않아요.'), findsOneWidget);
+      expect(find.text('화면 테스트 · 실제 장치와 신고는 작동하지 않아요.'), findsOneWidget);
       await tap(t, '시간·알림 전달 상태 보기');
       expect(find.textContaining('실제 명령 없음'), findsOneWidget);
       await tap(t, '방송 확인했어요');
