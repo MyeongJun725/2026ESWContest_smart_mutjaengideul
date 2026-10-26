@@ -34,12 +34,18 @@ import 'widgets/live_caption_panel.dart';
 
 part 'home_dashboard.dart';
 
+typedef CameraFrameDecoder = void Function(
+  Uint8List frame, int width, int height, ui.PixelFormat format,
+  void Function(ui.Image image) onDecoded,
+);
+
 enum _SafeHubPage { home, signTranslation, appliances, wifiSensing }
 
 class SafeHubHomePage extends StatefulWidget {
-  const SafeHubHomePage({super.key, this.onSettingsSaved, this.cameraService});
+  const SafeHubHomePage({super.key, this.onSettingsSaved, this.cameraService, this.cameraDecoder});
   final VoidCallback? onSettingsSaved;
   final CameraStreamService? cameraService;
+  final CameraFrameDecoder? cameraDecoder;
 
   @override
   State<SafeHubHomePage> createState() => _SafeHubHomePageState();
@@ -187,8 +193,11 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       } else {
         _connectionStatus = '주소 미설정';
       }
-      if (AppConfig.cameraConfigured) _connectCamera();
       if (AppConfig.disasterConfigured) _startDisasterPolling();
+    }
+    if ((!AppConfig.localPreview && AppConfig.cameraConfigured) ||
+        widget.cameraService != null) {
+      _connectCamera();
     }
   }
 
@@ -206,10 +215,10 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
           final previousImage = connected ? null : _cameraImage.value;
 
           setState(() {
+            _cameraGeneration++;
             _cameraConnected = connected;
 
             if (!connected) {
-              _cameraGeneration++;
               _cameraImage.value = null;
             }
           });
@@ -224,7 +233,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     if (!mounted) return;
     const expectedBytes = _cameraWidth * _cameraHeight * 4;
 
-    if (frame.lengthInBytes != expectedBytes) {
+    if (!_cameraConnected || frame.lengthInBytes != expectedBytes) {
       return;
     }
 
@@ -235,7 +244,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _cameraDecodeInProgress = true;
     final generation = _cameraGeneration;
 
-    ui.decodeImageFromPixels(
+    (widget.cameraDecoder ?? ui.decodeImageFromPixels)(
       frame,
       _cameraWidth,
       _cameraHeight,
@@ -243,7 +252,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       (image) {
         _cameraDecodeInProgress = false;
 
-        if (!mounted || generation != _cameraGeneration) {
+        if (!mounted || !_cameraConnected || generation != _cameraGeneration) {
           image.dispose();
           return;
         }
@@ -1314,6 +1323,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                       fit: StackFit.expand,
                       children: [
                         RawImage(
+                            key: const ValueKey('camera_preview'),
                           image: image,
                           fit: BoxFit.contain,
                           filterQuality: FilterQuality.low,
