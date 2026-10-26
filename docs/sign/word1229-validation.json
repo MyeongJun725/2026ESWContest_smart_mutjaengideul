@@ -1,0 +1,54 @@
+{
+  "base_commit": "3ecfa82eff1d2c96118d5015697ac34455ec95a3",
+  "scope": "source candidate, not Pi4 deployment",
+  "host": "Windows x64 MSVC 19.52",
+  "cpp_tests": {
+    "passed": 21,
+    "total": 21,
+    "failures": [],
+    "names": [
+      "hand_coverage_quality_test",
+      "sign_runtime_regression",
+      "class_15_inference_parity_regression",
+      "class_id_coverage_regression",
+      "hand_input_regression",
+      "temporal_resample_regression",
+      "temp_eligibility_regression",
+      "temp_min_frames_regression",
+      "temp_positive_full_regression",
+      "temp_negative_full_regression",
+      "aircon_cold_last40_regression",
+      "hot_rescue_regression",
+      "tracking_roi_runner_test",
+      "vision_crop_nms_test",
+      "live_sign_session_test",
+      "live_sign_timing_test",
+      "hand_observation_policy_test",
+      "classifier_frame_bridge_test",
+      "palm_retry_policy_test",
+      "tracking_roi_retry_policy_test",
+      "async_translation_queue_test"
+    ]
+  },
+  "python_tests": {
+    "passed": 3,
+    "total": 3
+  },
+  "opencv_geometry_tests": "OpenCV 4.9 actual preprocessing with scripted model outputs; not ONNX detection recovery",
+  "live_translation_unit": "Host object compilation with real OpenCV 4.9 / ORT 1.21 / Paho 1.3.13 headers passed; not ARM64 linking",
+  "source_bundle_manifest_verified_files": 48,
+  "pi4_binary_before_and_after": "5b2f19129411cfe0a162b5f63f3410b36f9240e3d2faf3981860071735f55499",
+  "pi4_model_before_and_after": "f1c3cec6b057a053733dc45690317724745cc47258a2f34753e4659ad669d7d7",
+  "pi4_pid_unchanged": 180182,
+  "deployed": false,
+  "actual_recovery_accuracy_measured": false,
+  "user_original_video_or_coordinate_replayed": false,
+  "unverified": [
+    "clean ATLAS ARM64 build/link",
+    "reproducible deployed ELF from recovered sources",
+    "actual two-hand re-acquisition",
+    "live WORD1229 accuracy/latency",
+    "occlusion vs NMS/crop synchronization",
+    "one-hand false abstention rate"
+  ]
+}

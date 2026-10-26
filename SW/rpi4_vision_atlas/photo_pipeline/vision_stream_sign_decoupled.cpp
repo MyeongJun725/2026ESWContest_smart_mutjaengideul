@@ -12,20 +12,26 @@
 #include <utility>
 
 #include "live_sign_session.hpp"
+#include "classifier_frame_bridge.hpp"
+#include "palm_retry_policy.hpp"
+#include "tracking_roi_retry_policy.hpp"
 #include "mqtt_translation_publisher.hpp"
+#include "async_translation_queue.hpp"
+#include <cstdio>
+#include <sstream>
 #include "vision_frame_hands.hpp"
 #include "runtime_data.hpp"
 #include "sign_runtime.hpp"
+#include "active_targets.hpp"
 #include "raw_tcp_streamer.hpp"
 
 namespace {
 
-constexpr int kPalmInterval = 10;
 constexpr float kBorderMargin = 8.0f;
 constexpr auto kStreamInterval =
     std::chrono::milliseconds(125);
 
-constexpr std::array<const char*, 15>
+constexpr std::array<const char*, 16>
     kClassNames{{
         "에어컨",
         "문잠그다",
@@ -42,6 +48,7 @@ constexpr std::array<const char*, 15>
         "온도",
         "배고프다",
         "목마르다",
+        "쓰러지다",
     }};
 
 std::string class_name(
@@ -136,6 +143,7 @@ sign_engine::VisionFrameDetections to_vision_detections(
 Palm tracked_palm_from_hand(const Hand& hand_result) {
     Palm tracked{};
     tracked.id = -1;
+    tracked.tracked_side = hand_result.handedness > 0.5 ? 1 : -1;
     tracked.score = hand_result.confidence;
     tracked.points[0] = hand_result.xy[0];
     tracked.points[1] = hand_result.xy[5];
@@ -180,22 +188,7 @@ bool near_border(const Hand& hand_result, int width, int height) {
     return false;
 }
 
-std::vector<Hand> run_hands(const cv::Mat& image,
-                            const std::vector<Palm>& palms_to_run,
-                            Model& hand_model,
-                            bool& any_failure) {
-    std::vector<Hand> results;
-    any_failure = false;
-    for (const auto& palm : palms_to_run) {
-        Hand result{};
-        if (hand(image, palm, hand_model, result)) {
-            results.push_back(result);
-        } else {
-            any_failure = true;
-        }
-    }
-    return results;
-}
+#include "tracking_roi_runner.inc"
 
 void write_frame_json(std::ofstream& output,
                       size_t frame_index,
@@ -203,6 +196,15 @@ void write_frame_json(std::ofstream& output,
                       int height,
                       double processing_ms,
                       bool used_palm_detector,
+                      bool tracking_fallback,
+                      bool tracking_backoff,
+                      bool second_hand_recovery,
+                      const vision_runtime::TrackingRoiRetryDiagnostics& roi_retry,
+                      bool any_candidate_failure,
+                      bool force_palm_next_frame,
+                      double capture_ms,
+                      const vision_runtime::InferenceBudget& budget,
+                      const PalmScanDiagnostics& palm_diagnostics,
                       const std::vector<Hand>& hands) {
     output << std::setprecision(12)
            << "{\"frame_index\":" << frame_index
@@ -210,9 +212,45 @@ void write_frame_json(std::ofstream& output,
            << ",\"coordinate_system\":\"mirrored camera image pixels\""
            << ",\"mirror_input\":true"
            << ",\"processing_ms\":" << processing_ms
+           << ",\"capture_monotonic_ms\":" << capture_ms
+           << ",\"hand_inferences\":" << budget.hand_calls
+           << ",\"palm_inferences\":" << budget.palm_calls
+           << ",\"palm_candidates\":" << palm_diagnostics.candidates
+           << ",\"palm_nms_suppressed\":" << palm_diagnostics.suppressed
+           << ",\"palm_nms_max_iou\":" << palm_diagnostics.max_suppressed_iou
+           << ",\"palm_nms_max_keypoint_distance\":" << palm_diagnostics.max_suppressed_keypoint_distance
            << ",\"used_palm_detector\":"
            << (used_palm_detector ? "true" : "false")
-           << ",\"hands\":[";
+           << ",\"tracking_fallback\":" << (tracking_fallback ? "true" : "false")
+           << ",\"tracking_backoff\":" << (tracking_backoff ? "true" : "false")
+           << ",\"second_hand_recovery\":" << (second_hand_recovery ? "true" : "false")
+           << ",\"tracking_roi_retry_attempted\":" << roi_retry.attempted
+           << ",\"tracking_roi_retry_accepted\":" << roi_retry.accepted
+           << ",\"hand_candidate_failed\":" << (any_candidate_failure ? "true" : "false")
+           << ",\"force_palm_next_frame\":" << (force_palm_next_frame ? "true" : "false")
+           << ",\"palm_nms_pairs\":[";
+    for (std::size_t i=0; i<palm_diagnostics.pairs.size(); ++i) {
+        const auto& pair=palm_diagnostics.pairs[i];
+        if (i) output << ',';
+        output << "{\"discarded_anchor\":" << pair.candidate.id
+               << ",\"kept_anchor\":" << pair.keeper.id
+               << ",\"discarded_score\":" << pair.candidate.score
+               << ",\"kept_score\":" << pair.keeper.score << ",\"iou\":" << pair.iou
+               << ",\"discarded_box\":[" << pair.candidate.box[0] << ',' << pair.candidate.box[1]
+               << ',' << pair.candidate.box[2] << ',' << pair.candidate.box[3] << "]}";
+    }
+    output << "],\"hand_candidates\":[";
+    for (std::size_t i=0; i<roi_retry.candidates.size(); ++i) {
+        const auto& c = roi_retry.candidates[i];
+        if (i) output << ',';
+        output << "{\"anchor\":" << c.anchor << ",\"confidence\":" << c.confidence
+               << ",\"accepted\":" << (c.accepted?"true":"false")
+               << ",\"square_retry\":" << (c.square_retry?"true":"false")
+               << ",\"invalid_crop\":" << (c.invalid_crop?"true":"false")
+               << ",\"angle\":" << c.angle << ",\"palm_points_outside_crop\":" << c.outside
+               << ",\"crop\":[" << c.crop[0] << ',' << c.crop[1] << ',' << c.crop[2] << ',' << c.crop[3] << "]}";
+    }
+    output << "],\"hands\":[";
 
     for (size_t index = 0; index < hands.size(); ++index) {
         if (index != 0) {
@@ -289,6 +327,7 @@ void write_overlay_ppm(const fs::path& path,
 }  // namespace
 
 int main(int argc, char** argv) {
+    std::setvbuf(stdout, nullptr, _IOLBF, 0);
     try {
         if (argc != 7) {
             throw std::runtime_error(
@@ -322,7 +361,7 @@ int main(int argc, char** argv) {
         );
 
         Ort::SessionOptions opts;
-        opts.SetIntraOpNumThreads(2);
+        opts.SetIntraOpNumThreads(4);
         opts.SetInterOpNumThreads(1);
         opts.SetGraphOptimizationLevel(
             GraphOptimizationLevel::ORT_ENABLE_ALL
@@ -348,6 +387,9 @@ int main(int argc, char** argv) {
             );
 
         sign_engine::validateRuntimeData(runtime);
+        const auto active_targets = sign_engine::loadActiveTargetModel(
+            environment_or_default("SIGN_ACTIVE_MODEL",
+              (fs::path(runtime_data_dir).parent_path()/"active_targets_v4.bin").string().c_str()));
 
         std::cout
             << "Runtime data validated: "
@@ -369,12 +411,12 @@ int main(int argc, char** argv) {
                 "safehub/vision/livingroom/translation"
             );
 
-        MqttTranslationPublisher
-            mqtt_publisher(
-                mqtt_host,
-                mqtt_port,
-                mqtt_topic
-            );
+        // The synchronous Paho client is called by this worker only.
+        // Inference only copies a short text into the bounded queue.
+        auto mqtt_client = std::make_shared<MqttTranslationPublisher>(mqtt_host, mqtt_port, mqtt_topic);
+        AsyncTranslationQueue mqtt_publisher([mqtt_client](const std::string& text) {
+            return mqtt_client->publishText(text);
+        });
 
         std::cout
             << "[mqtt] configured: tcp://"
@@ -526,6 +568,9 @@ int main(int argc, char** argv) {
         cv::Mat latest_processed_frame;
 
         bool force_detection = true;
+        vision_runtime::TwoHandTrackingBackoff tracking_backoff_policy;
+        vision_runtime::LostSecondHandRecovery second_hand_recovery_policy;
+        double last_palm_scan_ms = -1e9;
 
         size_t consumed_sequence = 0;
         size_t processed_frames = 0;
@@ -537,7 +582,7 @@ int main(int argc, char** argv) {
         double frame_age_ms_sum = 0.0;
         double frame_age_ms_max = 0.0;
 
-        constexpr size_t kMinimumSignFrames = 20;
+        constexpr size_t kMinimumSignFrames = 10;
         constexpr size_t kMaximumSignFrames = 90;
         constexpr size_t kSignEndGapFrames = 5;
 
@@ -548,7 +593,8 @@ int main(int argc, char** argv) {
         );
 
         size_t completed_signs = 0;
-        size_t published_signs = 0;
+        size_t queued_signs = 0;
+        size_t mqtt_queue_rejections = 0;
         size_t rejected_signs = 0;
 
         auto process_sign_recording =
@@ -562,13 +608,18 @@ int main(int argc, char** argv) {
                                 recording
                             );
 
-                    const auto sign_result =
-                        sign_engine::classifyRecording(
-                            direct_recording.frames,
-                            runtime
-                        );
+                    const auto classify_begin = std::chrono::steady_clock::now();
+                    std::ostringstream result_log;
+                    sign_engine::ActiveTargetDiagnostics active_diag;
+                    const auto sign_result = sign_engine::classifyWithActiveTargets(
+                        direct_recording.frames, runtime, active_targets, active_diag);
+                    result_log << "[active-target] paired=" << active_diag.paired_frames
+                        << " evaluated=" << active_diag.evaluated << " accepted=" << active_diag.accepted
+                        << " candidate=" << active_diag.candidate << " distance=" << active_diag.distance
+                        << " runner_up=" << active_diag.runner_up << " motion_left=" << active_diag.left_motion
+                        << " motion_right=" << active_diag.right_motion << " reason=" << std::quoted(active_diag.reason) << '\n';
 
-                    std::cout
+                    result_log
                         << "[sign] completed"
                         << " input="
                         << direct_recording.input_frame_count
@@ -590,7 +641,20 @@ int main(int argc, char** argv) {
                         << sign_result.final_id
                         << " stage="
                         << sign_result.stage
+                        << " source="
+                        << sign_result.source_mode
+                        << " c4_evaluated="
+                        << sign_result.c4_evaluated
+                        << " d_sign="
+                        << sign_result.c4_gate.d_sign
+                        << " d_nosign="
+                        << sign_result.c4_gate.d_nosign
+                        << " both=" << sign_result.recording_stats.both_count
+                        << " classify_ms=" << std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-classify_begin).count()
+                        << " error=" << std::quoted(sign_result.error)
                         << '\n';
+
+                    writeSignLog(result_log.str());
 
                     if (
                         !sign_result.valid ||
@@ -616,15 +680,17 @@ int main(int argc, char** argv) {
                         return;
                     }
 
-                    if (
-                        mqtt_publisher.publishText(
-                            text
-                        )
-                    ) {
-                        ++published_signs;
-                    } else {
-                        ++rejected_signs;
-                    }
+                    const auto enqueue_begin = std::chrono::steady_clock::now();
+                    const bool queued = mqtt_publisher.enqueueText(text);
+                    const double enqueue_ms = std::chrono::duration<double,std::milli>(
+                        std::chrono::steady_clock::now()-enqueue_begin).count();
+                    std::ostringstream queue_log;
+                    queue_log << "[mqtt] queued=" << (queued?1:0)
+                              << " enqueue_ms=" << enqueue_ms
+                              << " text=" << std::quoted(text) << '\n';
+                    writeSignLog(queue_log.str());
+                    if (queued) ++queued_signs; else ++mqtt_queue_rejections;
+
                 }
                 catch (const std::exception& error) {
                     ++rejected_signs;
@@ -714,52 +780,90 @@ int main(int argc, char** argv) {
             const cv::Mat& frame =
                 *frame_ptr;
 
+            const std::size_t previous_tracks = tracked_palms.size();
+            const double capture_ms = std::chrono::duration<double, std::milli>(
+                capture_time.time_since_epoch()).count();
+            vision_runtime::InferenceBudget inference_budget;
+            PalmScanDiagnostics palm_diagnostics;
+            const bool tracking_backoff = tracking_backoff_policy.beginFrame();
+            const bool second_hand_recovery = second_hand_recovery_policy.beginFrame(capture_ms);
             bool used_palm_detector =
-                force_detection ||
-                processed_frames %
-                    kPalmInterval == 0;
+                force_detection || tracking_backoff || second_hand_recovery ||
+                capture_ms - last_palm_scan_ms >= 700;
+
+            auto scan_palms = [&]() {
+                if (!inference_budget.takePalm()) return std::vector<Palm>{};
+                last_palm_scan_ms = capture_ms;
+                return palms(frame, palm_model, &palm_diagnostics);
+            };
 
             std::vector<Palm> inputs =
                 used_palm_detector
-                    ? palms(
-                          frame,
-                          palm_model
-                      )
+                    ? scan_palms()
                     : tracked_palms;
 
             if (used_palm_detector) {
                 ++palm_frames;
             }
 
+            const bool attempted_tracking = !used_palm_detector;
             bool failure = false;
+            bool tracking_fallback = false;
+            vision_runtime::TrackingRoiRetryDiagnostics roi_retry;
 
             auto hands = run_hands(
                 frame,
                 inputs,
                 hand_model,
-                failure
+                failure,
+                attempted_tracking,
+                roi_retry,
+                &inference_budget
             );
 
             // Same-frame fallback if tracking failed.
             if (
                 !used_palm_detector &&
-                (failure || hands.empty())
+                (failure || hands.empty()) &&
+                inference_budget.hand_calls < vision_runtime::InferenceBudget::max_hand_calls
             ) {
+                tracking_fallback = true;
                 used_palm_detector = true;
                 ++palm_frames;
 
-                inputs = palms(
-                    frame,
-                    palm_model
-                );
-
-                hands = run_hands(
+                inputs = scan_palms();
+                // Prefer candidates associated with the failed track. Do not
+                // blindly prefer distant false candidates during close overlap.
+                std::stable_sort(inputs.begin(), inputs.end(), [&](const Palm& a, const Palm& b) {
+                    auto distance = [&](const Palm& p) {
+                        double nearest = 1e9;
+                        for (const auto& old : tracked_palms) {
+                            const bool retained = std::any_of(hands.begin(), hands.end(), [&](const Hand& h) {
+                                return h.palm.tracked_side == old.tracked_side;
+                            });
+                            if (!retained) nearest = std::min(nearest, cv::norm(p.points[0]-old.points[0]));
+                        }
+                        return nearest;
+                    };
+                    return distance(a) < distance(b);
+                });
+                const auto fresh_hands = run_hands(
                     frame,
                     inputs,
                     hand_model,
-                    failure
+                    failure,
+                    false,
+                    roi_retry,
+                    &inference_budget
                 );
+                vision_runtime::mergeFreshHands(hands, fresh_hands, hand_geometry);
             }
+
+            tracking_backoff_policy.observe(
+                attempted_tracking, tracking_fallback, previous_tracks, hands.size()
+            );
+
+            second_hand_recovery_policy.observe(previous_tracks, hands.size(), capture_ms);
 
             tracked_palms.clear();
 
@@ -784,10 +888,12 @@ int main(int argc, char** argv) {
                     );
             }
 
-            force_detection =
-                failure ||
-                hands.empty() ||
-                border;
+            // A rejected detector candidate is not a failed tracked hand.
+            // Keep accepted ROIs instead of forcing full detection next frame.
+            // Same-frame tracking fallback above and scheduled scans stay intact.
+            force_detection = vision_runtime::forcePalmAfterInference(
+                used_palm_detector, failure, hands.size(), border
+            );
 
             latest_hands = hands;
 
@@ -800,9 +906,12 @@ int main(int argc, char** argv) {
 
             auto completed_sign =
                 live_sign_session.push(
-                    to_vision_detections(
-                        hands
-                    )
+                    restoreClassifierCoordinates(
+                        to_vision_detections(hands),
+                        width
+                    ),
+                    capture_ms,
+                    second_hand_recovery_policy.recovering(capture_ms)
                 );
 
             if (completed_sign.has_value()) {
@@ -834,6 +943,15 @@ int main(int argc, char** argv) {
                 height,
                 processing_ms,
                 used_palm_detector,
+                tracking_fallback,
+                tracking_backoff,
+                second_hand_recovery,
+                roi_retry,
+                failure,
+                force_detection,
+                capture_ms,
+                inference_budget,
+                palm_diagnostics,
                 hands
             );
 
@@ -909,6 +1027,10 @@ int main(int argc, char** argv) {
                   )
                 : 0.0;
 
+        // All camera input has ended. Waiting here cannot drop a future camera frame.
+        mqtt_publisher.stop();
+        const auto mqtt_stats = mqtt_publisher.stats();
+
         std::cout
             << "\n========================================\n"
             << "DECOUPLED STREAM + LIVE SIGN RESULT\n"
@@ -933,8 +1055,12 @@ int main(int argc, char** argv) {
             << kSignEndGapFrames << '\n'
             << "Completed signs     : "
             << completed_signs << '\n'
-            << "Published signs     : "
-            << published_signs << '\n'
+            << "Queued translations : "
+            << queued_signs << '\n'
+            << "MQTT queue rejected : " << mqtt_queue_rejections << '\n'
+            << "MQTT delivered      : " << mqtt_stats.delivered << '\n'
+            << "MQTT failed         : " << mqtt_stats.failed << '\n'
+            << "MQTT cancelled      : " << mqtt_stats.cancelled << '\n'
             << "Rejected signs      : "
             << rejected_signs << '\n'
             << "Average processing ms: "

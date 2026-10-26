@@ -1,0 +1,260 @@
+{
+  "github_base": "3ecfa82eff1d2c96118d5015697ac34455ec95a3",
+  "github_branch": "upstream/develop",
+  "device_binary_sha256": "5b2f19129411cfe0a162b5f63f3410b36f9240e3d2faf3981860071735f55499",
+  "device_bundle": "/data/safehub/sign_async_publish_rpi4_v1",
+  "active_model_sha256": "f1c3cec6b057a053733dc45690317724745cc47258a2f34753e4659ad669d7d7",
+  "github_has_matching_deployment_source": false,
+  "source_bundle_has_matching_binary": true,
+  "reproducible_build_match_verified": false,
+  "deployment_allowed": false,
+  "recovered_files": [
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/async_translation_queue.hpp",
+      "github_sha256": null,
+      "device_source_sha256": "b2bab06d9d88bcc3afc1688930d9c5bf87237a67cc44c9ee220e0f8bedcc3aa0"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/async_translation_queue_test.cpp",
+      "github_sha256": null,
+      "device_source_sha256": "beb2c1fd5578984ee035e95f3054f94c9cc5bddab06e7fd96689af73868a6223"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/classifier_frame_bridge.hpp",
+      "github_sha256": null,
+      "device_source_sha256": "9394436722161e4683ff1c00cd8c2b98b318a1d4c617fc904eaa56de9b19b889"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/classifier_frame_bridge_test.cpp",
+      "github_sha256": null,
+      "device_source_sha256": "48bbf13693836da5c349d468d3ca44041167d3a9a81feccf20255c6e707ca364"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/log_record.hpp",
+      "github_sha256": null,
+      "device_source_sha256": "5edd985ba16a2f0b780c1fe69f87a8cfbe08a7e5e2576cd5e65ae4a1507a7c8d"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/mqtt_translation_publisher.cpp",
+      "github_sha256": "344eff378e9789d17919595438fc13795a6b4bb9aa31f6d068d1ef7b0f7f0e91",
+      "device_source_sha256": "45a6689ee73ce3cc444c11bec476455b3281aebf8d1fa39e799efd0658163f73"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/palm_retry_policy.hpp",
+      "github_sha256": null,
+      "device_source_sha256": "138ce954690ae1d9323ee6285b6993bdb58ad8406382a8365e3f779811836814"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/palm_retry_policy_test.cpp",
+      "github_sha256": null,
+      "device_source_sha256": "be8b1cd9107a372e90fe4aacce089394d5137d42204da58b6060cba2ad02211f"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/roi_runner_cases.inc",
+      "github_sha256": null,
+      "device_source_sha256": "2c492866e44ec085fceec49c14a8443801c60dc4fbabfb97453e1cc8db7adf59"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/tracking_roi_retry_policy.hpp",
+      "github_sha256": null,
+      "device_source_sha256": "0c7269d6df3836930a4c41f71039249ae5c692566232efb467ddeee18e9cac7d"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/tracking_roi_retry_policy_test.cpp",
+      "github_sha256": null,
+      "device_source_sha256": "98bfe6b689f49418d226fa3b288b0322298314990817fd04f70b36f064429a2f"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/tracking_roi_runner.inc",
+      "github_sha256": null,
+      "device_source_sha256": "5e443fca826ba855354db441e554588a1425b31c13a5b5c7b06c1c0c90f60044"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/tracking_roi_runner_test.cpp",
+      "github_sha256": null,
+      "device_source_sha256": "eb688c0efe976c24c4cb2610b5fcbc4ddc920c088ca0f79f7d708b033897e61a"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/vision_stream_sign_decoupled.cpp",
+      "github_sha256": "aa50394e51551529452eeae3827469c2d7f57abfc376d256011be9293a68c205",
+      "device_source_sha256": "d69e62dd3fa69532d8d42ab9fbcd79ad2622b1a4b20ad18fe6dac3494eb6eef9"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/live_sign_session.cpp",
+      "github_sha256": "e6c51563690a42e8deaa50d3666410ffe2eaa855afe08fd9c8eeab49da902647",
+      "device_source_sha256": "16fbd00ae482d5dad2f5edd80b3b7c76dd2cedf20dd7acc6af222fc8e5a0a422"
+    },
+    {
+      "path": "SW/rpi4_vision_atlas/photo_pipeline/vision_photo.cpp",
+      "github_sha256": "e628bbf56ebd3a012566479ac864c8e9d017b86b3ed20b16eb07c49af86c2e65",
+      "device_source_sha256": "acf2e252b87167bbf0750d8beedc44b5adace39e5c9ab7b8ce2085676f988b9f"
+    },
+    {
+      "path": "SW/rpi4_sign_cpp/include/active_targets.hpp",
+      "github_sha256": null,
+      "device_source_sha256": "4f6c43080c6fcb6ec81cb275976f23d5b8188c166bce735b021b1ab71a6b7743"
+    },
+    {
+      "path": "SW/rpi4_sign_cpp/src/active_targets.cpp",
+      "github_sha256": null,
+      "device_source_sha256": "4c871e3fbfc06585a83e96a3fba57b71e6a11e0d15e59fe6567f991212905e12"
+    }
+  ],
+  "remote_branch_scan": [
+    {
+      "branch": "upstream/develop",
+      "commit": "3ecfa82eff1d2c96118d5015697ac34455ec95a3",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/docs/mqtt-contract-v1.2-migration",
+      "commit": "0f6cb1385349d0745a17594317963ee74deb8c35",
+      "vision_source_sha256_normalized": "8f63a5624d6c6c123250d25303a19cfc87a306fdb5b12ebfa32e7000564796c6",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/SW",
+      "commit": "110a09e3063d629bc54676d157d940c347ebd1a5",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/accessibility-audio-shortcuts",
+      "commit": "87f0efa674f8b1189855e6f84bd335bbaae7b4ef",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/rpi4-live-sign-mqtt",
+      "commit": "d17c57f5bc7e2b8535b4440eb3bc6b6ba3f0cefa",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/safehub-site-ui",
+      "commit": "013dc001869cef200c0d6a33d003d76abc982190",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/scenario-event-overlays",
+      "commit": "64e60df56be869a5d1681e7c492a6c29633eae7b",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/sign-context-llm-20261023",
+      "commit": "7061b35dbcfe5200d80311799b8509fbc13e4df8",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/touch-sign-shortcuts",
+      "commit": "24807342479e2031058dcfab66edfb1b3e098206",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/ui-sign-overlay",
+      "commit": "ae3af641c36549b5d2b4bfca89d61d5aaef35db3",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/feature/voice-server-port",
+      "commit": "d943a96c2c19f1950c2c22d09ab78c30c4a84cf8",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/fix/disaster-latest-regression",
+      "commit": "3e9cc20612d295ff65fd61f8c10cc1b58802a2ce",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/fix/pr5-local-stt-bootstrap",
+      "commit": "7061b35dbcfe5200d80311799b8509fbc13e4df8",
+      "vision_source_sha256_normalized": "d43a917f2d051f2c89c1af47f783d90f713ee89d2136d268de2fc23d1d910c7c",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/fix/rpi4-input-bridge-20261009-080540",
+      "commit": "993a1036dd45feba5faf77b9861d520c609c20c6",
+      "vision_source_sha256_normalized": "34146371b6f86cf12678122cadfd01fc9e2b84a2ac73c3ef2179c850b7509941",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/perf/camera-pipeline-decoupling",
+      "commit": "1323530e164382373200cc4018860e2bee25f8cb",
+      "vision_source_sha256_normalized": "70537fa9af8a9252db5795ab56d8341bd855bacbe9c87a99b4a8203fac281a36",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    },
+    {
+      "branch": "upstream/perf/camera-preview-latency",
+      "commit": "b1af64f46c4100d5088525748da574bdb660f74c",
+      "vision_source_sha256_normalized": "8f63a5624d6c6c123250d25303a19cfc87a306fdb5b12ebfa32e7000564796c6",
+      "active_targets": false,
+      "async_queue": false,
+      "roi_retry": false
+    }
+  ],
+  "source_files_matching_bundle_manifest": 48,
+  "note": "Bundle provenance and matching ELF verified; no clean ATLAS rebuild equivalence has been established. No live replacement is authorized by this result.",
+  "all_upstream_refs_searched": [
+    "upstream",
+    "upstream/backup/develop-before-pr5-20261025-081248",
+    "upstream/develop",
+    "upstream/docs/mqtt-contract-v1.2-migration",
+    "upstream/feature/HW",
+    "upstream/feature/SW",
+    "upstream/feature/accessibility-audio-shortcuts",
+    "upstream/feature/rpi4-live-sign-mqtt",
+    "upstream/feature/safehub-final-integration",
+    "upstream/feature/safehub-site-ui",
+    "upstream/feature/scenario-event-overlays",
+    "upstream/feature/sign-context-llm-20261023",
+    "upstream/feature/sign-shortcut-control",
+    "upstream/feature/touch-sign-shortcuts",
+    "upstream/feature/ui-sign-overlay",
+    "upstream/feature/voice-server-port",
+    "upstream/fix/disaster-latest-regression",
+    "upstream/fix/pr5-local-stt-bootstrap",
+    "upstream/fix/rpi4-input-bridge-20261009-080540",
+    "upstream/main",
+    "upstream/perf/camera-pipeline-decoupling",
+    "upstream/perf/camera-preview-latency"
+  ],
+  "deployment_feature_source_hits_on_upstream": []
+}
