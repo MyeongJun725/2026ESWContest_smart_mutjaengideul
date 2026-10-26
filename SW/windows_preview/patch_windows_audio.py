@@ -11,7 +11,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import url2pathname
 
 
-CANONICAL_APP = Path(__file__).resolve().parents[1] / "safehub_app"
+CANONICAL_APP = Path(__file__).resolve().parents[1] / "safehub_scenario"
 PLUGIN = "audioplayers_windows"
 VERSION = "4.3.0"
 CPP_PATH = Path("windows/audioplayers_windows_plugin.cpp")
@@ -73,6 +73,9 @@ def manifest(folder):
 def apply_patch(host, package=None, check_only=False):
     host = Path(host).expanduser().resolve(strict=True)
     canonical = CANONICAL_APP.resolve()
+    repository = Path(__file__).resolve().parents[2]
+    if host == repository or repository in host.parents or host in repository.parents:
+        raise ValueError("Use a Windows host outside the source repository.")
     if host == canonical or host in canonical.parents or canonical in host.parents:
         raise ValueError("Use a separate Windows host, never the canonical ATLAS app.")
     if not (host / "pubspec.yaml").is_file() or not (host / "windows").is_dir():

@@ -11,30 +11,8 @@ from patch_windows_audio import apply_patch as prepare_windows_audio
 
 
 SOURCE = Path(__file__).resolve().parents[1] / "safehub_scenario"
-ATLAS_PACKAGES = {"audioplayers_atlas", "record_atlas"}
-
-
-def host_pubspec(text):
-    """Remove only the two host-incompatible path dependencies."""
-    lines = text.splitlines(keepends=True)
-    result, removed = [], set()
-    index = 0
-    while index < len(lines):
-        match = re.fullmatch(r"  ([a-z_]+):\s*", lines[index].rstrip("\r\n"))
-        if match and match[1] in ATLAS_PACKAGES:
-            removed.add(match[1])
-            index += 1
-            while index < len(lines):
-                line = lines[index]
-                if line.strip() and len(line) - len(line.lstrip()) <= 2:
-                    break
-                index += 1
-        else:
-            result.append(lines[index])
-            index += 1
-    if removed != ATLAS_PACKAGES:
-        raise ValueError("Expected both ATLAS path dependencies in the source pubspec.")
-    return "".join(result)
+sys.path.insert(0, str(SOURCE / "tool"))
+from host_support import host_pubspec, validate_target
 
 
 def preflight(flutter_path, output_dir):
@@ -44,8 +22,7 @@ def preflight(flutter_path, output_dir):
         raise ValueError("--flutter-path must name the Flutter executable (bin/flutter.bat).")
     if output_dir.exists():
         raise ValueError("--output-dir must be a new directory; existing files are never replaced.")
-    if SOURCE == output_dir or SOURCE in output_dir.parents or output_dir in SOURCE.parents:
-        raise ValueError("The output directory must be separate from the canonical app.")
+    validate_target(output_dir, SOURCE)
     for name in ("lib", "assets", "pubspec.yaml"):
         if not (SOURCE / name).exists():
             raise ValueError(f"Missing source input: {name}")
@@ -70,7 +47,7 @@ def prepare(flutter_path, output_dir, pubspec, build=False, real=False):
     text = re.sub(r"Win32Window::Size size\(\d+,\s*\d+\);",
                   "Win32Window::Size size(1280, 840);", text)
     text = text.replace('window.Create(L"safehub_app",',
-                        'window.Create(L"SafeHub - Sign & WiFi Sensing",')
+                        'window.Create(L"SafeHub Scenario",')
     runner.write_text(text, encoding="utf-8")
 
     if build:
@@ -89,7 +66,7 @@ def main(argv=None):
     parser.add_argument("--flutter-path", type=Path, required=True,
                         help="Full path to the installed Flutter bin/flutter.bat")
     parser.add_argument("--output-dir", type=Path, required=True,
-                        help="New directory outside SW/safehub_scenario")
+                        help="New directory outside the repository")
     parser.add_argument("--real", action="store_true",
                         help="Build for real device connections with editable settings")
     actions = parser.add_mutually_exclusive_group()

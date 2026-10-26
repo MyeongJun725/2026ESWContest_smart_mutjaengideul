@@ -2,11 +2,10 @@
 
 import argparse
 from pathlib import Path
-import sys
+
+from host_support import prepare
 
 SOURCE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(SOURCE.parent / "wifi_sensing"))
-from prepare_ui_tests import prepare
 
 
 def main():
@@ -14,7 +13,7 @@ def main():
     parser.add_argument("output", type=Path, help="New/empty directory outside the checkout")
     args = parser.parse_args()
     try:
-        count = prepare(SOURCE, args.output, full=True)
+        count = prepare(SOURCE, args.output)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     print(f"Prepared scenario host: {args.output.resolve()} ({count} files)")

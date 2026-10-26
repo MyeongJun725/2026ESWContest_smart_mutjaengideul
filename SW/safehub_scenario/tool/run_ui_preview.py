@@ -4,11 +4,13 @@ import argparse
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
 import webbrowser
+
+
+from host_support import host_pubspec, validate_target
 
 
 SOURCE = Path(__file__).resolve().parents[1]
@@ -22,16 +24,12 @@ def replace_once(text, before, after):
 
 def prepare_host(output):
     """Copy app sources/assets, adapting only the disposable browser host."""
-    output.mkdir(parents=True)
+    output = output.expanduser().resolve()
+    validate_target(output, SOURCE)
+    output.mkdir(parents=True, exist_ok=True)
     for name in ("lib", "assets"):
         shutil.copytree(SOURCE / name, output / name)
-    pubspec = (SOURCE / "pubspec.yaml").read_text(encoding="utf-8")
-    for package in ("audioplayers_atlas", "record_atlas"):
-        pubspec, count = re.subn(
-            rf"  {package}:\r?\n    path: [^\n]+\n", "", pubspec
-        )
-        if count != 1:
-            raise ValueError(f"Expected one ATLAS dependency: {package}")
+    pubspec = host_pubspec((SOURCE / "pubspec.yaml").read_text(encoding="utf-8"))
     (output / "pubspec.yaml").write_text(pubspec, encoding="utf-8")
     shutil.copyfile(SOURCE / "pubspec.lock", output / "pubspec.lock")
 

@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 import re
+import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -48,6 +50,32 @@ class ReproductionTests(unittest.TestCase):
                                    capture_output=True)
             self.assertNotEqual(again.returncode, 0)
             self.assertEqual(marker.read_text(), "preserve me")
+
+
+    def test_scenario_tools_work_without_legacy_ui_or_csi_checkout(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            isolated = root / "repo/SW/safehub_scenario"
+            shutil.copytree(SOURCE, isolated, ignore=shutil.ignore_patterns(
+                "build", ".dart_tool", "__pycache__"))
+            self.assertFalse((isolated.parent / "safehub_app").exists())
+            self.assertFalse((isolated.parent / "wifi_sensing").exists())
+            # Both real packaging entry points must work in this reduced tree.
+            subprocess.run([sys.executable, str(isolated / "tool/prepare_host_tests.py"),
+                            str(root / "host")], check=True, capture_output=True)
+            subprocess.run([sys.executable, str(isolated / "tool/run_ui_preview.py"),
+                            "--check-only"], check=True, capture_output=True)
+            self.assertEqual((root / "host/lib/main.dart").read_bytes(),
+                             (SOURCE / "lib/main.dart").read_bytes())
+
+    def test_host_output_cannot_enter_another_repository_directory(self):
+        # A nonexistent child must be rejected without creating tracked/local files.
+        output = REPO / "SW" / "cleanup-test-output-do-not-create"
+        self.assertFalse(output.exists())
+        result = subprocess.run([sys.executable, str(SOURCE / "tool/prepare_host_tests.py"),
+                                 str(output)], capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
