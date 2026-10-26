@@ -1,5 +1,9 @@
 # 현재 UI의 시나리오·장치 테스트
 
+기본 제품 화면에는 이 테스트 UI가 없습니다. 브라우저는 `--developer-tools`,
+실제 연결용 개발 빌드는 `SAFEHUB_DEVELOPER_TOOLS=true`를 명시해야 표시됩니다.
+[승인된 제품 구성](../../../docs/integration/product-scope-20261027.md)을 기준으로 합니다.
+
 현재 소스는 `SW/safehub_scenario`입니다. 아래는 PR #10과 안정화 보완을 반영한
 검토 후보의 설명입니다. [이전 화면·배포 기록](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/blob/654e2f3cb09a1778d65ba6554bc35b94e1679e6e/SW/safehub_scenario/docs/scenario-event-overlays.md)은
 과거 기록이며 현재 장치 상태를 증명하지 않습니다.
@@ -37,7 +41,7 @@ PR #10에는 장치 연동 선택과 별도의 **실제 장치 테스트** 창�
   펌웨어 watchdog이나 실제 모터 정지는 현재 클라우드에서 확인하지 못했습니다.
 
 이번 작업은 실제 장치 명령을 보내거나 이 창을 장비에 연결해 시험하지 않았습니다.
-최종 제품에서 테스트 UI를 어디까지 노출할지는 [결정 목록](../../../docs/integration/ui-consolidation-20261027.md)에 남겼습니다.
+테스트 UI는 사용자 승인대로 개발·시연 모드에만 노출합니다.
 
 ## 사건·도움·카메라 동작
 
@@ -58,6 +62,6 @@ PR #10에는 장치 연동 선택과 별도의 **실제 장치 테스트** 창�
 flutter test test/scenario_event_overlay_test.dart test/scenario_actuation_test.dart test/hardware_test_dialog_test.dart
 ```
 
-전체 Flutter 265 pass/1 skip과 후속 영향 경로 13 pass, 정적 분석의 남은 경고 및
+최종 전체 Flutter 271 pass/실제 fastText 1 skip과 개발 모드 6 pass, 정적 분석의 남은 경고 및
 실기 미검증 범위는 [현재 검토 기록](../../../docs/integration/pr10-addendum-review.md)에 있습니다.
 명령 제출·UART 응답·실제 물리 동작 완료를 구분하며, 호스트 통과로 장치 배포 완료를 표시하지 않습니다.

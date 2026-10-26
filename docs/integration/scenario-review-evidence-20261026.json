@@ -128,7 +128,7 @@
     "status_contexts_each": 0,
     "combined_state": "pending; no statuses present, not a running-CI claim"
   },
-  "current_review": "pr10-addendum-review.md",
+  "current_review": "product-scope-20261027.md",
   "pr9_source_integration": {
     "included": true,
     "deployed": false,
@@ -157,5 +157,37 @@
     "legacy_ui_removed": false,
     "pending_product_decisions": 6,
     "source_isolation_test": "Scenario-only fixture without safehub_app/wifi_sensing succeeds"
+  },
+  "previous_review": "pr10-addendum-review.md",
+  "product_scope": {
+    "user_approved_all_recommendations": true,
+    "recorded_at": "2026-10-27T03:38:05.433410+09:00",
+    "backup_ref": "backup/pr11-before-product-cleanup-20261027",
+    "backup_sha": "d6be7c7f74a4e715cff73979f2a5d16c1cb31d0c",
+    "legacy_ui_removed": true,
+    "old_standalone_csi_and_mock_vision_removed": true,
+    "c6_source_relocated_to": "HW/esp32_csi",
+    "product_csi_inference_only": true,
+    "developer_tools_default": false,
+    "context_model": "fasttext-fire-screen",
+    "real_fasttext_model_test": "skipped; model unavailable/unconfirmed",
+    "direct_runs": {
+      "flutter_passed": 271,
+      "flutter_failed": 0,
+      "flutter_skipped": 1,
+      "developer_mode_passed": 6,
+      "csi_python_passed": 54,
+      "source_packaging_passed": 5,
+      "windows_tools_passed": 14,
+      "cpp_ctest_passed": 19,
+      "web_product_build_exit": 0,
+      "analysis_errors": 0,
+      "analysis_warnings": 0,
+      "analysis_infos": 103,
+      "analysis_exit": 1
+    },
+    "physical_device_execution": false,
+    "backup_archive_restored_files_verified": 847,
+    "flutter_source_files_compared": 93
   }
 }

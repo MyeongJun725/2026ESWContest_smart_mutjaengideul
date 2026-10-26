@@ -16,6 +16,7 @@ python3 -m unittest discover -s SW/safehub_scenario/tool -p 'test_*.py' -v
 # 브라우저 화면 시연; --check-only는 준비 검사만 수행
 python3 SW/safehub_scenario/tool/run_ui_preview.py --check-only
 python3 SW/safehub_scenario/tool/run_ui_preview.py
+# 개발·시연 도구가 필요할 때만 --developer-tools 추가
 
 # 실제 현재 소스·테스트·자산을 새 외부 폴더로 복사
 python3 SW/safehub_scenario/tool/prepare_host_tests.py /tmp/safehub-scenario-host
@@ -34,10 +35,12 @@ ATLAS 빌드는 이 폴더에서 팀의 ATLAS SDK와
 ## 기능과 시연
 
 현재 소스에는 방송 자막·재난 안내·수어/터치 도움 흐름, 카메라, 가전/단축키,
-CSI 상태/수집 화면, 문맥 설명과 시나리오·장치 테스트가 있습니다.
-CSI 화면 범위, 테스트 UI 노출, 설명 엔진과 제품 가전 범위는
-[사용자 결정 목록](../../docs/integration/ui-consolidation-20261027.md)에 남겼습니다.
-이번 정리는 제품 기능이나 기존 사용자 설정을 조용히 제거/변경하지 않습니다.
+CSI 상태·기존 모델 선택·추론, fastText 문맥 설명이 있습니다.
+수집·학습과 시나리오/장치 테스트는 개발 모드로 분리했습니다.
+팬·커튼·수어 단축키와 기존 LED·진동 경보를 유지하고 미지원 가전 카드는 제외했습니다.
+[승인된 제품 범위·복원 방법](../../docs/integration/product-scope-20261027.md)을 확인하세요.
+기존 개인 설정 파일은 임의 삭제하지 않습니다. 과거 생성형 설정은 자동 호출을 막고
+문맥 설명을 메모리에서 꺼 두므로 fastText 주소·실제 모델을 확인한 뒤 켜세요.
 
 [시나리오 및 장치 테스트](docs/scenario-event-overlays.md)는 화면 전용과 장치 연동을 구별합니다.
 **#10의 장치 테스트는 실제 MQTT 명령을 발행할 수 있습니다.**
@@ -60,7 +63,10 @@ runner의 버전 번호를 맞춘 것만으로 설치본 재현을 선언하지 
 ## 검증
 
 [현재 검토·수치·장치 확인 목록](../../docs/integration/pr10-addendum-review.md)을 기준으로 합니다.
-전체 Flutter 265 pass / 0 fail / 1 opt-in live LLM skip; 이후 경고 수정의 영향 경로 13개도 통과했습니다.
-정적 분석은 error 0 / warning 11 / info 100, exit 1입니다.
+최종 전체 Flutter 271 pass / 0 fail / 1 opt-in 실제 fastText skip; 개발 플래그 true 경로 6개도 통과했습니다.
+정적 분석은 error 0 / warning 0 / info 103, exit 1입니다.
 Preview web release 빌드는 통과했으나 ATLAS 패키지 빌드·재부팅·실제 모델·마이크부터
 물리 장치까지의 동작은 미검증입니다. 모델·비공개 SDK·인증정보·개인 설정은 포함하지 않습니다.
+
+제품 빌드는 `APP_LOCAL_PREVIEW=false`, `SAFEHUB_DEVELOPER_TOOLS=false`를 사용합니다.
+일반 화면에서 시연·장치 시험은 숨기고 실제 경보·도움 요청은 유지합니다.

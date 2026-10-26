@@ -4,7 +4,7 @@
 현재 통합 후보의 UI 진입점은 **[SW/safehub_scenario](SW/safehub_scenario/README.md)** 하나입니다.
 PR #10의 새 화면·장치 제어, #6의 필요한 안정화, #9의 수어 수정 소스를
 [기존 Draft PR #11](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11)에서 검토합니다.
-#10은 #8/#7을 포함합니다. main/develop에 병합하거나 실제 장치에 배포한 상태는 아닙니다.
+#10은 #8/#7을 포함합니다. 사용자가 여섯 권장안을 승인해 옛 UI와 독립 과거 앱은 정리했습니다. main/develop에 병합하거나 실제 장치에 배포한 상태는 아닙니다.
 
 ## 시작하기
 
@@ -35,13 +35,18 @@ ATLAS runner·manifest는 `SW/safehub_scenario/atlas`에 있습니다.
 | `SW/rpi5_hub`, `SW/uno_bridge` | 수어 단축키, MQTT·Uno 경보/팬/커튼 명령 경로 |
 | `SW/local_stt`, `SW/fasttext_context` | 음성 자막 서비스, fastText 문맥 서비스 소스 |
 | `SW/atlas_boot` | 현재 Scenario 앱 ID를 사용하는 부팅 구성 후보 |
-| `SW/wifi_sensing` | CSI 수집·학습·상태 서비스. 최종 제품에서 유지할 범위는 결정 대기 |
+| `SW/wifi_sensing` | 제품은 상태·기존 모델 선택·추론 전용. 수집·학습은 개발용 |
+| `HW/esp32_csi` | 현재 C6 송수신 소스·라이선스. 빌드/플래시 미실행 |
 | `SW/windows_preview` | 현재 UI의 Windows 개발 호스트·패키징 도구 |
 
-`SW/safehub_app`은 **옛 UI 소스**이며 새 개발/빌드 진입점이 아닙니다.
-옛 UI·독립 CSI 앱·실험 코드의 최종 삭제와 화면별 기능 축소는 아직 결정 전입니다.
-현재 파일을 남겼다는 이유로 모든 경로를 제품에 설치하거나 함께 실행하지 않습니다.
-[완료한 정리와 사용자 결정 목록](docs/integration/ui-consolidation-20261027.md)을 참고하세요.
+옛 `SW/safehub_app`, 독립 CSI 데스크톱 앱, 모의 Pi4 비전, 생성형 서버는 제거했습니다.
+수어 회귀에 필요한 기준 코드/fixture와 개발 도구는 구분해 남겼습니다.
+[최종 제품 범위·검증·복원 절차](docs/integration/product-scope-20261027.md)를 확인하세요.
+정리 전 코드는 [GitHub 백업 브랜치](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/tree/backup/pr11-before-product-cleanup-20261027)에서 되돌릴 수 있습니다.
+
+브라우저 미리보기는 기본적으로 제품 화면입니다. `--developer-tools`를 추가한 경우만
+시나리오/장치 시험과 CSI 수집·학습 화면을 표시합니다. 실제 연결용 빌드에서도 기본은
+`SAFEHUB_DEVELOPER_TOOLS=false`이며, 개발 도구 노출과 실제 I/O 허용은 서로 다릅니다.
 
 ## 버전과 검증 근거
 
@@ -50,15 +55,15 @@ ATLAS runner·manifest는 `SW/safehub_scenario/atlas`에 있습니다.
 1.2.0은 과거 사용자 확인, 1.4.0 설치는 #10 작성자 보고입니다. 소스 후보는 1.4.0+1이며
 현재 장치 실행본·IPK·설정·보관본은 이 클라우드에서 **미확인/미확보**입니다.
 
-새 UI 전체 Flutter 265 pass / 0 fail / 1 opt-in live LLM skip,
+새 UI 전체 Flutter 271 pass / 0 fail / 1 opt-in 실제 fastText skip,
 통합 C++ 19개 통과 등 [검증 근거와 제한](docs/integration/pr10-addendum-review.md)을 확인하세요.
-정적 분석은 error 0 / warning 11 / info 100, exit 1입니다.
+정적 분석은 error 0 / warning 0 / info 103, exit 1입니다.
 호스트 결과로 ATLAS 빌드·재부팅·실제 모델·마이크·물리 장치 검증을 주장하지 않습니다.
 
 ## 계약과 자료
 
 - [MQTT 계약](config/topics.json): 기존 topic·JSON·QoS·retain을 유지합니다.
-- [CSI 서비스](SW/wifi_sensing/README.md), [이전 독립 CSI 개발 도구](WiFi-CSI-Sensing/README.md): 모델/전처리 버전을 혼용하지 않습니다. CSI의 전역 MQTT 사건 발행은 미완료입니다.
+- [CSI 서비스](SW/wifi_sensing/README.md), [이전 독립 CSI 개발 도구](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/blob/d6be7c7f74a4e715cff73979f2a5d16c1cb31d0c/WiFi-CSI-Sensing/README.md): 모델/전처리 버전을 혼용하지 않습니다. CSI의 전역 MQTT 사건 발행은 미완료입니다.
 - [Home Assistant·ThinQ 상태](docs/home-assistant/STATUS.md): 미완료 연동을 작동 기능으로 표시하지 않습니다.
 - [협업 규칙](CONTRIBUTING.md): 작업 브랜치·Draft PR에서 검토하고 main/develop에 직접 반영하지 않습니다.
 

@@ -2,6 +2,8 @@
 
 Python CSI 서비스와 Flutter Windows 앱의 시작·종료를 관리하는 WinExe입니다. 실제 모드에서 장비가 없으면 연결 대기로 표시합니다.
 
+> Windows 런처·패키징은 유지한 **개발 도구**입니다. CSI 학습을 허용하는 개발 런처를 Pi 제품 service로 사용하지 않습니다.
+> 준비 UI는 기본적으로 제품 화면이며 `--developer-tools`가 있을 때만 개발 화면을 표시합니다.
 > 현재 원본 UI는 `SW/safehub_scenario`입니다. 출력은 저장소 밖 새 폴더만 허용합니다.
 > 이 클라우드에서 Windows 실행 파일을 새로 빌드·실행한 결과는 아닙니다.
 
@@ -35,7 +37,7 @@ Set-Location $previewHost
 & $flutterExe pub get
 python $audioPatch --host-dir $previewHost
 & $flutterExe pub get
-& $flutterExe build windows --release --dart-define=APP_LOCAL_PREVIEW=true
+& $flutterExe build windows --release --dart-define=APP_LOCAL_PREVIEW=true --dart-define=SAFEHUB_DEVELOPER_TOOLS=false
 ```
 
 준비 스크립트는 `flutter create --platforms=windows --no-pub`로 호스트를 생성하고, 실제 `lib`/`assets`를 복사한 뒤 호스트의 pubspec에서 `audioplayers_atlas`와 `record_atlas`만 제외합니다. Windows용 오디오·녹음 플러그인은 유지됩니다. 표준 라이브러리만 사용하며 기존 출력 폴더는 덮어쓰지 않습니다. 호스트 pubspec 처리는 현재 UI의 `tool/host_support.py`를 공유하며 CSI/옛 UI 도우미를 사용하지 않습니다. 준비 실패 시 남은 폴더를 자동 삭제하지 않습니다.
@@ -155,7 +157,7 @@ py -3.12 -m venv .venv-safehub
 }
 ```
 
-Flutter 앱은 `--dart-define=APP_LOCAL_PREVIEW=true`로 빌드합니다. 기본 CSI 주소는 `http://127.0.0.1:8765`이며, 포트를 바꾸는 경우 앱의 `CSI_SERVICE_URL` 빌드 설정도 일치시켜야 합니다. 기존 WifiSensing 데이터와 분리된 새 `data_dir`을 지정합니다.
+Flutter 앱은 `--dart-define=APP_LOCAL_PREVIEW=true --dart-define=SAFEHUB_DEVELOPER_TOOLS=false`로 빌드합니다. 기본 CSI 주소는 `http://127.0.0.1:8765`이며, 포트를 바꾸는 경우 앱의 `CSI_SERVICE_URL` 빌드 설정도 일치시켜야 합니다. 기존 WifiSensing 데이터와 분리된 새 `data_dir`을 지정합니다.
 
 ## 실행 동작
 

@@ -1,3 +1,8 @@
+> 현재 제품 UI는 `SW/safehub_scenario`입니다. 일반 화면은 CSI 상태·기존 모델 선택·추론 전용입니다.
+> 아래 수집·학습 안내는 개발 모드/개발 서비스용입니다. 제품 unit의 `--inference-only`는
+> 기록 수집·학습·가져오기/삭제를 거절합니다. C6 소스는 `HW/esp32_csi`로 분리했습니다.
+> [현재 제품 구성과 복원](../../docs/integration/product-scope-20261027.md)을 확인하세요.
+
 # SafeHub 안의 와이파이 센싱
 
 노트북 최신 WifiSensing2-src의 엔진을 기존 수어 Flutter UI에 연결한 개발본입니다. 원래 WifiSensing2.0 EXE/데이터는 수정하지 않습니다. 실기기 검증 전 상태입니다.
