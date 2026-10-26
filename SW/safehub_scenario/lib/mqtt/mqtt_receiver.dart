@@ -43,6 +43,7 @@ class _OwnedMqttClient extends MqttServerClient {
 }
 
 class MqttReceiver {
+  final Set<String> _signPackets = {};
   static const String shortcutCommandTopic =
       'safehub/config/sign_shortcut/command';
 
@@ -265,6 +266,17 @@ class MqttReceiver {
 
       // 수어 번역 결과
       if (topic == 'safehub/vision/livingroom/translation') {
+        final packetId = message.variableHeader?.messageIdentifier ?? 0;
+        final key = '$packetId:$payload';
+        if (packetId != 0 &&
+            message.header?.duplicate == true &&
+            _signPackets.contains(key))
+          return;
+        if (packetId != 0) {
+          _signPackets.add(key);
+          if (_signPackets.length > 128)
+            _signPackets.remove(_signPackets.first);
+        }
         if (decoded is! Map<String, dynamic>) {
           return;
         }
@@ -307,15 +319,24 @@ class MqttReceiver {
 
   bool publishAlertSignal(String device, String action) {
     final client = _client;
-    if (_disposed || !_connected || client == null ||
-        client.connectionStatus?.state != MqttConnectionState.connected) return false;
+    if (_disposed ||
+        !_connected ||
+        client == null ||
+        client.connectionStatus?.state != MqttConnectionState.connected)
+      return false;
     try {
       final payload = jsonEncode(AlertSignal.payload(device, action));
       final builder = MqttClientPayloadBuilder()..addUTF8String(payload);
-      client.publishMessage('safehub/actuator/$device/command',
-          MqttQos.atLeastOnce, builder.payload!, retain: false);
+      client.publishMessage(
+        'safehub/actuator/$device/command',
+        MqttQos.atLeastOnce,
+        builder.payload!,
+        retain: false,
+      );
       return true;
-    } catch (_) { return false; }
+    } catch (_) {
+      return false;
+    }
   }
 
   bool publishShortcutCommand(String payload) {

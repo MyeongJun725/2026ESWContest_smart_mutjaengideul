@@ -10,150 +10,113 @@ class HouseStatusCard extends StatelessWidget {
   });
   final SituationService service;
   final VoidCallback onAcknowledge;
-
-  Widget _detail(String label, String value) => Expanded(
-    child: Padding(
-      padding: const EdgeInsets.only(right: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF686C73)),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 15),
-          ),
-        ],
-      ),
-    ),
-  );
-
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: service,
     builder: (context, _) {
-      final flow = service.flow;
-      final incident = flow.active;
-      final simulated = service.scenarioTestMode;
+      final incident = service.flow.active;
+      final previous = service.flow.lastAcknowledged;
+      final title =
+          incident != null
+              ? (incident.kind == HouseScenario.assistance
+                  ? '도움 요청을 확인해 주세요'
+                  : '새 알림이 도착했어요')
+              : previous != null
+              ? '알림을 확인했어요'
+              : '새로운 알림이 없어요';
+      final detail =
+          incident?.evidence ??
+          (previous != null
+              ? '필요하면 내용을 다시 볼 수 있어요.'
+              : '필요하면 수어 또는 터치로 도움을 요청하세요.');
       return Container(
-        height: 248,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         decoration: BoxDecoration(
-          color: simulated ? const Color(0xFFFFF1D6) : const Color(0xFFEEECE8),
-          borderRadius: BorderRadius.circular(24),
+          color:
+              incident != null || service.scenarioTestMode
+                  ? const Color(0xFFFFF3D6)
+                  : Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFFE5DFD8)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
           children: [
-            Row(
-              children: [
-                const Text(
-                  '우리 집 상황',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                if (simulated)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 12),
-                    child: Text(
-                      '테스트 · 실제 장치 명령 없음',
-                      style: TextStyle(
-                        color: Color(0xFF8C5300),
-                        fontWeight: FontWeight.w700,
-                      ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                const Spacer(),
-                if (simulated)
-                  TextButton(
-                    onPressed: service.endScenarioTest,
-                    child: const Text('테스트 종료'),
-                  ),
-                TextButton(
-                  onPressed: () => showScenarioTest(context, service),
-                  child: const Text('시나리오 테스트'),
-                ),
-              ],
-            ),
-            Text(
-              incident?.title ??
-                  (flow.lastAcknowledged != null
-                      ? '알림 확인을 기록했어요. 위험 해제 여부는 별도 확인이 필요해요.'
-                      : '방송·재난·센서 정보를 확인하며 새로운 알림을 기다려요.'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 9),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _detail(
-                  '판단 근거',
-                  incident == null
-                      ? flow.observation
-                      : '${incident.relevance} · ${incident.evidence}',
-                ),
-                _detail(
-                  '알림 전달',
-                  incident?.delivery ?? '화면 수신 대기 · 장치 동작을 확인한 상태가 아닙니다.',
-                ),
-                _detail(
-                  '사용자 응답',
-                  incident == null
-                      ? flow.lastAcknowledged?.response ?? '응답을 요청한 알림 없음'
-                      : incident.response.isEmpty
-                      ? '확인 대기 · 움직임만으로 확인 여부를 판단하지 않아요.'
-                      : incident.response,
-                ),
-              ],
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    incident?.nextAction ?? service.sensorStatus,
+                  const SizedBox(height: 4),
+                  Text(
+                    service.scenarioTestMode
+                        ? '시연 모드 · 실제 장치는 작동하지 않아요.'
+                      : detail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-                if (flow.pendingCount > 0) Text('대기 ${flow.pendingCount}건  '),
-                if (incident != null) ...[
-                  TextButton(
-                    onPressed: onAcknowledge,
-                    child: const Text('확인했어요'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: service.openHelp,
-                    child: const Text('상황 응답 · 도움'),
-                  ),
-                ] else
-                  TextButton(
-                    onPressed: service.toggleVoiceChat,
-                    child: Text(
-                      service.voiceChatEnabled ? 'AI 대화 끄기' : 'AI에게 말하기',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      color: Color(0xFF625E5A),
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-            Text(
-              service.voiceReply.isNotEmpty && incident == null
-                  ? '질문: ${service.voiceQuestion} · ${service.voiceReply}'
-                  : service.busy
-                  ? 'AI가 근거를 정리하고 있어요. 경보·응답은 바로 사용할 수 있어요.'
-                  : service.assessmentStale
-                  ? 'AI 설명 대기 · 알림과 응답은 AI 연결 없이도 작동합니다.'
-                  : 'AI 참고 안내: ${service.assessment!.summary}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF686C73)),
+            const SizedBox(width: 16),
+            if (service.scenarioTestMode)
+              TextButton(
+                onPressed: service.endScenarioTest,
+                child: const Text('시연 종료', style: TextStyle(fontSize: 20)),
+              ),
+            TextButton(
+              onPressed: () => showScenarioTest(context, service),
+              child: const Text('시나리오 테스트', style: TextStyle(fontSize: 20)),
+            ),
+            if (incident != null)
+              TextButton(
+                onPressed: service.openHelp,
+                child: const Text('상황 응답 · 도움', style: TextStyle(fontSize: 20)),
+              ),
+            IconButton(
+              tooltip: '상황 상세 보기',
+              icon: const Icon(Icons.expand_more),
+              onPressed:
+                  () => showDialog<void>(
+                    context: context,
+                    builder:
+                        (context) => AlertDialog(
+                          title: const Text('확인한 내용'),
+                          content: SizedBox(
+                            width: 650,
+                            child: SingleChildScrollView(
+                              child: Text(
+                                [
+                                  detail,
+                                  service.sensorStatus,
+                                  if (incident != null) incident.delivery,
+                                  if (!service.assessmentStale)
+                                    service.assessment!.summary,
+                                  if (previous != null)
+                                    '알림 확인은 위험 해제를 의미하지 않아요.',
+                                ].join('\n\n'),
+                                style: const TextStyle(fontSize: 22),
+                              ),
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('닫기'),
+                            ),
+                          ],
+                        ),
+                  ),
             ),
           ],
         ),

@@ -1,9 +1,9 @@
 part of 'home_page.dart';
 
-const _paper = Color(0xFFF6F5F3);
+const _paper = Color(0xFFF7F5F2);
 const _charcoal = Color(0xFF242629);
 const _secondary = Color(0xFF686C73);
-const _accent = Color(0xFFA32640);
+const _accent = Color(0xFF8D2345);
 const _line = Color(0xFFE9E8E5);
 
 extension _HomeDashboard on _SafeHubHomePageState {
@@ -63,7 +63,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
     ),
     child: _label(
       text,
-      size: 13,
+      size: 18,
       color: ok ? const Color(0xFF287055) : _secondary,
     ),
   );
@@ -146,52 +146,57 @@ extension _HomeDashboard on _SafeHubHomePageState {
     children: [
       HouseStatusCard(
         service: _situation,
-        onAcknowledge: () {
-          final simulated = _situation.scenarioTestMode;
-          _situation.acknowledge();
-          if (!simulated) {
-            if (_situation.liveFlow.active != null) {
-              _sendScenarioSignal();
-            } else {
-              _stopScenarioSignal();
-            }
-          }
-        },
+        onAcknowledge: _situation.acknowledge,
       ),
       const SizedBox(height: 18),
       Expanded(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Expanded(flex: 62, child: _modernCamera()),
+            const SizedBox(width: 20),
             Expanded(
-              flex: 34,
+              flex: 38,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(flex: 7, child: _modernCamera()),
-                  const SizedBox(height: 18),
-                  Expanded(flex: 3, child: _modernPresence()),
-                ],
-              ),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              flex: 37,
-              child: Column(
-                children: [
-                  Expanded(flex: 6, child: _modernCaptions()),
-                  const SizedBox(height: 18),
-                  Expanded(flex: 4, child: _modernEvents()),
-                ],
-              ),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              flex: 29,
-              child: Column(
-                children: [
-                  Expanded(flex: 7, child: _modernAlarms(alert)),
-                  const SizedBox(height: 18),
-                  Expanded(flex: 3, child: _modernHelp()),
+                  Expanded(child: _modernCaptions()),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 62,
+                    child: OutlinedButton.icon(
+                      onPressed: _showEventDetails,
+                      icon: const Icon(Icons.notifications_none),
+                      label: Text(
+                        _recentEvents.isEmpty
+                            ? '받은 알림 · 기록 보기'
+                            : '받은 알림 ${_recentEvents.length}건 · 기록 보기',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        textStyle: const TextStyle(fontSize: 21),
+                        foregroundColor: _charcoal,
+                        backgroundColor: Colors.white,
+                        side: const BorderSide(color: _line),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 70,
+                    child: FilledButton.icon(
+                      onPressed: _situation.openHelp,
+                      icon: const Icon(Icons.front_hand_outlined, size: 28),
+                      label: const Text('도움이 필요해요'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _accent,
+                        foregroundColor: Colors.white,
+                        textStyle: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -210,9 +215,13 @@ extension _HomeDashboard on _SafeHubHomePageState {
       children: [
         Expanded(child: _cameraPlaceholder()),
         const SizedBox(height: 12),
-        _label(_signText, size: 23, weight: FontWeight.w700),
+        _label(
+          _signText == '수어 인식 대기 중' ? '수어를 기다리고 있어요' : '인식한 수어  $_signText',
+          size: 28,
+          weight: FontWeight.w700,
+        ),
         const SizedBox(height: 6),
-        _label('인식한 수어를 확인하고 대화를 이어가세요.', size: 14, color: _secondary),
+        _label('인식한 수어가 여기에 표시돼요.', size: 20, color: _secondary),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: _openSignTranslation,
@@ -220,9 +229,38 @@ extension _HomeDashboard on _SafeHubHomePageState {
           label: const Text('수어 대화 열기'),
           style: OutlinedButton.styleFrom(
             foregroundColor: _charcoal,
-            minimumSize: const Size.fromHeight(44),
+            minimumSize: const Size.fromHeight(56),
+            textStyle: const TextStyle(fontSize: 20),
             side: const BorderSide(color: _line),
           ),
+        ),
+        const SizedBox(height: 10),
+        AnimatedBuilder(
+          animation: _situation,
+          builder:
+              (context, _) => InkWell(
+                onTap: () => _navigate(_SafeHubPage.wifiSensing),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.sensors, color: _accent, size: 26),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _label(
+                          _situation.sensorStatus.replaceFirst(
+                            'CSI 분류:',
+                            'CSI 활동:',
+                          ),
+                          size: 22,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward, color: _secondary),
+                    ],
+                  ),
+                ),
+              ),
         ),
       ],
     ),
@@ -252,7 +290,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
                   ),
                 ),
               ),
-              _label('움직임이 없다고 부재·수면으로 단정하지 않아요.', size: 13, color: _secondary),
+              _label('움직임이 없다고 부재·수면으로 단정하지 않아요.', size: 18, color: _secondary),
             ],
           ),
     ),
@@ -463,7 +501,7 @@ class _FinalCaptionBody extends StatelessWidget {
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: _secondary,
-                          fontSize: 23,
+                          fontSize: 24,
                           height: 1.6,
                         ),
                       ),

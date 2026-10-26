@@ -246,6 +246,8 @@ class SituationService extends ChangeNotifier {
     voiceQuestion = voiceReply = '';
     assessment = null;
     beginIncident();
+    helpSign = '';
+    deferredHelp = false;
     helpOpen = false;
     testFlow.reset();
     switch (kind) {
@@ -278,6 +280,10 @@ class SituationService extends ChangeNotifier {
     assessment = null;
     helpOpen = false;
     response = '';
+    pendingSign = helpSign = '';
+    _lastHelpLabel = null;
+    _lastHelpAt = DateTime(0);
+    deferredHelp = false;
     _signTurns.clear();
     testFlow.reset();
     _notify();
@@ -299,6 +305,11 @@ class SituationService extends ChangeNotifier {
   String status = '새 음성·재난 정보를 기다립니다';
   String? announcement;
   bool helpOpen = false;
+  String helpSign = '';
+  String? _lastHelpLabel;
+  DateTime _lastHelpAt = DateTime(0);
+  bool deferredHelp = false;
+  DateTime _analysisStarted = DateTime(0);
   String response = '';
   String pendingSign = '';
   String signQuestion = '';
@@ -511,8 +522,8 @@ class SituationService extends ChangeNotifier {
       final utterance = _evidence.last;
       _displayCaptions[utterance.id] = utterance.text;
       _lastCaptionAt = utterance.time;
+      observeBroadcast(utterance.text);
       if (!scenarioTestMode) {
-        observeBroadcast(utterance.text);
         _receiveVoice(utterance.text);
       }
       while (_displayCaptions.length > 12) {
@@ -565,6 +576,35 @@ class SituationService extends ChangeNotifier {
       signQuestion = '';
     }
     pendingSign = text.trim();
+    final label = text.replaceAll(RegExp(r'[\s.!?,·]'), '');
+    final isHelp = const {
+      '구조',
+      '도움',
+      '도와주세요',
+      '도와줘',
+      '아프다',
+      '아파요',
+      '쓰러짐',
+      '쓰러지다',
+      '낙상',
+    }.contains(label);
+    if (isHelp) {
+      final now = DateTime.now();
+      if (_lastHelpLabel != label ||
+          now.difference(_lastHelpAt) >= const Duration(seconds: 8)) {
+        _lastHelpLabel = label;
+        _lastHelpAt = now;
+        if (flow.active != null &&
+            flow.active!.kind != HouseScenario.assistance) {
+          deferredHelp = true;
+        } else {
+          openHelp();
+        }
+        helpSign = text.trim();
+      }
+    } else {
+      _lastHelpLabel = null;
+    }
     _notify();
   }
 
@@ -604,6 +644,19 @@ class SituationService extends ChangeNotifier {
     _notify();
   }
 
+  /// Cancel a help confirmation without acknowledging a simultaneous hazard.
+  void cancelHelp() {
+    helpOpen = false;
+    helpSign = '';
+    pendingSign = '';
+    deferredHelp = false;
+    if (flow.active?.kind == HouseScenario.assistance) {
+      acknowledge();
+    } else {
+      _notify();
+    }
+  }
+
   void beginIncident() {
     _signVersion++;
     _requestedSign = null;
@@ -615,6 +668,8 @@ class SituationService extends ChangeNotifier {
   }
 
   void acknowledge() {
+    final pendingHelp = deferredHelp;
+    final deferredSign = helpSign;
     _invalidateSituation();
     flow.acknowledge();
     if (!scenarioTestMode) _presentedIncident = liveFlow.active?.id;
@@ -624,8 +679,15 @@ class SituationService extends ChangeNotifier {
     announcement = null;
     helpOpen = false;
     pendingSign = '';
+    helpSign = '';
+    deferredHelp = false;
     response = '사용자가 화면을 확인했습니다. 위험 해제 여부는 확인되지 않았습니다.';
     _notify();
+    if (pendingHelp && flow.active == null) {
+      openHelp();
+      helpSign = deferredSign;
+      _notify();
+    }
     requestAssessment();
   }
 
@@ -660,8 +722,17 @@ class SituationService extends ChangeNotifier {
     if (!immediate && (_timer?.isActive ?? false)) return;
     _timer?.cancel();
     final backoff = _retryAfter.difference(DateTime.now());
-    final delay =
+    var delay =
         backoff.isNegative ? (immediate ? Duration.zero : debounce) : backoff;
+    // Captions render immediately. Background summaries leave CPU time for STT.
+    if (_requestedVoice == null &&
+        _requestedSign == null &&
+        flow.active == null) {
+      final cooling =
+          const Duration(seconds: 15) -
+          DateTime.now().difference(_analysisStarted);
+      if (cooling > delay) delay = cooling;
+    }
     _timer = Timer(delay, () => unawaited(analyze()));
   }
 
@@ -685,6 +756,7 @@ class SituationService extends ChangeNotifier {
       return;
     }
     busy = true;
+    _analysisStarted = DateTime.now();
     _pending = false;
     final generation = _generation;
     final signVersion = _signVersion;
