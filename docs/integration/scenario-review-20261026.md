@@ -27,6 +27,9 @@ Git ref와 GitHub 웹 페이지를 대조했다. #6/#8/#9/#10은 모두 open Dra
 base `develop`이다. 웹 페이지 Reviewers에는 `No reviews`가 표시됐다.
 CI/required-check 상세는 GitHub API의 네트워크 거부 때문에 확인하지 못했다.
 `Checks` 탭의 존재나 작성자의 테스트 설명을 CI 성공으로 간주하지 않는다.
+제출 준비 직전 다시 받은 열린 목록과 Git ref에서 위 SHA들의 추가 변경은 없었다.
+#6 Checks 웹 페이지는 `There are no checks for this commit`를 표시했다.
+#8/#9/#10 Checks 정적 응답에서는 신뢰할 수 있는 실행 결론을 얻지 못했다.
 
 | 대상 | 검토 SHA | 문서 이후 차이 / 결정 |
 |---|---|---|
@@ -82,6 +85,9 @@ live CSI 낙상 경보 통합 또는 장치 물리 확인이 완료됐다는 뜻
 `pr9-sign-ctest.log`, `pr9-sign-ctest.xml`, `pr10-uno-tests.log`,
 `windows-tools-tests.log`에 보존했다. 이전 onboarding의 CSI 52개 통과는
 이 표에 합산하지 않았다. 서로 다른 PR/환경의 검사 수를 하나의 통합 통과 수로 합치지 않는다.
+추적 파일만 가져온 새 로컬 clone에서도 source packaging 3개를 통과했다.
+PR #8이 추가한 OFL 라이선스의 끝 공백 1개를 제거해 전체 후보 diff 검사를 통과시킨다.
+라이선스 문구·폰트는 변경하지 않았다.
 
 ### 아직 실행하지 못한 필수 확인
 
