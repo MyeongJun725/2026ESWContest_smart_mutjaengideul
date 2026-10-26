@@ -89,4 +89,3 @@ def prepare(source: Path, target: Path) -> int:
     with (target / 'pubspec.yaml').open('x', encoding='utf-8', newline='\n') as output:
         output.write(pubspec)
     return len(files)
-
