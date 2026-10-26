@@ -10,7 +10,7 @@ import sys
 from patch_windows_audio import apply_patch as prepare_windows_audio
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "safehub_app"
+SOURCE = Path(__file__).resolve().parents[1] / "safehub_scenario"
 ATLAS_PACKAGES = {"audioplayers_atlas", "record_atlas"}
 
 
@@ -89,7 +89,7 @@ def main(argv=None):
     parser.add_argument("--flutter-path", type=Path, required=True,
                         help="Full path to the installed Flutter bin/flutter.bat")
     parser.add_argument("--output-dir", type=Path, required=True,
-                        help="New directory outside SW/safehub_app")
+                        help="New directory outside SW/safehub_scenario")
     parser.add_argument("--real", action="store_true",
                         help="Build for real device connections with editable settings")
     actions = parser.add_mutually_exclusive_group()

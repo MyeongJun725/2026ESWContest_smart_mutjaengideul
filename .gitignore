@@ -283,3 +283,9 @@ SW/windows_preview/build/
 SW/local_stt/korean-streaming-174m/
 SW/local_stt/venv/
 SW/local_stt/*.wav
+
+# Scenario app and its local ATLAS plugin sources must survive fresh checkout.
+!SW/safehub_scenario/lib/
+!SW/safehub_scenario/lib/**
+!SW/safehub_scenario/third_party/record_atlas/lib/
+!SW/safehub_scenario/third_party/record_atlas/lib/**
