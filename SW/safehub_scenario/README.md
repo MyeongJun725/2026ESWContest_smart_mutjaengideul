@@ -1,48 +1,66 @@
-> 현재 검토 기준은 PR #10 + #6 안정화 + #9 미배포 소스 후보입니다.
-> 1.2.0은 과거 사용자 확인, 1.4.0 설치는 #10 작성자 보고이며 현재 장치 버전은 직접 확인하지 못했습니다.
-> 보관본과 실제 배치·manifest·IPK는 현재 클라우드에서 **미확인/미확보**입니다.
-> [최신 통합 기록](../../docs/integration/pr10-addendum-review.md)을 먼저 읽으세요.
+# SafeHub 현재 UI
 
-# SafeHub Scenario
+이 폴더가 PR #11 통합 후보의 UI·빌드 진입점입니다. #10의 새 UI·장치 제어와
+#6 안정화, #9 수어 후보 소스를 함께 검토합니다. #10에 #8/#7이 포함돼 있습니다.
+옛 `SW/safehub_app`을 복사하거나 함께 실행할 필요는 없습니다.
+필수 runner·manifest·record_atlas·이미지·폰트는 이 폴더에 있습니다.
 
-기존 `SW/safehub_app`을 유지하면서 별도 앱으로 실행하는 가정 내 상황 안내 UI입니다. 수어·카메라, CSI 상태, 음성자막, 재난, 가전 화면을 포함합니다. 음성자막을 교정하거나 LLM 응답을 스피커로 읽지 않습니다.
+## 준비와 실행 경로
 
-새 이벤트 팝업과 하단 ①②③ 시연 버튼은 [팝업 실행 안내](docs/scenario-event-overlays.md)를 참고하세요. PC 브라우저에서는 `python SW/safehub_scenario/tool/run_ui_preview.py`로 기존 UI와 함께 실행할 수 있습니다.
+저장소 루트에서:
 
-## 세 가지 흐름
+```sh
+# 호스트 패키징 검사 (Flutter/장치 불필요)
+python3 -m unittest discover -s SW/safehub_scenario/tool -p 'test_*.py' -v
 
-1. **안내방송**: 확정 자막의 위험 관련 표현을 후보로 표시 → 화면 안내 → 수어·터치 확인. 훈련·부정 표현은 제외하며 화재 확정으로 표시하지 않습니다.
-2. **재난 알림**: 수신한 기록의 발행 시각과 설정 지역을 확인 → 적용 여부와 원문 표시 → 사용자 확인. 30분 이전 기록은 새 경보로 처리하지 않습니다. 현재 API 조회는 최신 기록 중심이며 모든 지역의 경보를 빠짐없이 조회하는 구현은 아닙니다.
-3. **도움 요청**: 센서의 쓰러짐 의심 또는 사용자 요청 → 카메라·터치 응답 → 도움 요청 문안 확인 → 신고하기 시연. 의식불명 판단, 실제 119 신고, 보호자 전송은 구현하지 않았습니다.
+# 브라우저 화면 시연; --check-only는 준비 검사만 수행
+python3 SW/safehub_scenario/tool/run_ui_preview.py --check-only
+python3 SW/safehub_scenario/tool/run_ui_preview.py
 
-알림과 응답 단계는 LLM 없이도 동작합니다. 로컬 LLM은 음성·수어·활성 알림·센서 상태를 참고해 짧은 설명을 작성합니다. 카메라 영상 자체는 LLM에 전달하지 않습니다. 움직임 없음은 부재·수면·의식불명으로 해석하지 않습니다.
+# 실제 현재 소스·테스트·자산을 새 외부 폴더로 복사
+python3 SW/safehub_scenario/tool/prepare_host_tests.py /tmp/safehub-scenario-host
+```
 
-## 화면 테스트
+생성한 호스트에서 `flutter pub get`, `flutter test`를 실행합니다.
+검증에 사용한 호스트 SDK는 Flutter 3.35.7 / Dart 3.9.2입니다.
+[Windows 준비](../windows_preview/README.md)도 이 폴더를 원본으로 사용합니다.
+호스트 준비 도구는 CSI 서비스나 옛 UI 도우미를 import하지 않습니다.
 
-메인 **우리 집 상황 → 시나리오 테스트**에서 항목을 고른 후 문장을 수정하고 **화면 테스트 실행**을 누릅니다.
+ATLAS 빌드는 이 폴더에서 팀의 ATLAS SDK와
+`/opt/flutter-atlas-plugins/packages/flutter-plugin-atlas-audioplayers`를 사용합니다.
+`atlas/`의 [출처와 한계](atlas/PROVENANCE.md), [권한 안내](atlas/README.md)를 확인하세요.
+표준 호스트에서 제외한 ATLAS 플러그인의 ABI·권한·실제 장비 동작은 호스트 검사로 입증되지 않습니다.
 
-**상황 응답 · 도움**에서 터치 응답이나 **테스트 수어 넣기 → 이 수어로 응답**을 사용할 수 있습니다. 문안을 확인한 후 **경보 확인**, **테스트 종료**로 돌아옵니다.
+## 기능과 시연
 
-- 테스트는 별도 상태를 사용하며 MQTT 장치 명령, 실제 재난 등록, CSI 기록·학습을 수행하지 않습니다.
-- 실제 경보가 있으면 테스트를 시작하지 않습니다. 테스트 중 실제 경보가 접수되면 실제 상황으로 전환합니다.
-- 테스트 수어는 카메라 인식 정확도를 검증하지 않습니다.
-- 경보 확인은 위험 해제나 신고 완료가 아닙니다.
+현재 소스에는 방송 자막·재난 안내·수어/터치 도움 흐름, 카메라, 가전/단축키,
+CSI 상태/수집 화면, 문맥 설명과 시나리오·장치 테스트가 있습니다.
+CSI 화면 범위, 테스트 UI 노출, 설명 엔진과 제품 가전 범위는
+[사용자 결정 목록](../../docs/integration/ui-consolidation-20261027.md)에 남겼습니다.
+이번 정리는 제품 기능이나 기존 사용자 설정을 조용히 제거/변경하지 않습니다.
 
-## 실행 환경
+[시나리오 및 장치 테스트](docs/scenario-event-overlays.md)는 화면 전용과 장치 연동을 구별합니다.
+**#10의 장치 테스트는 실제 MQTT 명령을 발행할 수 있습니다.**
+연동 모드 선택만으로 전송이 보장되지는 않으며 preview/활성화/LED action/MQTT 조건의
+영향을 받습니다. 명령 제출·UART 응답과 물리 동작 완료는 서로 다릅니다.
+실제 신고·보호자 메시지 전송·의식불명 확정 기능은 구현하지 않았습니다.
+경보와 도움 화면은 설명 서버의 응답을 기다리지 않습니다.
 
-- Pi5: ATLAS Flutter 3.27.4 / Dart 3.6.2, 앱 ID `com.atlas.app.safehub_scenario`
-- Windows 검증 호스트: Flutter 3.29.3
-- LLM: LiteRT-LM 0.18.1, 기존 `gemma4-e2b` 모델, loopback `9380`의 OpenAI 호환 API. `llm/fast_server_atlas.py`의 `--help`에 실행 인자가 있습니다. 모델과 비공개 SDK는 포함하지 않습니다.
-- 앱 설정·기록은 `SafeHubScenarioData`에 저장합니다. 기존 `SafeHubData`와 분리합니다.
-- ATLAS 빌드에는 팀 SDK의 `audioplayers_atlas`와 포함된 `record_atlas`가 필요합니다. `lib/main.dart`와 SDK 플러그인 등록 진입점을 사용하고, ATLAS runner 템플릿에 위 앱 ID를 설정합니다. 기존 앱 ID로 덮어 설치하지 마세요.
-- Windows 빌드는 `audioplayers_atlas` 의존성을 제외한 Windows 호스트에서 `lib`, `assets`, `test`를 사용합니다. 기존 `SW/windows_preview`의 호스트 생성 방식을 참고하세요.
+## 앱 식별과 설정
 
-## 검증 (2026-10-24)
+- 설치 앱 ID: `com.atlas.app.safehub_scenario_pr7`
+- Dart package / 실행 파일: `safehub_app` — 옛 UI 폴더를 참조한다는 뜻이 아닙니다.
+- 소스 후보: pubspec 1.4.0+1 / manifest 1.4.0
+- 기본 설정 경로: 앱 계정의 `SafeHubScenarioData`; `SAFEHUB_SCENARIO_CONFIG_FILE` 등 명시적 override가 우선합니다.
 
-- Flutter 33개 통과: 세 시나리오의 UI 조작, 중복·오래된 재난 제외, 테스트 격리, 실제 경보 우선, 수어·터치 응답, 문안, 음성 대화·자막·가전 회귀 검사.
-- Python 서버 계약 검사 6개 통과. 모델 추론 정확도 시험과는 별개입니다.
-- Flutter 정적 검사에 오류·경고 없음. 기존 스타일 안내는 남아 있습니다.
-- 실제 LED·베드셰이커 작동과 낙상 감지 정확도는 미검증입니다. 물리 동작 확인 전에는 알림 장치 설정을 켜지 않습니다.
-- 실제 사용자 발화에서의 위험 표현 누락·오인식, 지역별 재난 수신 누락, 장시간 운전은 추가 검증이 필요합니다.
+1.2.0은 과거 사용자 확인, 1.4.0 설치는 #10 작성자 보고입니다.
+현재 장치 버전·배치·IPK·ELF·보관본은 **미확인/미확보**이며 없다고 단정하지 않습니다.
+runner의 버전 번호를 맞춘 것만으로 설치본 재현을 선언하지 않습니다.
 
-기존 MQTT Topic과 JSON 규격을 유지합니다. 기존 프로젝트·서드파티 저작권과 라이선스는 원래 고지 및 `third_party`를 따릅니다. 개인 CSI 기록·모델·토큰·음성·기기별 설정은 저장소에 포함하지 않습니다.
+## 검증
+
+[현재 검토·수치·장치 확인 목록](../../docs/integration/pr10-addendum-review.md)을 기준으로 합니다.
+전체 Flutter 265 pass / 0 fail / 1 opt-in live LLM skip; 이후 경고 수정의 영향 경로 13개도 통과했습니다.
+정적 분석은 error 0 / warning 11 / info 100, exit 1입니다.
+Preview web release 빌드는 통과했으나 ATLAS 패키지 빌드·재부팅·실제 모델·마이크부터
+물리 장치까지의 동작은 미검증입니다. 모델·비공개 SDK·인증정보·개인 설정은 포함하지 않습니다.

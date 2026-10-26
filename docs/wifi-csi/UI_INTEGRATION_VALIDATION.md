@@ -67,7 +67,7 @@ UI는 USB 목록을 갱신하고 늦은 응답이 새 연결 상태를 덮어쓰
 | 왕복 처리 중앙값 범위 | 22.62–23.14ms | 2.21–2.74ms |
 | 측정 프로세스 최대 RSS 범위 | 325.7–326.8MiB | 203.5–204.6MiB |
 
-근거: [카메라 원자료](integration-validation/camera-transport-benchmark.json), [재현 스크립트](../../SW/safehub_app/tool/benchmark_camera.dart)
+근거: [카메라 원자료](integration-validation/camera-transport-benchmark.json), [재현 스크립트](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/blob/654e2f3cb09a1778d65ba6554bc35b94e1679e6e/SW/safehub_app/tool/benchmark_camera.dart)
 
 CSI 상태 조회는 최신 4.025초만 복사하고 동일 입력·설정의 계산 결과를 공유한다. 기록·모델 목록은 파일 변경 시 다시 읽는다. 다음 측정은 합성 입력·8,400프레임 버퍼·모델 메타데이터 40개 조건의 20회 중앙값이며, 숫자 입력 변환 최적화 전의 상태 조회 비교다.
 

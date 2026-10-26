@@ -1,5 +1,8 @@
 # PR #10 추가 통합 검토 (현재 기록)
 
+이후 UI 진입점·호스트 도구 정리와 제품 범위 결정 목록은
+[2026-10-27 소스 정리](ui-consolidation-20261027.md)를 함께 참고한다.
+
 이 기록이 이전 PR #8 중심 검토의 채택/보류 판단을 대체한다. 기존 Draft PR #11과
 `integration/scenario-stability-20261026`에서 이어 작업했다. 시작 시 tracked/untracked
 변경은 없었고, 직전 Git 상태를 `/workspace/.cloud-setup/addendum-preservation/before-addendum.bundle`에

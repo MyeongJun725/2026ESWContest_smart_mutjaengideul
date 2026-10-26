@@ -1,5 +1,9 @@
 # ATLAS 보드 자동 실행
 
+현재 UI 소스는 [../safehub_scenario](../safehub_scenario/README.md)입니다. 이 문서는
+검토용 부팅 구성이며 이번 클라우드 작업에서 설치·서비스 제어·재부팅을 수행하지 않았습니다.
+실제 적용은 사용자 후속 지시와 [장치 확인 목록](../../docs/integration/pr10-addendum-review.md)을 따릅니다.
+
 RPi5에서 SafeHub 화면, CSI 수집 서비스, MQTT 브로커를 실행한다. RPi4의
 기존 카메라·수어 추론 서비스는 유지하고 MQTT 목적지를 RPi5로 지정한다.
 Topic과 JSON 형식은 변경하지 않는다.
@@ -60,16 +64,17 @@ UI는 ATLAS 홈 화면이 준비된 뒤 AppManager로 실행한다. 앱이 종�
 systemctl is-enabled safehub-bootstrap
 systemctl is-active safehub-bootstrap safehub-csi safehub-mqtt safehub-ui
 busctl --system call com.atlas.AppManager1 /com/atlas/AppManager1 \
-  com.atlas.AppManager1 GetStatus s com.atlas.app.safehub_app
+  com.atlas.AppManager1 GetStatus s com.atlas.app.safehub_scenario_pr7
 journalctl -u safehub-csi -u safehub-mqtt -u safehub-ui -n 50
 ```
 
 카메라 보드의 수어 추론 로그와 MQTT 연결 여부, UI 수신 로그를 따로 확인한다.
 카메라 영상이 보이는 것만으로 수어 결과 전달이 정상이라는 뜻은 아니다.
 
-음성 합성·음성 입력 서버는 이 설정에 포함하지 않는다. 기존 앱이 외부 서버를
-가리키면 해당 기능에는 그 서버가 계속 필요하다. 완전한 독립 음성 운용에는
-기존 음성 서버 코드·모델의 별도 이식이 필요하다.
+`boot.sh`는 base 서비스 다음에 LoadState가 loaded인 `safehub-stt`,
+`safehub-fasttext`, `safehub-sign-control`을 선택적으로 시작하는 소스 구성이다.
+해당 서비스의 실제 배치·모델·런타임이 준비됐다는 뜻은 아니다. 외부 STT/TTS
+주소를 쓰는 설정은 그 서버가 계속 필요하다. 모의 부팅 검사 통과와 실제 재부팅은 구분한다.
 
 ## 배포 의존성
 

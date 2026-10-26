@@ -146,5 +146,16 @@
     "model_load_predict_http": "not_run; model unconfirmed/unavailable",
     "context_fake_model_recheck_passed": 8,
     "affected_flutter_recheck_passed": 13
+  },
+  "ui_consolidation": {
+    "record": "ui-consolidation-20261027.md",
+    "implementation_commit": "c1c69c7fbb1e3177e558ea2ff4cafe689bca8de8",
+    "scenario_packaging_passed": 5,
+    "windows_python_tools_passed": 14,
+    "preview_web_release_exit": 0,
+    "dart_product_source_changed": false,
+    "legacy_ui_removed": false,
+    "pending_product_decisions": 6,
+    "source_isolation_test": "Scenario-only fixture without safehub_app/wifi_sensing succeeds"
   }
 }

@@ -1,47 +1,66 @@
-# 멋쟁이들 · 2026 임베디드소프트웨어 경진대회
+# SafeHub · 멋쟁이들
 
-제24회 임베디드소프트웨어 경진대회 LG전자 부문 팀 프로젝트 저장소입니다.
+2026 임베디드소프트웨어 경진대회 LG전자 부문 팀 프로젝트입니다.
+현재 통합 후보의 UI 진입점은 **[SW/safehub_scenario](SW/safehub_scenario/README.md)** 하나입니다.
+PR #10의 새 화면·장치 제어, #6의 필요한 안정화, #9의 수어 수정 소스를
+[기존 Draft PR #11](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11)에서 검토합니다.
+#10은 #8/#7을 포함합니다. main/develop에 병합하거나 실제 장치에 배포한 상태는 아닙니다.
 
-## 수어 UI와 최신 CSI 통합 개발본
+## 시작하기
 
-[SW/wifi_sensing](SW/wifi_sensing/README.md)은 현재 노트북의 **52채널/PCA 1성분/4초 모델**을 기존 SafeHub 수어 UI 안에서 사용하는 통합 작업입니다. 아래의 WiFi-CSI-Sensing 폴더는 이전 독립 앱 구현이며 서로 다른 모델 버전을 섞지 않습니다.
+저장소 루트에서 실행합니다. 출력·SDK·개인 설정·모델은 저장소 밖에 둡니다.
 
-통합 화면은 수집·전처리 관찰·기록 선택·PC 학습·현재 행동 판단을 제공합니다. ATLAS RPi5에서 실제 C6 신호 수집과 화면 조작, RPi4 수어 결과 전달을 확인했습니다. 현장 행동 정확도와 전역 MQTT 안전 경보 연결은 별도 검증 대상입니다. [ATLAS 검증 범위](docs/wifi-csi/ATLAS_VALIDATION.md)와 [통합 설계](docs/wifi-csi/UI_INTEGRATION.md)를 참고하세요.
+```sh
+# Flutter 없이 소스 패키징과 화면 미리보기 준비만 검사
+python3 -m unittest discover -s SW/safehub_scenario/tool -p 'test_*.py' -v
+python3 SW/safehub_scenario/tool/run_ui_preview.py --check-only
 
-메인 화면에 행동 예측과 연속 음성 자막을 표시하고 경보·재난 알림을 통합했습니다.
-음성 인식은 [Pi 내부의 한국어 스트리밍 서버](SW/local_stt/README.md)를 사용합니다.
-[Home Assistant·LG ThinQ](docs/home-assistant/STATUS.md)는 토큰 설정까지 완료했으며,
-Cloud Gateway 등록과 세탁 완료 이벤트 연결은 아직 완료하지 않았습니다.
+# 전체 새 UI의 소스·테스트를 호스트용 새 폴더에 준비
+python3 SW/safehub_scenario/tool/prepare_host_tests.py /tmp/safehub-scenario-host
+```
 
-Windows 실행 방법은 [통합 앱 빌드](SW/windows_preview/README.md)에 있습니다. [실제 모드](docs/wifi-csi/REAL_MODE.md)는 앱에서 장비 주소를 저장하며, 장비가 없으면 연결 대기로 표시합니다. 별도 체험 빌드에서만 모의 신호를 시작할 수 있습니다.
+Flutter SDK가 준비되어 있다면 생성한 호스트 폴더에서 `flutter pub get` 후
+`flutter test`를 실행합니다. 호스트 복사본은 ATLAS 전용 path 플러그인 두 개만 제외하며
+현재 UI의 Dart 소스·테스트·자산을 그대로 사용합니다. 옛 UI나 CSI 서비스 폴더의 도우미를
+가져다 쓰지 않습니다. [브라우저 미리보기](SW/safehub_scenario/docs/scenario-event-overlays.md)와
+[Windows 호스트 준비](SW/windows_preview/README.md)는 개발용입니다.
+ATLAS runner·manifest는 `SW/safehub_scenario/atlas`에 있습니다.
 
-## Wi-Fi CSI 센싱 모듈
+## 현재 구성과 정리 범위
 
-[WiFi-CSI-Sensing](WiFi-CSI-Sensing/README.md)은 ESP32로 수집한 무선 신호를 관찰하고, 사용자가 선택한 행동 기록으로 모델을 학습하여 새 신호를 판단하는 개발 도구입니다.
+| 경로 | 역할 |
+|---|---|
+| `SW/safehub_scenario` | 현재 UI, 자체 runner·record_atlas·자산·테스트·호스트 도구 |
+| `SW/rpi4_sign_cpp`, `SW/rpi4_vision_atlas` | #9 수어/비전 소스 후보, 실제 장치 실행은 미검증 |
+| `SW/rpi5_hub`, `SW/uno_bridge` | 수어 단축키, MQTT·Uno 경보/팬/커튼 명령 경로 |
+| `SW/local_stt`, `SW/fasttext_context` | 음성 자막 서비스, fastText 문맥 서비스 소스 |
+| `SW/atlas_boot` | 현재 Scenario 앱 ID를 사용하는 부팅 구성 후보 |
+| `SW/wifi_sensing` | CSI 수집·학습·상태 서비스. 최종 제품에서 유지할 범위는 결정 대기 |
+| `SW/windows_preview` | 현재 UI의 Windows 개발 호스트·패키징 도구 |
 
-- **PC**: Windows 데스크톱 UI, 행동별 수집·구간 편집·기록 선택·CNN 학습
-- **ESP32-C6 두 대**: ESP-NOW 송신기·수신기 구성 및 설치 펌웨어
-- **라즈베리파이 4/5**: CSI 수집·전처리·NumPy 추론 실행 소스
+`SW/safehub_app`은 **옛 UI 소스**이며 새 개발/빌드 진입점이 아닙니다.
+옛 UI·독립 CSI 앱·실험 코드의 최종 삭제와 화면별 기능 축소는 아직 결정 전입니다.
+현재 파일을 남겼다는 이유로 모든 경로를 제품에 설치하거나 함께 실행하지 않습니다.
+[완료한 정리와 사용자 결정 목록](docs/integration/ui-consolidation-20261027.md)을 참고하세요.
 
-실제 C6 두 대의 통신과 Pi 성능, 현장 행동 정확도는 추가 검증이 필요합니다. 현재 자동 검사는 하드웨어 없이 합성 CSI로 소프트웨어 기능을 확인합니다.
+## 버전과 검증 근거
 
-| 문서 | 내용 |
-| --- | --- |
-| [모듈 시작하기](WiFi-CSI-Sensing/README.md) | 수집 → 기록 선택 → 학습 → 실시간 인식 |
-| [실행·빌드](WiFi-CSI-Sensing/BUILDING.md) | Python 환경, 실행 파일 생성, 자동 검사 |
-| [전처리·학습 구조](WiFi-CSI-Sensing/ARCHITECTURE.md) | 50채널, DWT·PCA·저역 통과, CNN |
-| [팀 시스템 연동 범위](docs/wifi-csi/INTEGRATION.md) | 기존 MQTT 명세 및 후속 협의 항목 |
-| [작업 기록](docs/wifi-csi/WORKLOG.md) | 변경 사항, 검증 결과, 다음 작업 |
-| [협업 규칙](CONTRIBUTING.md) | 개인 fork·feature 브랜치·PR 제출 |
+앱 ID는 `com.atlas.app.safehub_scenario_pr7`, Dart package와 실행 파일 이름은
+`safehub_app`입니다. 이 이름은 옛 UI 디렉터리와 구별해야 하며 일괄 치환하지 않습니다.
+1.2.0은 과거 사용자 확인, 1.4.0 설치는 #10 작성자 보고입니다. 소스 후보는 1.4.0+1이며
+현재 장치 실행본·IPK·설정·보관본은 이 클라우드에서 **미확인/미확보**입니다.
 
-## 실행
+새 UI 전체 Flutter 265 pass / 0 fail / 1 opt-in live LLM skip,
+통합 C++ 19개 통과 등 [검증 근거와 제한](docs/integration/pr10-addendum-review.md)을 확인하세요.
+정적 분석은 error 0 / warning 11 / info 100, exit 1입니다.
+호스트 결과로 ATLAS 빌드·재부팅·실제 모델·마이크·물리 장치 검증을 주장하지 않습니다.
 
-통합본은 [SW/wifi_sensing 실행 안내](SW/wifi_sensing/README.md)를 따릅니다. 이전 독립 앱은 WiFi-CSI-Sensing 폴더의 BUILDING.md를 참고합니다. CSI 모듈에서 검사한 Python은 3.12이며 팀 전체의 공통 버전은 별도 확인이 필요합니다.
+## 계약과 자료
 
-통합본의 수어 화면은 feature/SW의 기존 코드를 기준으로 합니다. 기존 feature/HW의 ESP32 실험 도구와 이전 독립 CSI 앱은 별도 폴더로 유지합니다.
+- [MQTT 계약](config/topics.json): 기존 topic·JSON·QoS·retain을 유지합니다.
+- [CSI 서비스](SW/wifi_sensing/README.md), [이전 독립 CSI 개발 도구](WiFi-CSI-Sensing/README.md): 모델/전처리 버전을 혼용하지 않습니다. CSI의 전역 MQTT 사건 발행은 미완료입니다.
+- [Home Assistant·ThinQ 상태](docs/home-assistant/STATUS.md): 미완료 연동을 작동 기능으로 표시하지 않습니다.
+- [협업 규칙](CONTRIBUTING.md): 작업 브랜치·Draft PR에서 검토하고 main/develop에 직접 반영하지 않습니다.
 
-## 팀 통신 규격
-
-MQTT 기준은 develop의 config/topics.json입니다. 현재 CSI 모듈에는 MQTT 발행 기능이 포함되어 있지 않습니다. 연동 시 기존 Topic·JSON Key·자료형·QoS·retain을 유지하고, 정의되지 않은 항목은 팀 협의 후 문서와 함께 반영합니다.
-
-출처·저작권 및 외부 라이선스는 [모듈 NOTICE](WiFi-CSI-Sensing/NOTICE.md)와 해당 라이선스 파일에서 확인합니다.
+서드파티 고지·라이선스는 각 모듈과 `third_party`에 유지합니다. SDK·빌드 산출물·
+개인 CSI 기록·인증정보·녹음·설정·모델 보관본은 Git에 무차별로 추가하지 않습니다.

@@ -4,18 +4,18 @@
 
 ## 브랜치와 제출
 
-현재 CSI·수어 UI 통합 작업은 `feature/wifi-sensing-ui`에서 진행하고 `develop` 대상으로 PR을 제출합니다(2026-10-04 확인). 아래의 main 제출 절차는 최종 배포 단계에 적용합니다.
+현재 SafeHub 통합 후보는 `integration/scenario-stability-20261026`의 기존 Draft PR #11에서
+`develop` 대상으로 검토합니다. UI 원본은 `SW/safehub_scenario`입니다.
+main/develop에는 직접 commit·push하지 않습니다.
 
-1. 작업 시작 전 팀 저장소 main의 최신 변경을 가져옵니다.
-2. 본인 계정으로 fork한 저장소에 feature/기능명 브랜치를 만듭니다.
-3. 개인 브랜치에서 작업·검사하고 개인 fork에 push합니다.
-4. 팀장 저장소 main을 대상으로 PR을 만듭니다.
-5. 최소 한 명의 팀원이 코드와 실행 결과를 검토한 뒤 merge합니다.
-6. merge 후 main에서 정상 동작을 확인합니다.
+1. 기존 사용자 변경과 로컬 커밋을 보존하고 최신 원격 상태를 확인합니다.
+2. 기능별 작업 브랜치에서 코드·검사·문서를 수정하고 검증합니다.
+3. 기존 통합 작업이면 같은 PR을 갱신하고, 새 작업이면 팀 절차에 맞춰 PR을 제출합니다.
+4. 최소 한 명의 팀원이 diff와 검증 범위를 검토합니다.
+5. develop 통합 및 최종 develop → main 병합은 별도 검토·지시 후 수행합니다.
 
-main은 최종 배포, develop은 통합 개발 브랜치입니다. main에 직접 commit·push하지 않습니다. 이 모듈의 작업 브랜치는 feature/wifi-csi-sensing입니다.
-
-Commit 제목은 Feat:, Fix:, Refactor:, Docs:, Style:, Test:, Chore: 중 해당하는 접두어를 사용합니다.
+커밋은 `Feat:`, `Fix:`, `Refactor:`, `Docs:`, `Style:`, `Test:`, `Chore:` 등 기능을 드러내는
+접두어를 사용합니다. 실제 장치 배포·서비스 제어·펌웨어 플래시는 코드 리뷰와 구분합니다.
 
 ## 코드와 검증
 
