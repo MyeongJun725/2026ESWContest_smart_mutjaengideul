@@ -162,8 +162,9 @@ class MqttReceiver {
       onConnectionChanged?.call(true);
     };
 
-    client.connectionMessage =
-        MqttConnectMessage().withClientIdentifier(clientId).startClean();
+    client.connectionMessage = MqttConnectMessage()
+        .withClientIdentifier(clientId)
+        .startClean();
 
     try {
       await client.connect();
@@ -260,7 +261,8 @@ class MqttReceiver {
       final payload = utf8.decode(message.payload.message);
 
       handlePayload(
-        topic, payload,
+        topic,
+        payload,
         packetId: message.variableHeader?.messageIdentifier ?? 0,
         duplicate: message.header?.duplicate == true,
       );
@@ -270,8 +272,11 @@ class MqttReceiver {
   }
 
   @visibleForTesting
-  void handlePayload(String topic, String payload, {
-    int packetId = 0, bool duplicate = false,
+  void handlePayload(
+    String topic,
+    String payload, {
+    int packetId = 0,
+    bool duplicate = false,
   }) {
     if (_disposed) return;
     try {
@@ -288,10 +293,7 @@ class MqttReceiver {
       // 수어 번역 결과
       if (topic == 'safehub/vision/livingroom/translation') {
         final key = '$packetId:$payload';
-        if (packetId != 0 &&
-            duplicate &&
-            _signPackets.contains(key))
-          return;
+        if (packetId != 0 && duplicate && _signPackets.contains(key)) return;
         if (packetId != 0) {
           _signPackets.add(key);
           if (_signPackets.length > 128)

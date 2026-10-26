@@ -5,20 +5,33 @@ import 'package:safehub_app/services/situation_service.dart';
 import 'package:safehub_app/ui/widgets/scenario_event_overlay.dart';
 
 Widget host(SituationService service) => MaterialApp(
-  home: Scaffold(body: Stack(children: [
-    const Center(child: Text('SafeHub 홈')),
-    AnimatedBuilder(animation: service, builder: (_, __) =>
-      service.flow.active == null ? const SizedBox.shrink() : ScenarioEventOverlay(
-        key: ValueKey(service.flow.active), service: service,
-        camera: const ColoredBox(color: Colors.black,
-          child: Center(child: Text('연결된 수어 카메라'))),
-        onAcknowledge: service.acknowledge,
-        onSignal: () => service.flow.setDelivery('테스트 · 실제 명령 없음'))),
-  ])),
+  home: Scaffold(
+    body: Stack(
+      children: [
+        const Center(child: Text('SafeHub 홈')),
+        AnimatedBuilder(
+          animation: service,
+          builder: (_, __) => service.flow.active == null
+              ? const SizedBox.shrink()
+              : ScenarioEventOverlay(
+                  key: ValueKey(service.flow.active),
+                  service: service,
+                  camera: const ColoredBox(
+                    color: Colors.black,
+                    child: Center(child: Text('연결된 수어 카메라')),
+                  ),
+                  onAcknowledge: service.acknowledge,
+                  onSignal: () => service.flow.setDelivery('테스트 · 실제 명령 없음'),
+                ),
+        ),
+      ],
+    ),
+  ),
 );
 
 SituationService createService() => SituationService(
-  settings: SituationSettings(enabled: false, address: '테스트시 안심로 10, 101호'));
+  settings: SituationSettings(enabled: false, address: '테스트시 안심로 10, 101호'),
+);
 
 Future<void> mount(WidgetTester t, SituationService s) async {
   t.view.physicalSize = const Size(1304, 900);
@@ -37,21 +50,24 @@ Future<void> tap(WidgetTester t, String label) async {
 }
 
 void main() {
-  testWidgets('broadcast keeps source, simulated delivery and acknowledgement semantics', (t) async {
-    final s = createService();
-    s.startScenarioTest(HouseScenario.broadcast, '화재가 발생했습니다. 대피하세요.');
-    await mount(t, s);
-    expect(find.text('SafeHub 홈'), findsOneWidget);
-    expect(find.text('화재 관련 안내방송'), findsOneWidget);
-    expect(find.text('화재가 발생했습니다. 대피하세요.'), findsOneWidget);
-    expect(find.text('시연 모드 · 실제 장치와 신고는 작동하지 않아요.'), findsOneWidget);
-    await tap(t, '시간·알림 전달 상태 보기');
-    expect(find.textContaining('실제 명령 없음'), findsOneWidget);
-    await tap(t, '방송 확인했어요');
-    expect(find.byType(ScenarioEventOverlay), findsNothing);
-    expect(s.flow.lastAcknowledged!.toJson()['risk_resolved'], isFalse);
-    expect(t.takeException(), isNull);
-  });
+  testWidgets(
+    'broadcast keeps source, simulated delivery and acknowledgement semantics',
+    (t) async {
+      final s = createService();
+      s.startScenarioTest(HouseScenario.broadcast, '화재가 발생했습니다. 대피하세요.');
+      await mount(t, s);
+      expect(find.text('SafeHub 홈'), findsOneWidget);
+      expect(find.text('화재 관련 안내방송'), findsOneWidget);
+      expect(find.text('화재가 발생했습니다. 대피하세요.'), findsOneWidget);
+      expect(find.text('시연 모드 · 실제 장치와 신고는 작동하지 않아요.'), findsOneWidget);
+      await tap(t, '시간·알림 전달 상태 보기');
+      expect(find.textContaining('실제 명령 없음'), findsOneWidget);
+      await tap(t, '방송 확인했어요');
+      expect(find.byType(ScenarioEventOverlay), findsNothing);
+      expect(s.flow.lastAcknowledged!.toJson()['risk_resolved'], isFalse);
+      expect(t.takeException(), isNull);
+    },
+  );
 
   testWidgets('disaster retains the actual source and region', (t) async {
     final s = createService();
@@ -63,17 +79,23 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('unknown response and address remain explicit in an unsent report', (t) async {
-    final s = createService();
-    s.startScenarioTest(HouseScenario.assistance, '보호자 쓰러짐 의심');
-    await mount(t, s);
-    await tap(t, '119 신고 내용 확인');
-    expect(find.textContaining('불러도 반응이 있는지: 미확인'), findsOneWidget);
-    expect(find.textContaining('주소: 테스트시 안심로 10, 101호'), findsOneWidget);
-    expect(find.textContaining('미전송 · 실제 신고·연락 기능은 연결되어 있지 않아요.'), findsOneWidget);
-    expect(find.byType(AlertDialog), findsNothing);
-    expect(t.takeException(), isNull);
-  });
+  testWidgets(
+    'unknown response and address remain explicit in an unsent report',
+    (t) async {
+      final s = createService();
+      s.startScenarioTest(HouseScenario.assistance, '보호자 쓰러짐 의심');
+      await mount(t, s);
+      await tap(t, '119 신고 내용 확인');
+      expect(find.textContaining('불러도 반응이 있는지: 미확인'), findsOneWidget);
+      expect(find.textContaining('주소: 테스트시 안심로 10, 101호'), findsOneWidget);
+      expect(
+        find.textContaining('미전송 · 실제 신고·연락 기능은 연결되어 있지 않아요.'),
+        findsOneWidget,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
 
   testWidgets('new incident clears the old report and response', (t) async {
     final s = createService();
@@ -93,39 +115,45 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('camera and touch are visible together without starting sign capture', (t) async {
-    final s = createService();
-    s.startScenarioTest(HouseScenario.assistance, '보호자 쓰러짐 의심');
-    await mount(t, s);
-    final camera = t.getRect(find.text('연결된 수어 카메라'));
-    final touch = t.getRect(find.text('119 신고 내용 확인'));
-    expect(camera.bottom, lessThan(900));
-    expect(touch.bottom, lessThan(900));
-    expect(camera.left, lessThan(touch.left));
-    expect(find.byTooltip('구조 수어 입력 시연'), findsNothing);
-    expect(t.takeException(), isNull);
-  });
+  testWidgets(
+    'camera and touch are visible together without starting sign capture',
+    (t) async {
+      final s = createService();
+      s.startScenarioTest(HouseScenario.assistance, '보호자 쓰러짐 의심');
+      await mount(t, s);
+      final camera = t.getRect(find.text('연결된 수어 카메라'));
+      final touch = t.getRect(find.text('119 신고 내용 확인'));
+      expect(camera.bottom, lessThan(900));
+      expect(touch.bottom, lessThan(900));
+      expect(camera.left, lessThan(touch.left));
+      expect(find.byTooltip('구조 수어 입력 시연'), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
 
-  testWidgets('repeated help signs stay on one surface and cancellation suppresses repeats', (t) async {
-    final s = createService();
-    s.startScenarioTest(HouseScenario.assistance, '보호자 쓰러짐 의심');
-    await mount(t, s);
-    s.receiveSign('쓰러짐', simulated: true);
-    s.receiveSign('쓰러짐', simulated: true);
-    await t.pumpAndSettle();
-    expect(find.text('“쓰러짐” 수어를 인식했어요.'), findsOneWidget);
-    expect(find.byType(ScenarioEventOverlay), findsOneWidget);
-    expect(find.byType(AlertDialog), findsNothing);
-    await tap(t, '괜찮아요');
-    s.receiveSign('쓰러짐', simulated: true);
-    await t.pumpAndSettle();
-    expect(find.byType(ScenarioEventOverlay), findsNothing);
-    s.receiveSign('감사', simulated: true);
-    s.receiveSign('도움', simulated: true);
-    await t.pumpAndSettle();
-    expect(find.text('“도움” 수어를 인식했어요.'), findsOneWidget);
-    expect(t.takeException(), isNull);
-  });
+  testWidgets(
+    'repeated help signs stay on one surface and cancellation suppresses repeats',
+    (t) async {
+      final s = createService();
+      s.startScenarioTest(HouseScenario.assistance, '보호자 쓰러짐 의심');
+      await mount(t, s);
+      s.receiveSign('쓰러짐', simulated: true);
+      s.receiveSign('쓰러짐', simulated: true);
+      await t.pumpAndSettle();
+      expect(find.text('“쓰러짐” 수어를 인식했어요.'), findsOneWidget);
+      expect(find.byType(ScenarioEventOverlay), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      await tap(t, '괜찮아요');
+      s.receiveSign('쓰러짐', simulated: true);
+      await t.pumpAndSettle();
+      expect(find.byType(ScenarioEventOverlay), findsNothing);
+      s.receiveSign('감사', simulated: true);
+      s.receiveSign('도움', simulated: true);
+      await t.pumpAndSettle();
+      expect(find.text('“도움” 수어를 인식했어요.'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
 
   testWidgets('ending an incident removes its help surface', (t) async {
     final s = createService();
@@ -153,7 +181,9 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('cancelling help preserves a simultaneous fire hazard', (t) async {
+  testWidgets('cancelling help preserves a simultaneous fire hazard', (
+    t,
+  ) async {
     final s = createService();
     s.startScenarioTest(HouseScenario.broadcast, '화재가 발생했습니다.');
     final hazard = s.flow.active;
@@ -166,20 +196,23 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('report returns to choice and close without claiming transmission', (t) async {
-    final s = createService();
-    s.startScenarioTest(HouseScenario.assistance, '보호자 쓰러짐 의심');
-    await mount(t, s);
-    await tap(t, '119 신고 내용 확인');
-    expect(find.text('내용 복사'), findsOneWidget);
-    expect(find.text('신고하기'), findsNothing);
-    expect(find.byType(AlertDialog), findsNothing);
-    await tap(t, '다시 선택하기');
-    expect(find.text('119 신고 내용 확인'), findsOneWidget);
-    await tap(t, '가족에게 전할 내용 확인');
-    expect(find.textContaining('가족에게 전할 내용 · 미전송'), findsOneWidget);
-    await tap(t, '확인하고 돌아가기');
-    expect(find.byType(ScenarioEventOverlay), findsNothing);
-    expect(t.takeException(), isNull);
-  });
+  testWidgets(
+    'report returns to choice and close without claiming transmission',
+    (t) async {
+      final s = createService();
+      s.startScenarioTest(HouseScenario.assistance, '보호자 쓰러짐 의심');
+      await mount(t, s);
+      await tap(t, '119 신고 내용 확인');
+      expect(find.text('내용 복사'), findsOneWidget);
+      expect(find.text('신고하기'), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      await tap(t, '다시 선택하기');
+      expect(find.text('119 신고 내용 확인'), findsOneWidget);
+      await tap(t, '가족에게 전할 내용 확인');
+      expect(find.textContaining('가족에게 전할 내용 · 미전송'), findsOneWidget);
+      await tap(t, '확인하고 돌아가기');
+      expect(find.byType(ScenarioEventOverlay), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
 }

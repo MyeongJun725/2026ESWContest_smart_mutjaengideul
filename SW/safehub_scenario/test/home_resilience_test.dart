@@ -77,8 +77,13 @@ void main() {
       await directory.delete(recursive: true);
     });
     final captions = LiveCaptionService(transcribe: (_) async => '');
-    await tester.pumpWidget(MaterialApp(home: Scaffold(
-      body: LiveCaptionPanel(service: captions, configured: true))));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LiveCaptionPanel(service: captions, configured: true),
+        ),
+      ),
+    );
     unawaited(captions.start());
     await tester.pump();
     expect(find.text('마이크 준비 중'), findsWidgets);
@@ -117,13 +122,18 @@ void main() {
       );
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text('경보 · 재난 알림'), findsOneWidget);
-      expect(find.text('실시간 음성 자막'), findsOneWidget);
+      expect(find.text('최근 알림'), findsOneWidget);
+      expect(find.text('음성 자막'), findsOneWidget);
+      final help = tester.getRect(find.text('도움이 필요해요').hitTestable());
+      expect(help.left, greaterThanOrEqualTo(0));
+      expect(help.right, lessThanOrEqualTo(size.width));
+      expect(help.bottom, lessThanOrEqualTo(size.height));
       if (Platform.environment['SAFEHUB_CAPTURE_UI'] == '1') {
         await tester.pump(const Duration(milliseconds: 400));
         await tester.runAsync(() async {
-          final boundary = captureKey.currentContext!.findRenderObject()!
-              as RenderRepaintBoundary;
+          final boundary =
+              captureKey.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary;
           final image = await boundary.toImage();
           final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
           await File(
@@ -132,13 +142,15 @@ void main() {
           image.dispose();
         });
       }
-      await tester.ensureVisible(find.text('의사소통 화면 열기'));
-      await tester.tap(find.text('의사소통 화면 열기'));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('navigation-수어 대화')),
+      );
+      await tester.tap(find.byKey(const ValueKey('navigation-수어 대화')));
       await tester.pump();
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('홈으로'));
+      await tester.tap(find.byKey(const ValueKey('navigation-홈')));
       await tester.pump();
-      expect(find.text('의사소통 화면 열기'), findsOneWidget);
+      expect(find.byKey(const ValueKey('navigation-수어 대화')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();

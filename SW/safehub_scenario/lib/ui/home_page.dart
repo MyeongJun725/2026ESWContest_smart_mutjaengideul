@@ -1323,7 +1323,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                       fit: StackFit.expand,
                       children: [
                         RawImage(
-                            key: const ValueKey('camera_preview'),
+                          key: const ValueKey('camera_preview'),
                           image: image,
                           fit: BoxFit.contain,
                           filterQuality: FilterQuality.low,

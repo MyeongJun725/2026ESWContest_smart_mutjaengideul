@@ -29,7 +29,9 @@ class _Client extends MqttServerClient {
   final completion = Completer<MqttClientConnectionStatus?>();
   final status = MqttClientConnectionStatus();
   final stream =
-      StreamController<List<MqttReceivedMessage<MqttMessage>>>.broadcast(sync: true);
+      StreamController<List<MqttReceivedMessage<MqttMessage>>>.broadcast(
+        sync: true,
+      );
   final subscriptions = <String>[];
   final subscriptionQos = <String, MqttQos>{};
   MqttPublishMessage? subscriptionEvent;
@@ -50,7 +52,11 @@ class _Client extends MqttServerClient {
 
   @override
   Subscription? subscribe(String topic, MqttQos qosLevel) {
-    expect(stream.hasListener, isTrue, reason: "Register updates before every subscribe");
+    expect(
+      stream.hasListener,
+      isTrue,
+      reason: "Register updates before every subscribe",
+    );
     subscriptionQos[topic] = qosLevel;
     subscriptions.add(topic);
     if (topic == 'safehub/csi/bedroom/event' && subscriptionEvent != null) {
@@ -129,7 +135,10 @@ void main() {
         'safehub/vision/livingroom/translation',
         'safehub/control/livingroom/aircon/command',
       ]);
-      expect(clients.last.subscriptionQos['safehub/vision/livingroom/translation'], MqttQos.atLeastOnce);
+      expect(
+        clients.last.subscriptionQos['safehub/vision/livingroom/translation'],
+        MqttQos.atLeastOnce,
+      );
       expect(timers.where((timer) => timer.isActive), isEmpty);
     },
   );
@@ -197,18 +206,26 @@ void main() {
     },
   );
 
-  test('subscription-time delivery is received and reconnect retry is deduplicated', () async {
-    const topic = 'safehub/csi/bedroom/event';
-    const payload = '{"event":"fall_detected","message_id":"subscribe-1"}';
-    final connecting = receiver.connect();
-    final builder = MqttClientPayloadBuilder()..addUTF8String(payload);
-    clients.single.subscriptionEvent = MqttPublishMessage().toTopic(topic).publishData(builder.payload!);
-    clients.single.accept();
-    await connecting;
-    expect(receiver.eventManager.getNextEvent()?['message_id'], 'subscribe-1');
-    clients.single.onAutoReconnect?.call();
-    clients.single.onAutoReconnected?.call();
-    receiver.handlePayload(topic, payload);
-    expect(receiver.eventManager.getNextEvent(), isNull);
-  });
+  test(
+    'subscription-time delivery is received and reconnect retry is deduplicated',
+    () async {
+      const topic = 'safehub/csi/bedroom/event';
+      const payload = '{"event":"fall_detected","message_id":"subscribe-1"}';
+      final connecting = receiver.connect();
+      final builder = MqttClientPayloadBuilder()..addUTF8String(payload);
+      clients.single.subscriptionEvent = MqttPublishMessage()
+          .toTopic(topic)
+          .publishData(builder.payload!);
+      clients.single.accept();
+      await connecting;
+      expect(
+        receiver.eventManager.getNextEvent()?['message_id'],
+        'subscribe-1',
+      );
+      clients.single.onAutoReconnect?.call();
+      clients.single.onAutoReconnected?.call();
+      receiver.handlePayload(topic, payload);
+      expect(receiver.eventManager.getNextEvent(), isNull);
+    },
+  );
 }

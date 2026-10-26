@@ -97,8 +97,12 @@ void main() {
 
   test('safety IDs do not suppress repeated sign utterances', () {
     final signs = <String>[];
-    final signReceiver = MqttReceiver(broker: 'localhost', port: 1883,
-      eventManager: manager, onSignTextReceived: signs.add);
+    final signReceiver = MqttReceiver(
+      broker: 'localhost',
+      port: 1883,
+      eventManager: manager,
+      onSignTextReceived: signs.add,
+    );
     addTearDown(signReceiver.disconnect);
     const topic = 'safehub/vision/livingroom/translation';
     const payload = '{"text":"도움"}';

@@ -115,5 +115,4 @@ void main() {
     await failed;
     expect(player.sources, isEmpty);
   });
-
 }

@@ -82,6 +82,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
     VoidCallback action, {
     bool selected = false,
   }) => TextButton.icon(
+    key: ValueKey('navigation-$text'),
     onPressed: action,
     icon: Icon(icon, size: 20),
     label: Text(text),

@@ -42,19 +42,42 @@ class _Publication {
 // clientFactory mock, hardware, external host or production service is used.
 class _LoopbackBroker {
   _LoopbackBroker(this.server) {
-    listener = server.listen((socket) {
-      connectionCount++;
-      sockets.add(socket);
-      final pending = <int>[];
-      socket.listen(
-        (bytes) {
-          pending.addAll(bytes);
-          while (_consume(socket, pending)) {}
-        },
-        onError: (Object _) => sockets.remove(socket),
-        onDone: () => sockets.remove(socket),
-      );
-    });
+    listener = server.listen(
+      (socket) {
+        connectionCount++;
+        sockets.add(socket);
+        // The write sink has a separate error future from the read stream.
+        // Deliberate client disposal may reset outstanding SUBACK writes.
+        unawaited(
+          socket.done.then<void>(
+            (_) {},
+            onError: (Object error) {
+              if (error is! SocketException ||
+                  !{104, 54, 10054}.contains(error.osError?.errorCode)) {
+                throw error;
+              }
+            },
+          ),
+        );
+        final pending = <int>[];
+        socket.listen(
+          (bytes) {
+            pending.addAll(bytes);
+            while (_consume(socket, pending)) {}
+          },
+          onError: (Object _) => sockets.remove(socket),
+          onDone: () => sockets.remove(socket),
+        );
+      },
+      onError: (Object error) {
+        // Deliberately closing an in-flight test client can reset accept() on
+        // Linux/macOS/Windows. Other listener errors still fail the fixture.
+        if (error is! SocketException ||
+            !{104, 54, 10054}.contains(error.osError?.errorCode)) {
+          throw error;
+        }
+      },
+    );
   }
 
   final ServerSocket server;
@@ -128,7 +151,13 @@ class _LoopbackBroker {
     return true;
   }
 
-  void publish(String topic, String payload, {int qos = 0, int id = 1, bool duplicate = false}) {
+  void publish(
+    String topic,
+    String payload, {
+    int qos = 0,
+    int id = 1,
+    bool duplicate = false,
+  }) {
     final body = <int>[
       ..._stringBytes(topic),
       if (qos == 1) ...[id >> 8, id & 255],
@@ -155,24 +184,34 @@ Future<void> _until(bool Function() condition, String reason) async {
 }
 
 void main() {
-  test('wire packet headers preserve sign retry filtering and new utterances', () async {
-    final broker = await _LoopbackBroker.open();
-    final signs = <String>[];
-    final receiver = MqttReceiver(broker: '127.0.0.1', port: broker.port,
-      eventManager: EventManager(), onSignTextReceived: signs.add);
-    addTearDown(() async { receiver.disconnect(); await broker.close(); });
-    await receiver.connect();
-    await _until(() => broker.subscriptions.length == 4, 'subscriptions');
-    const topic = 'safehub/vision/livingroom/translation';
-    const payload = '{"text":"도움"}';
-    broker.publish(topic, payload, qos: 1, id: 71);
-    await _until(() => signs.length == 1, 'first utterance');
-    broker.publish(topic, payload, qos: 1, id: 71, duplicate: true);
-    broker.publish(topic, payload, qos: 1, id: 72);
-    await _until(() => signs.length >= 2, 'new utterance');
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    expect(signs, ['도움', '도움']);
-  });
+  test(
+    'wire packet headers preserve sign retry filtering and new utterances',
+    () async {
+      final broker = await _LoopbackBroker.open();
+      final signs = <String>[];
+      final receiver = MqttReceiver(
+        broker: '127.0.0.1',
+        port: broker.port,
+        eventManager: EventManager(),
+        onSignTextReceived: signs.add,
+      );
+      addTearDown(() async {
+        receiver.disconnect();
+        await broker.close();
+      });
+      await receiver.connect();
+      await _until(() => broker.subscriptions.length == 4, 'subscriptions');
+      const topic = 'safehub/vision/livingroom/translation';
+      const payload = '{"text":"도움"}';
+      broker.publish(topic, payload, qos: 1, id: 71);
+      await _until(() => signs.length == 1, 'first utterance');
+      broker.publish(topic, payload, qos: 1, id: 71, duplicate: true);
+      broker.publish(topic, payload, qos: 1, id: 72);
+      await _until(() => signs.length >= 2, 'new utterance');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(signs, ['도움', '도움']);
+    },
+  );
 
   test(
     'disposing during real TCP connect closes a late socket without callbacks',

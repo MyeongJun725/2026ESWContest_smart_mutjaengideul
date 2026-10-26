@@ -5,11 +5,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:safehub_app/config/app_config.dart';
-import 'package:safehub_app/services/live_caption_service.dart';
 import 'package:safehub_app/services/situation_service.dart';
 import 'package:safehub_app/ui/home_page.dart';
 import 'package:safehub_app/ui/theme/app_theme.dart';
-import 'package:safehub_app/ui/widgets/situation_panel.dart';
+import 'package:safehub_app/ui/widgets/scenario_event_overlay.dart';
 import 'local_preview_test.dart' show mockAudioPlugins;
 
 Future<void> capture(WidgetTester tester, GlobalKey key, String name) async {
@@ -29,43 +28,60 @@ Future<void> capture(WidgetTester tester, GlobalKey key, String name) async {
 }
 
 void main() {
-  testWidgets('sign, appliance and signal routes retain one light visual theme', (tester) async {
-    tester.view.physicalSize = const Size(1280, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    AppConfig.resetForTesting();
-    mockAudioPlugins(tester);
-    await tester.runAsync(() async {
-      await (FontLoader('Pretendard')..addFont(rootBundle.load('assets/fonts/Pretendard-Regular.otf'))).load();
-      await (FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
-    });
-    final key = GlobalKey();
-    await tester.pumpWidget(RepaintBoundary(key: key,
-      child: MaterialApp(theme: AppTheme.light, home: const SafeHubHomePage())));
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.text('수어 대화'));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('수어 인식 결과'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await capture(tester, key, 'unified-sign');
-    await tester.tap(find.text('가전'));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('가전 · 수어 단축키'), findsOneWidget);
-    expect(Theme.of(tester.element(find.text('가전 · 수어 단축키'))).brightness, Brightness.light);
-    expect(tester.takeException(), isNull);
-    await capture(tester, key, 'unified-appliance');
-    await tester.tap(find.text('신호 관리'));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('와이파이 센싱'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await capture(tester, key, 'unified-signal');
-    await tester.tap(find.text('홈'));
-    await tester.pump();
-    expect(find.text('우리 집 상황'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump();
-  });
+  testWidgets(
+    'sign, appliance and signal routes retain one light visual theme',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      AppConfig.resetForTesting();
+      mockAudioPlugins(tester);
+      await tester.runAsync(() async {
+        await (FontLoader('Pretendard')
+              ..addFont(rootBundle.load('assets/fonts/Pretendard-Regular.otf')))
+            .load();
+        await (FontLoader(
+          'MaterialIcons',
+        )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+      });
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: key,
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: const SafeHubHomePage(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const ValueKey('navigation-수어 대화')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('수어 인식 결과'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await capture(tester, key, 'unified-sign');
+      await tester.tap(find.byKey(const ValueKey('navigation-가전')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('가전 · 수어 단축키'), findsOneWidget);
+      expect(
+        Theme.of(tester.element(find.text('가전 · 수어 단축키'))).brightness,
+        Brightness.light,
+      );
+      expect(tester.takeException(), isNull);
+      await capture(tester, key, 'unified-appliance');
+      await tester.tap(find.byKey(const ValueKey('navigation-신호 관리')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('와이파이 센싱'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await capture(tester, key, 'unified-signal');
+      await tester.tap(find.byKey(const ValueKey('navigation-홈')));
+      await tester.pump();
+      expect(find.text('우리 집'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
 
   testWidgets('home keeps all functions and opens the new help workflow', (
     tester,
@@ -77,9 +93,9 @@ void main() {
     AppConfig.resetForTesting();
     mockAudioPlugins(tester);
     await tester.runAsync(() async {
-      await (FontLoader('Pretendard')..addFont(
-        rootBundle.load('assets/fonts/Pretendard-Regular.otf'),
-      )).load();
+      await (FontLoader('Pretendard')
+            ..addFont(rootBundle.load('assets/fonts/Pretendard-Regular.otf')))
+          .load();
     });
     final key = GlobalKey();
     await tester.pumpWidget(
@@ -92,33 +108,41 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('우리 집 상황'), findsOneWidget);
-    expect(find.byTooltip('신호 수집 · 모델 관리'), findsOneWidget);
-    expect(find.text('거실'), findsNothing);
-    expect(find.text('침실'), findsNothing);
-    expect(find.text('AI에게 말하기'), findsOneWidget);
-    expect(find.byIcon(Icons.auto_awesome), findsNothing);
+    expect(find.text('우리 집'), findsOneWidget);
+    for (final id in [
+      'status',
+      'camera',
+      'captions',
+      'notices',
+      'help',
+      'csi',
+    ]) {
+      expect(find.byKey(ValueKey('tile-$id')), findsOneWidget);
+    }
+    expect(find.byTooltip('AI·알림 설정'), findsOneWidget);
     expect(find.text('수어로 이야기해요').hitTestable(), findsOneWidget);
     expect(find.text('도움이 필요해요').hitTestable(), findsOneWidget);
-    expect(find.text('경보 · 재난').hitTestable(), findsOneWidget);
-    expect(find.text('수어 인식 대기 중'), findsOneWidget);
+    expect(find.text('최근 알림'), findsOneWidget);
+    expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
     await capture(tester, key, 'scenario-home');
     await tester.tap(find.text('도움이 필요해요'));
     await tester.pump();
-    expect(find.byType(SituationResponse), findsOneWidget);
-    await tester.tap(find.text('가족이 쓰러졌어요'));
+    expect(find.byType(ScenarioEventOverlay), findsOneWidget);
+    await tester.tap(find.text('다른 사람이 아파요'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('반응 없어요'));
     await tester.pump();
-    expect(find.textContaining('확인된 응답: 가족이 쓰러졌습니다.'), findsOneWidget);
+    await tester.tap(find.text('119 신고 내용 확인'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('불러도 반응이 있는지: 반응 없어요'), findsOneWidget);
+    expect(
+      find.textContaining('미전송 · 실제 신고·연락 기능은 연결되어 있지 않아요.'),
+      findsOneWidget,
+    );
     await capture(tester, key, 'scenario-response');
-    await tester.tap(find.text('도움 요청 문안 만들기'));
+    await tester.tap(find.text('확인하고 돌아가기'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('아직 전송하지 않음'), findsOneWidget);
-    await tester.tap(find.text('닫기'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('경보 확인'));
-    await tester.tap(find.text('경보 확인'));
-    await tester.pump();
-    expect(find.byType(SituationResponse), findsNothing);
+    expect(find.byType(ScenarioEventOverlay), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
@@ -132,28 +156,31 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     mockAudioPlugins(tester);
-    final situation = SituationService()..openHelp();
-    final captions = LiveCaptionService(transcribe: (_) async => '');
+    final situation = SituationService(
+      settings: SituationSettings(enabled: false),
+    )..receiveSign('아프다');
+    addTearDown(situation.dispose);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: SituationResponse(
+          body: ScenarioEventOverlay(
             service: situation,
-            captions: captions,
             camera: const ColoredBox(color: Colors.black),
-            incidentTitle: '재난 알림',
-            incidentText: '화재 안내방송 내용을 확인해 주세요.',
-            onAcknowledge: () {},
+            onAcknowledge: situation.acknowledge,
             onSignal: () {},
           ),
         ),
       ),
     );
-    await tester.ensureVisible(find.text('경보 확인'));
+    await tester.pumpAndSettle();
+    expect(find.text('괜찮아요').hitTestable(), findsOneWidget);
+    await tester.ensureVisible(find.text('119 신고 내용 확인'));
+    await tester.tap(find.text('119 신고 내용 확인'));
+    await tester.pumpAndSettle();
+    expect(find.text('확인하고 돌아가기').hitTestable(), findsOneWidget);
+    expect(find.textContaining('실제 신고·연락 기능은 연결되어 있지 않아요.'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
-    situation.dispose();
-    captions.dispose();
     await tester.pump();
   });
 }
