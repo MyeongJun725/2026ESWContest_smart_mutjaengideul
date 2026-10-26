@@ -30,7 +30,7 @@ def preflight(flutter_path, output_dir):
     return flutter_path, output_dir, pubspec
 
 
-def prepare(flutter_path, output_dir, pubspec, build=False, real=False):
+def prepare(flutter_path, output_dir, pubspec, build=False, real=False, developer_tools=False):
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [str(flutter_path), "create", "--platforms=windows", "--no-pub",
@@ -56,7 +56,8 @@ def prepare(flutter_path, output_dir, pubspec, build=False, real=False):
         subprocess.run([str(flutter_path), "pub", "get"], cwd=output_dir, check=True)
         subprocess.run(
             [str(flutter_path), "build", "windows", "--release",
-             f"--dart-define=APP_LOCAL_PREVIEW={'false' if real else 'true'}"],
+             f"--dart-define=APP_LOCAL_PREVIEW={'false' if real else 'true'}",
+             f"--dart-define=SAFEHUB_DEVELOPER_TOOLS={str(developer_tools).lower()}"],
             cwd=output_dir, check=True,
         )
 
@@ -67,6 +68,7 @@ def main(argv=None):
                         help="Full path to the installed Flutter bin/flutter.bat")
     parser.add_argument("--output-dir", type=Path, required=True,
                         help="New directory outside the repository")
+    parser.add_argument("--developer-tools", action="store_true", help="Include scenario/device tests and CSI development screens")
     parser.add_argument("--real", action="store_true",
                         help="Build for real device connections with editable settings")
     actions = parser.add_mutually_exclusive_group()
@@ -82,7 +84,7 @@ def main(argv=None):
             return 0
         if sys.platform != "win32":
             raise ValueError("Prepare the Windows preview on Windows.")
-        prepare(flutter, output, pubspec, args.build, args.real)
+        prepare(flutter, output, pubspec, args.build, args.real, args.developer_tools)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"Windows preview preparation failed: {exc}", file=sys.stderr)
         print("An incomplete output folder is preserved for inspection.", file=sys.stderr)
@@ -94,7 +96,8 @@ def main(argv=None):
         print("Run flutter pub get, patch_windows_audio.py --host-dir <this host>, "
               "then flutter pub get again before building.")
         print("Build with flutter build windows --release "
-              f"--dart-define=APP_LOCAL_PREVIEW={mode} from this host folder.")
+              f"--dart-define=APP_LOCAL_PREVIEW={mode} "
+              f"--dart-define=SAFEHUB_DEVELOPER_TOOLS={str(args.developer_tools).lower()} from this host folder.")
     return 0
 
 

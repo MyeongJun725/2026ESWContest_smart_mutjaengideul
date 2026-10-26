@@ -73,6 +73,7 @@ def main():
     parser.add_argument("--flutter-path", help="Flutter executable; defaults to PATH")
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--developer-tools", action="store_true", help="Show scenario/device tests and CSI development screens")
     parser.add_argument("--check-only", action="store_true",
                         help="Prepare and verify the host without running Flutter")
     args = parser.parse_args()
@@ -88,11 +89,12 @@ def main():
         host = Path(temporary) / "app"
         prepare_host(host)
         if args.check_only:
-            print("Preview host preparation passed; source files unchanged.")
+            print(f"Preview host preparation passed; mode={'developer' if args.developer_tools else 'product'}; source files unchanged.")
             return
         subprocess.run([flutter, "pub", "get"], cwd=host, check=True)
         subprocess.run(
             [flutter, "build", "web", "--dart-define=APP_LOCAL_PREVIEW=true",
+             f"--dart-define=SAFEHUB_DEVELOPER_TOOLS={str(args.developer_tools).lower()}",
              "--no-web-resources-cdn"], cwd=host, check=True,
         )
         handler = partial(SimpleHTTPRequestHandler, directory=str(host / "build/web"))

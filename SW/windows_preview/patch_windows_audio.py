@@ -71,7 +71,7 @@ def manifest(folder):
 
 
 def apply_patch(host, package=None, check_only=False):
-    host = Path(host).expanduser().resolve(strict=True)
+    host = Path(host).expanduser().resolve()
     canonical = CANONICAL_APP.resolve()
     repository = Path(__file__).resolve().parents[2]
     if host == repository or repository in host.parents or host in repository.parents:
