@@ -70,9 +70,20 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       await capture(tester, key, 'unified-appliance');
-      await tester.tap(find.byKey(const ValueKey('navigation-신호 관리')));
+      await tester.tap(
+        find.byKey(
+          ValueKey(
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+          ),
+        ),
+      );
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('와이파이 센싱'), findsOneWidget);
+      expect(
+        find.text('와이파이 센싱'),
+        AppConfig.developerTools ? findsOneWidget : findsNothing,
+      );
+      if (!AppConfig.developerTools)
+        expect(find.text('현재 모델의 행동 예측'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await capture(tester, key, 'unified-signal');
       await tester.tap(find.byKey(const ValueKey('navigation-홈')));

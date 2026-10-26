@@ -9,11 +9,13 @@ class WifiActionStatus extends StatefulWidget {
     required this.service,
     this.allowDummy = false,
     this.compact = false,
+    this.allowModelSelection = false,
   });
 
   final WifiSensingService service;
   final bool allowDummy;
   final bool compact;
+  final bool allowModelSelection;
 
   @override
   State<WifiActionStatus> createState() => _WifiActionStatusState();
@@ -88,6 +90,14 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
   Future<void> _toggleRecognition() async {
     if (_busy || _state == null) return;
     final running = _state!['recognition']['running'] == true;
+    await _runControl(running ? 'stop_recognition' : 'recognize');
+  }
+
+  Future<void> _runControl(
+    String action, [
+    Map<String, dynamic> payload = const {},
+  ]) async {
+    if (_busy || _state == null) return;
     final generation = ++_generation;
     _polling = false;
     setState(() {
@@ -97,7 +107,7 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
       _commandError = '';
     });
     try {
-      await widget.service.command(running ? 'stop_recognition' : 'recognize');
+      await widget.service.command(action, payload);
     } catch (error) {
       if (mounted && generation == _generation) {
         setState(
@@ -129,26 +139,24 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
     final label = result?['label'] as String?;
     final scores = result?['scores'] as Map?;
     final score = label == null ? null : scores?[label] as num?;
-    final status =
-        state == null
-            ? '서비스 연결 대기'
-            : fresh
+    final status = state == null
+        ? '서비스 연결 대기'
+        : fresh
             ? '실시간 신호 수신 중'
             : '수신기 신호 대기';
-    final reason =
-        _commandError.isNotEmpty
-            ? _commandError
-            : _error.isNotEmpty
+    final reason = _commandError.isNotEmpty
+        ? _commandError
+        : _error.isNotEmpty
             ? _error
             : state == null
-            ? '연결되면 새 결과를 표시합니다.'
-            : !fresh
-            ? '수신기 연결을 확인하세요. 이전 결과는 표시하지 않습니다.'
-            : model == null
-            ? '신호 수집 · 모델 관리에서 학습한 모델을 가져오세요.'
-            : !running
-            ? '행동 인식을 시작하면 여기에 표시됩니다.'
-            : state['recognition']['reason'] as String;
+                ? '연결되면 새 결과를 표시합니다.'
+                : !fresh
+                    ? '수신기 연결을 확인하세요. 이전 결과는 표시하지 않습니다.'
+                    : model == null
+                        ? '준비된 CSI 모델을 선택하세요. 모델 파일 준비는 개발 도구에서 진행합니다.'
+                        : !running
+                            ? '행동 인식을 시작하면 여기에 표시됩니다.'
+                            : state['recognition']['reason'] as String;
     const ink = Color(0xFFF1F3F6);
     const muted = Color(0xFFC5CAD1);
     const blue = Color(0xFFBBD5FC);
@@ -259,6 +267,25 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
             ),
           ),
         ),
+        if (widget.allowModelSelection &&
+            state != null &&
+            (state['models'] as List).isNotEmpty)
+          DropdownButtonFormField<String>(
+            decoration: const InputDecoration(labelText: '기존 CSI 모델 선택 · 추론용'),
+            value: model?['model_id'] as String?,
+            items: [
+              for (final item in (state['models'] as List))
+                DropdownMenuItem(
+                  value: item['model_id'] as String,
+                  child: Text(item['model_id'] as String),
+                ),
+            ],
+            onChanged: _busy
+                ? null
+                : (id) {
+                    if (id != null) _runControl('select_model', {'id': id});
+                  },
+          ),
         if (model != null)
           Text(
             '${(model['labels'] as List).join(' · ')}  /  ${model['window_seconds'] ?? 4}초 신호',
@@ -276,8 +303,8 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
             _busy
                 ? '적용 중…'
                 : running
-                ? '행동 인식 중지'
-                : '행동 인식 시작',
+                    ? '행동 인식 중지'
+                    : '행동 인식 시작',
           ),
           style: TextButton.styleFrom(
             foregroundColor: blue,

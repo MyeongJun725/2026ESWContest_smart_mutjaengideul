@@ -7,6 +7,12 @@ class AppConfig {
     defaultValue: false,
   );
 
+  // UI visibility only: unlike localPreview, this does not disable real I/O.
+  static const bool developerTools = bool.fromEnvironment(
+    'SAFEHUB_DEVELOPER_TOOLS',
+    defaultValue: localPreview,
+  );
+
   static const _defaults = <String, Object?>{
     'MQTT_BROKER': String.fromEnvironment('MQTT_BROKER'),
     'MQTT_PORT': int.fromEnvironment('MQTT_PORT', defaultValue: 1883),
@@ -56,12 +62,15 @@ class AppConfig {
 
   static String get configFilePath {
     if (_filePath != null) return _filePath!;
-    final override = Platform.environment['SAFEHUB_SCENARIO_CONFIG_FILE']?.trim();
+    final override = Platform.environment['SAFEHUB_SCENARIO_CONFIG_FILE']
+        ?.trim();
     if (override != null && override.isNotEmpty) return override;
     final home =
         Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
     if (home == null || home.isEmpty) {
-      throw StateError('사용자 폴더를 찾을 수 없습니다. SAFEHUB_SCENARIO_CONFIG_FILE을 지정하세요.');
+      throw StateError(
+        '사용자 폴더를 찾을 수 없습니다. SAFEHUB_SCENARIO_CONFIG_FILE을 지정하세요.',
+      );
     }
     return '$home${Platform.pathSeparator}SafeHubScenarioData'
         '${Platform.pathSeparator}connection-settings.json';
@@ -78,10 +87,9 @@ class AppConfig {
     setupError = null;
     try {
       final file = File(configFilePath);
-      final decoded =
-          await file.exists()
-              ? jsonDecode(await file.readAsString())
-              : <String, dynamic>{};
+      final decoded = await file.exists()
+          ? jsonDecode(await file.readAsString())
+          : <String, dynamic>{};
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('설정 파일은 JSON 객체여야 합니다.');
       }
@@ -131,15 +139,15 @@ class AppConfig {
       final raw = values[key];
       if (_portDefaults.containsKey(key)) {
         final value = raw?.toString().trim() ?? '';
-        result[key] =
-            value.isEmpty ? _portDefaults[key] : int.tryParse(value) ?? value;
+        result[key] = value.isEmpty
+            ? _portDefaults[key]
+            : int.tryParse(value) ?? value;
       } else if (raw == null || raw is String) {
         final value = raw as String? ?? '';
         final normalized = key == 'DISASTER_API_KEY' ? value : value.trim();
-        result[key] =
-            key == 'CSI_SERVICE_URL' && normalized.isEmpty
-                ? _defaults[key]
-                : normalized;
+        result[key] = key == 'CSI_SERVICE_URL' && normalized.isEmpty
+            ? _defaults[key]
+            : normalized;
       } else {
         result[key] = raw;
       }
@@ -238,16 +246,14 @@ class AppConfig {
     final secretFile = File(secretFilePath);
     await target.parent.create(recursive: true);
     final oldJson = await target.exists() ? await target.readAsString() : null;
-    final oldSecret =
-        await secretFile.exists() ? await secretFile.readAsString() : null;
+    final oldSecret = await secretFile.exists()
+        ? await secretFile.readAsString()
+        : null;
     final secret = candidate['DISASTER_API_KEY'] as String;
-    final secretLines =
-        const LineSplitter()
-            .convert(oldSecret ?? '')
-            .where(
-              (line) => !RegExp(r'^\s*DISASTER_API_KEY\s*=').hasMatch(line),
-            )
-            .toList();
+    final secretLines = const LineSplitter()
+        .convert(oldSecret ?? '')
+        .where((line) => !RegExp(r'^\s*DISASTER_API_KEY\s*=').hasMatch(line))
+        .toList();
     if (secret.isNotEmpty)
       secretLines.add('DISASTER_API_KEY=${jsonEncode(secret)}');
     final publicSettings = {...candidate}..remove('DISASTER_API_KEY');

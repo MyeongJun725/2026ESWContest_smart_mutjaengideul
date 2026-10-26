@@ -7,9 +7,10 @@ import 'package:http/http.dart' as http;
 import '../core/house_scenario.dart';
 
 class SituationSettings {
+  static const contextModel = 'fasttext-fire-screen';
   SituationSettings({
     this.endpoint = 'http://127.0.0.1:9380/v1/chat/completions',
-    this.model = 'gemma4-e2b',
+    this.model = contextModel,
     this.enabled = true,
     this.fastProtocol = true,
     this.monitorAnnouncements = true,
@@ -34,13 +35,22 @@ class SituationSettings {
   static Future<SituationSettings> load() async {
     if (!await file.exists()) return SituationSettings();
     final data = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    return fromJson(data);
+  }
+
+  // Do not overwrite the saved file or contact an old generative endpoint.
+  // A user may review its existing endpoint before explicitly enabling fastText.
+  static SituationSettings fromJson(Map<String, dynamic> data) {
+    final legacyEngine =
+        (data['model'] != null && data['model'] != contextModel) ||
+        data['fastProtocol'] == false;
     final settings = SituationSettings(
       endpoint:
           data['endpoint'] as String? ??
           'http://127.0.0.1:9380/v1/chat/completions',
-      model: data['model'] as String? ?? 'gemma4-e2b',
-      enabled: data['enabled'] as bool? ?? true,
-      fastProtocol: data['fastProtocol'] as bool? ?? true,
+      model: contextModel,
+      enabled: legacyEngine ? false : data['enabled'] as bool? ?? true,
+      fastProtocol: true,
       monitorAnnouncements: data['monitorAnnouncements'] as bool? ?? true,
       address: data['address'] as String? ?? '',
       homeRegion: data['homeRegion'] as String? ?? '',
@@ -63,7 +73,7 @@ class SituationSettings {
         uri.path != '/v1/chat/completions' ||
         model.trim().isEmpty) {
       throw const FormatException(
-        'LLM 주소는 http(s)://서버:포트/v1/chat/completions 형식으로 입력하세요.',
+        '문맥 서비스 주소는 http(s)://서버:포트/v1/chat/completions 형식으로 입력하세요.',
       );
     }
     if ((ledOnAction.isEmpty) != (ledOffAction.isEmpty)) {
@@ -138,7 +148,7 @@ class SituationAssessment {
         data['confidence'] is! num ||
         data['is_drill'] is! bool ||
         data['evidence'] is! List) {
-      throw const FormatException('LLM 응답 형식을 확인하세요.');
+      throw const FormatException('문맥 응답 형식을 확인하세요.');
     }
     final confidence = (data['confidence'] as num).toDouble();
     if (!confidence.isFinite ||
@@ -148,7 +158,7 @@ class SituationAssessment {
         (data['title'] as String).length > 100 ||
         (data['summary'] as String).isEmpty ||
         (data['summary'] as String).length > 1200) {
-      throw const FormatException('LLM 응답 범위가 올바르지 않습니다.');
+      throw const FormatException('문맥 응답 범위가 올바르지 않습니다.');
     }
     final matched = <SituationEvidence>[];
     for (final ref in data['evidence']) {
@@ -179,7 +189,7 @@ class SituationAssessment {
   }
 }
 
-/// Local household observations. Raw microphone audio and camera images stay outside the LLM.
+/// Local context descriptions exclude raw microphone audio and camera images.
 class SituationService extends ChangeNotifier {
   SituationService({
     SituationSettings? settings,
@@ -237,7 +247,11 @@ class SituationService extends ChangeNotifier {
     _newRealIncident(liveFlow.assistance(id, text));
   }
 
-  bool startScenarioTest(HouseScenario kind, String text, {bool actuate = false}) {
+  bool startScenarioTest(
+    HouseScenario kind,
+    String text, {
+    bool actuate = false,
+  }) {
     if (liveFlow.active != null) return false;
     _generation++;
     _client?.close();
@@ -354,13 +368,12 @@ class SituationService extends ChangeNotifier {
     // Speech may continue while inference runs. Keep its answer valid and
     // coalesce only the waiting text; cancellation is explicit (off/clear).
     final waiting = _requestedVoice;
-    _requestedVoice =
-        waiting == null || addressed
-            ? next
-            : '$waiting $next'.substring(
-              0,
-              ('$waiting $next').length.clamp(0, 500),
-            );
+    _requestedVoice = waiting == null || addressed
+        ? next
+        : '$waiting $next'.substring(
+            0,
+            ('$waiting $next').length.clamp(0, 500),
+          );
     if (voiceQuestion.isEmpty) voiceQuestion = next;
   }
 
@@ -400,59 +413,55 @@ class SituationService extends ChangeNotifier {
     final data = {
       ..._homeContext,
       'workflow': flow.active?.toJson(),
-      'last_acknowledged':
-          flow.lastAcknowledged == null
-              ? null
-              : {
-                'scenario': flow.lastAcknowledged!.kind.name,
-                'user_response': flow.lastAcknowledged!.response,
-                'risk_resolved': false,
-              },
+      'last_acknowledged': flow.lastAcknowledged == null
+          ? null
+          : {
+              'scenario': flow.lastAcknowledged!.kind.name,
+              'user_response': flow.lastAcknowledged!.response,
+              'risk_resolved': false,
+            },
       'sensor':
           sensorAt != null &&
-                  DateTime.now().difference(sensorAt!) <
-                      const Duration(seconds: 5)
-              ? sensorStatus
-              : '재실·활동 미확인',
+              DateTime.now().difference(sensorAt!) < const Duration(seconds: 5)
+          ? sensorStatus
+          : '재실·활동 미확인',
       'observed_at': DateTime.now().toIso8601String(),
       if (_lastCaptionAt != null &&
           DateTime.now().difference(_lastCaptionAt!) <
               const Duration(minutes: 2))
-        'recent_dialogue':
-            _displayCaptions.values
-                .toList()
-                .reversed
-                .take(2)
-                .map((text) => text.substring(0, text.length.clamp(0, 180)))
-                .toList(),
+        'recent_dialogue': _displayCaptions.values
+            .toList()
+            .reversed
+            .take(2)
+            .map((text) => text.substring(0, text.length.clamp(0, 180)))
+            .toList(),
       if (_voiceTurns.isNotEmpty) 'conversation': _voiceTurns,
-      'recent_evidence':
-          snapshot
-              .where((e) => e.source != '확정 음성자막')
-              .take(2)
-              .map((e) => e.toJson())
-              .toList(),
+      'recent_evidence': snapshot
+          .where((e) => e.source != '확정 음성자막')
+          .take(2)
+          .map((e) => e.toJson())
+          .toList(),
     };
     final text = jsonEncode(data);
     return text.length <= 1600
         ? text
         : jsonEncode({
-          'workflow': data['workflow'],
-          'camera': data['camera'],
-          'sensor': data['sensor'],
-          'active_alarm': data['active_alarm'],
-          'disaster': '${data['disaster']}'.substring(
-            0,
-            '${data['disaster']}'.length.clamp(0, 180),
-          ),
-          'sign': data['sign'],
-          'events': '${data['events']}'.substring(
-            0,
-            '${data['events']}'.length.clamp(0, 160),
-          ),
-          'recent_dialogue': data['recent_dialogue'],
-          'last_acknowledged': data['last_acknowledged'],
-        });
+            'workflow': data['workflow'],
+            'camera': data['camera'],
+            'sensor': data['sensor'],
+            'active_alarm': data['active_alarm'],
+            'disaster': '${data['disaster']}'.substring(
+              0,
+              '${data['disaster']}'.length.clamp(0, 180),
+            ),
+            'sign': data['sign'],
+            'events': '${data['events']}'.substring(
+              0,
+              '${data['events']}'.length.clamp(0, 160),
+            ),
+            'recent_dialogue': data['recent_dialogue'],
+            'last_acknowledged': data['last_acknowledged'],
+          });
   }
 
   String _voiceContext(List<SituationEvidence> snapshot) {
@@ -493,7 +502,7 @@ class SituationService extends ChangeNotifier {
     try {
       settings = await SituationSettings.load();
     } catch (_) {
-      status = 'LLM 설정을 읽지 못했습니다. 연결 설정을 확인하세요.';
+      status = '문맥 설정을 읽지 못했습니다. 연결 설정을 확인하세요.';
     }
     if (!_closed) _notify();
   }
@@ -558,10 +567,9 @@ class SituationService extends ChangeNotifier {
         recognition['running'] == true &&
         result is Map;
     final previousStatus = sensorStatus;
-    sensorStatus =
-        valid
-            ? 'CSI 분류: ${result['label'] ?? '판단 보류'}'
-            : 'CSI 판단 대기 · 재실 여부 미확인';
+    sensorStatus = valid
+        ? 'CSI 분류: ${result['label'] ?? '판단 보류'}'
+        : 'CSI 판단 대기 · 재실 여부 미확인';
     sensorAt = valid ? DateTime.now() : null;
     if (previousStatus != sensorStatus) {
       _notify();
@@ -729,8 +737,9 @@ class SituationService extends ChangeNotifier {
     if (!immediate && (_timer?.isActive ?? false)) return;
     _timer?.cancel();
     final backoff = _retryAfter.difference(DateTime.now());
-    var delay =
-        backoff.isNegative ? (immediate ? Duration.zero : debounce) : backoff;
+    var delay = backoff.isNegative
+        ? (immediate ? Duration.zero : debounce)
+        : backoff;
     // Captions render immediately. Background summaries leave CPU time for STT.
     if (_requestedVoice == null &&
         _requestedSign == null &&
@@ -745,14 +754,11 @@ class SituationService extends ChangeNotifier {
 
   Future<void> analyze() async {
     if (_closed || busy || !settings.enabled) return;
-    final snapshot =
-        _evidence
-            .where(
-              (e) =>
-                  DateTime.now().difference(e.time) <
-                  const Duration(minutes: 2),
-            )
-            .toList();
+    final snapshot = _evidence
+        .where(
+          (e) => DateTime.now().difference(e.time) < const Duration(minutes: 2),
+        )
+        .toList();
     if (snapshot.isEmpty &&
         _requestedSign == null &&
         _requestedVoice == null &&
@@ -775,18 +781,17 @@ class SituationService extends ChangeNotifier {
     if (_requestedSign != null) _pending = true;
     final captionGeneration = _captionGeneration;
     final started = DateTime.now();
-    status =
-        voice != null
-            ? '질문에 답하고 있어요'
-            : sign == null
-            ? '최근 대화·재난 상황 해석 중'
-            : '수어에 맞는 확인 질문을 만들고 있습니다';
+    status = voice != null
+        ? '질문에 답하고 있어요'
+        : sign == null
+        ? '최근 대화·재난 상황 해석 중'
+        : '수어에 맞는 확인 질문을 만들고 있습니다';
     _notify();
     final client = clientFactory();
     _client = client;
     try {
       settings.validate();
-      final key = Platform.environment['SAFEHUB_LLM_API_KEY'];
+      final key = Platform.environment['SAFEHUB_CONTEXT_API_KEY'];
       final result = await client
           .post(
             Uri.parse(settings.endpoint),
@@ -797,8 +802,6 @@ class SituationService extends ChangeNotifier {
             body: jsonEncode({
               'model': settings.model,
               'stream': false,
-              'temperature': 0.1,
-              'max_tokens': 192,
               'messages': [
                 {'role': 'system', 'content': _instructions},
                 {
@@ -806,35 +809,31 @@ class SituationService extends ChangeNotifier {
                   'content': jsonEncode(
                     settings.fastProtocol
                         ? {
-                          'task':
-                              voice != null
-                                  ? '집 안 정보로 음성 질문에 답변'
-                                  : sign == null
-                                  ? '집 안 화면 상태 분석'
-                                  : '선택한 문맥에 맞춰 수어에 응답',
-                          'source':
-                              voice != null
-                                  ? voice
-                                  : sign == null
-                                  ? ''
-                                  : sign.substring(
-                                    0,
-                                    sign.length.clamp(0, 120),
-                                  ),
-                          'selected_context':
-                              voice != null
-                                  ? _voiceContext(snapshot)
-                                  : _houseContext(snapshot),
-                        }
+                            'task': voice != null
+                                ? '집 안 정보로 음성 질문에 답변'
+                                : sign == null
+                                ? '집 안 화면 상태 분석'
+                                : '선택한 문맥에 맞춰 수어에 응답',
+                            'source': voice != null
+                                ? voice
+                                : sign == null
+                                ? ''
+                                : sign.substring(0, sign.length.clamp(0, 120)),
+                            'selected_context': voice != null
+                                ? _voiceContext(snapshot)
+                                : _houseContext(snapshot),
+                          }
                         : {
-                          'evidence': snapshot.map((e) => e.toJson()).toList(),
-                          'sensor_context':
-                              sensorAt != null &&
-                                      DateTime.now().difference(sensorAt!) <
-                                          const Duration(seconds: 5)
-                                  ? sensorStatus
-                                  : '센서 정보 없음',
-                        },
+                            'evidence': snapshot
+                                .map((e) => e.toJson())
+                                .toList(),
+                            'sensor_context':
+                                sensorAt != null &&
+                                    DateTime.now().difference(sensorAt!) <
+                                        const Duration(seconds: 5)
+                                ? sensorStatus
+                                : '센서 정보 없음',
+                          },
                   ),
                 },
               ],
@@ -931,12 +930,11 @@ class SituationService extends ChangeNotifier {
     } catch (error) {
       if (_closed || generation != _generation) return;
       assessment = null;
-      status =
-          error is TimeoutException
-              ? 'LLM 응답 지연 · 자막과 기존 경보는 계속 동작'
-              : error is FormatException
-              ? '문장 검증 실패 · 다시 확인해 주세요'
-              : 'LLM 연결 실패 · 주소·모델·서버 실행 상태 확인';
+      status = error is TimeoutException
+          ? '문맥 응답 지연 · 자막과 기존 경보는 계속 동작'
+          : error is FormatException
+          ? '문장 검증 실패 · 다시 확인해 주세요'
+          : '문맥 서비스 연결 실패 · 주소·모델·서버 실행 상태 확인';
       _retryAfter = DateTime.now().add(const Duration(seconds: 10));
     } finally {
       client.close();

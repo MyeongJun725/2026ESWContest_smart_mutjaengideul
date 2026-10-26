@@ -53,6 +53,52 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets(
+    'product can select an existing model without capture or training',
+    (t) async {
+      final state = liveState();
+      state['model'] = null;
+      final actions = <String>[];
+      final service = WifiSensingService(
+        baseUrl: 'http://localhost',
+        client: MockClient((request) async {
+          if (request.method == 'POST') {
+            actions.add(request.url.path);
+            expect(jsonDecode(request.body), {'id': 'model'});
+            state['model'] = (state['models'] as List).first;
+            state['recognition']['running'] = false;
+            return utf8Response('{"ok":true}', 200);
+          }
+          return utf8Response(jsonEncode(state), 200);
+        }),
+      );
+      addTearDown(service.close);
+      await t.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 650,
+              child: WifiActionStatus(
+                service: service,
+                allowModelSelection: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.pump();
+      await t.tap(find.byType(DropdownButtonFormField<String>));
+      await t.pumpAndSettle();
+      await t.tap(find.text('model').last);
+      await t.pumpAndSettle();
+      expect(actions, ['/command/select_model']);
+      expect(find.text('행동 인식 시작'), findsOneWidget);
+      expect(find.text('기록 · 학습'), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
+
   testWidgets('home polls lightweight state and clears action on disconnect', (
     tester,
   ) async {

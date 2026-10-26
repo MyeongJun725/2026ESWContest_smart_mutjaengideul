@@ -70,15 +70,37 @@ void main() {
       );
       expect(find.byTooltip('연결 설정'), findsOneWidget);
       expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
-      expect(find.byKey(const ValueKey('navigation-신호 관리')), findsOneWidget);
+      expect(
+        find.byKey(
+          ValueKey(
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+          ),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('연결 중'), findsNothing);
       expect(tester.takeException(), isNull);
 
-      await tester.tap(find.byKey(const ValueKey('navigation-신호 관리')));
+      await tester.tap(
+        find.byKey(
+          ValueKey(
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+          ),
+        ),
+      );
       await tester.pump();
-      expect(find.text('1. 신호 수집'), findsOneWidget);
-      expect(find.text('2. 기록 · 학습'), findsOneWidget);
-      expect(find.text('3. 현재 행동'), findsOneWidget);
+      expect(
+        find.text('1. 신호 수집'),
+        AppConfig.developerTools ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('2. 기록 · 학습'),
+        AppConfig.developerTools ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('3. 현재 행동'),
+        AppConfig.developerTools ? findsOneWidget : findsNothing,
+      );
       expect(
         find.text('장비 없이 모의 신호'),
         AppConfig.localPreview ? findsOneWidget : findsNothing,

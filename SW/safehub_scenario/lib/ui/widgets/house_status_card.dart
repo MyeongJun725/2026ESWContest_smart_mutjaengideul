@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../config/app_config.dart';
 import '../../core/house_scenario.dart';
 import '../../services/situation_service.dart';
 
@@ -7,7 +8,9 @@ class HouseStatusCard extends StatelessWidget {
     super.key,
     required this.service,
     required this.onAcknowledge,
+    this.developerTools = AppConfig.developerTools,
   });
+  final bool developerTools;
   final SituationService service;
   final VoidCallback onAcknowledge;
   @override
@@ -16,14 +19,13 @@ class HouseStatusCard extends StatelessWidget {
     builder: (context, _) {
       final incident = service.flow.active;
       final previous = service.flow.lastAcknowledged;
-      final title =
-          incident != null
-              ? (incident.kind == HouseScenario.assistance
-                  ? '도움 요청을 확인해 주세요'
-                  : '새 알림이 도착했어요')
-              : previous != null
-              ? '알림을 확인했어요'
-              : '새로운 알림이 없어요';
+      final title = incident != null
+          ? (incident.kind == HouseScenario.assistance
+                ? '도움 요청을 확인해 주세요'
+                : '새 알림이 도착했어요')
+          : previous != null
+          ? '알림을 확인했어요'
+          : '새로운 알림이 없어요';
       final detail =
           incident?.evidence ??
           (previous != null
@@ -32,10 +34,9 @@ class HouseStatusCard extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         decoration: BoxDecoration(
-          color:
-              incident != null || service.scenarioTestMode
-                  ? const Color(0xFFFFF3D6)
-                  : Colors.white,
+          color: incident != null || service.scenarioTestMode
+              ? const Color(0xFFFFF3D6)
+              : Colors.white,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: const Color(0xFFE5DFD8)),
           boxShadow: const [
@@ -52,10 +53,9 @@ class HouseStatusCard extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color:
-                    incident == null
-                        ? const Color(0xFFF6ECEF)
-                        : const Color(0xFFFFE7AE),
+                color: incident == null
+                    ? const Color(0xFFF6ECEF)
+                    : const Color(0xFFFFE7AE),
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Icon(
@@ -92,7 +92,9 @@ class HouseStatusCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     service.scenarioTestMode
-                        ? (service.scenarioActuators ? '시연 입력 · 실제 LED·진동 연동' : '화면 테스트 · 실제 장치 작동 없음')
+                        ? (service.scenarioActuators
+                              ? '시연 입력 · 실제 LED·진동 연동'
+                              : '화면 테스트 · 실제 장치 작동 없음')
                         : detail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -114,13 +116,14 @@ class HouseStatusCard extends StatelessWidget {
                   style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
                 ),
               ),
-            TextButton(
-              onPressed: () => showScenarioTest(context, service),
-              child: const Text(
-                '시나리오 테스트',
-                style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+            if (developerTools)
+              TextButton(
+                onPressed: () => showScenarioTest(context, service),
+                child: const Text(
+                  '시나리오 테스트',
+                  style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+                ),
               ),
-            ),
             if (incident != null)
               TextButton(
                 onPressed: service.openHelp,
@@ -132,40 +135,37 @@ class HouseStatusCard extends StatelessWidget {
             IconButton(
               tooltip: '상황 상세 보기',
               icon: const Icon(Icons.expand_more),
-              onPressed:
-                  () => showDialog<void>(
-                    context: context,
-                    builder:
-                        (context) => AlertDialog(
-                          title: const Text('확인한 내용'),
-                          content: SizedBox(
-                            width: 650,
-                            child: SingleChildScrollView(
-                              child: Text(
-                                [
-                                  detail,
-                                  service.sensorStatus,
-                                  if (incident != null) incident.delivery,
-                                  if (!service.assessmentStale)
-                                    service.assessment!.summary,
-                                  if (previous != null)
-                                    '알림 확인은 위험 해제를 의미하지 않아요.',
-                                ].join('\n\n'),
-                                style: const TextStyle(
-                                  fontFamily: 'Pretendard',
-                                  fontSize: 22,
-                                ),
-                              ),
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('닫기'),
-                            ),
-                          ],
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('확인한 내용'),
+                  content: SizedBox(
+                    width: 650,
+                    child: SingleChildScrollView(
+                      child: Text(
+                        [
+                          detail,
+                          service.sensorStatus,
+                          if (incident != null) incident.delivery,
+                          if (!service.assessmentStale)
+                            service.assessment!.summary,
+                          if (previous != null) '알림 확인은 위험 해제를 의미하지 않아요.',
+                        ].join('\n\n'),
+                        style: const TextStyle(
+                          fontFamily: 'Pretendard',
+                          fontSize: 22,
                         ),
+                      ),
+                    ),
                   ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('닫기'),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -282,7 +282,11 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
             setState(() => error = '입력 문장을 적어주세요.');
             return;
           }
-          if (!widget.service.startScenarioTest(kind, text.text.trim(), actuate: actuate)) {
+          if (!widget.service.startScenarioTest(
+            kind,
+            text.text.trim(),
+            actuate: actuate,
+          )) {
             setState(() => error = '실제 알림이 있습니다. 먼저 확인한 뒤 테스트를 시작하세요.');
             return;
           }

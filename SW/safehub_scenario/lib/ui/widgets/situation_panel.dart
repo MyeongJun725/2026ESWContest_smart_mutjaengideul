@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../config/app_config.dart';
 
 import '../../services/live_caption_service.dart';
 import '../../services/situation_service.dart';
@@ -48,82 +49,81 @@ class SituationPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: service,
-    builder:
-        (context, _) => Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: _panel,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFE9E8E5)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    builder: (context, _) => Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE9E8E5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 20,
+            runSpacing: 8,
             children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 20,
-                runSpacing: 8,
-                children: [
-                  _label('지금 우리 집', size: 28, bold: true),
-                  _label('음성·재난 확인 → 알림 → 수어·터치 응답', color: _accent),
-                ],
+              _label('지금 우리 집', size: 28, bold: true),
+              _label('음성·재난 확인 → 알림 → 수어·터치 응답', color: _accent),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _label(
+            service.assessmentStale
+                ? '최근 정보를 확인하고 있어요'
+                : service.assessment!.title,
+            size: 22,
+            bold: true,
+          ),
+          if (!service.assessmentStale) ...[
+            const SizedBox(height: 6),
+            _label(service.assessment!.summary),
+            _label('AI 상황 해석 · 원문과 함께 확인하세요', size: 14, color: _muted),
+          ],
+          const SizedBox(height: 10),
+          _label(
+            service.settings.enabled ? service.status : '문맥 설명 꺼짐',
+            color: _muted,
+            size: 15,
+          ),
+          _label(
+            '${service.sensorStatus} · 움직임만으로 부재·의식 상태를 판단하지 않습니다.',
+            color: _muted,
+            size: 15,
+          ),
+          if (service.evidence.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: _label(
+                '최근 원문 | ${service.evidence.last.source}: ${service.evidence.last.text}',
+                size: 16,
               ),
-              const SizedBox(height: 10),
-              _label(
-                service.assessmentStale
-                    ? '최근 정보를 확인하고 있어요'
-                    : service.assessment!.title,
-                size: 22,
-                bold: true,
+            ),
+          if (service.signQuestion.isNotEmpty)
+            _label('AI 확인 질문: ${service.signQuestion}', color: _accent),
+          if (service.pendingSign.isNotEmpty)
+            _button('수어로 질문: ${service.pendingSign}', service.confirmSign),
+          const SizedBox(height: 12),
+          Wrap(
+            children: [
+              _button('도움이 필요해요', service.openHelp, primary: true),
+              _button(
+                '지금 상황 다시 확인',
+                service.busy || !service.settings.enabled
+                    ? null
+                    : () => service.requestAssessment(immediate: true),
               ),
-              if (!service.assessmentStale) ...[
-                const SizedBox(height: 6),
-                _label(service.assessment!.summary),
-                _label('AI 상황 해석 · 원문과 함께 확인하세요', size: 14, color: _muted),
-              ],
-              const SizedBox(height: 10),
-              _label(
-                service.settings.enabled ? service.status : 'LLM 상황 해석 꺼짐',
-                color: _muted,
-                size: 15,
-              ),
-              _label(
-                '${service.sensorStatus} · 움직임만으로 부재·의식 상태를 판단하지 않습니다.',
-                color: _muted,
-                size: 15,
-              ),
-              if (service.evidence.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: _label(
-                    '최근 원문 | ${service.evidence.last.source}: ${service.evidence.last.text}',
-                    size: 16,
-                  ),
-                ),
-              if (service.signQuestion.isNotEmpty)
-                _label('AI 확인 질문: ${service.signQuestion}', color: _accent),
-              if (service.pendingSign.isNotEmpty)
-                _button('수어로 질문: ${service.pendingSign}', service.confirmSign),
-              const SizedBox(height: 12),
-              Wrap(
-                children: [
-                  _button('도움이 필요해요', service.openHelp, primary: true),
-                  _button(
-                    '지금 상황 다시 확인',
-                    service.busy || !service.settings.enabled
-                        ? null
-                        : () => service.requestAssessment(immediate: true),
-                  ),
-                  _button(
-                    'AI·알림 설정',
-                    () => showSituationSettings(context, service),
-                  ),
-                ],
+              _button(
+                'AI·알림 설정',
+                () => showSituationSettings(context, service),
               ),
             ],
           ),
-        ),
+        ],
+      ),
+    ),
   );
 }
 
@@ -149,7 +149,6 @@ class _SituationSettingsDialogState extends State<_SituationSettingsDialog> {
   late final endpoint = TextEditingController(
     text: widget.service.settings.endpoint,
   );
-  late final model = TextEditingController(text: widget.service.settings.model);
   late final homeRegion = TextEditingController(
     text: widget.service.settings.homeRegion,
   );
@@ -176,8 +175,8 @@ class _SituationSettingsDialogState extends State<_SituationSettingsDialog> {
     try {
       final settings = SituationSettings(
         endpoint: endpoint.text.trim(),
-        model: model.text.trim(),
-        fastProtocol: widget.service.settings.fastProtocol,
+        model: SituationSettings.contextModel,
+        fastProtocol: true,
         enabled: enabled,
         monitorAnnouncements: monitoring,
         address: address.text.trim(),
@@ -209,24 +208,23 @@ class _SituationSettingsDialogState extends State<_SituationSettingsDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'LiteRT-LM 0.18.1 · OpenAI 호환 API\n127.0.0.1은 이 화면을 실행하는 기기입니다. LLM이 다른 기기에 있으면 그 기기의 주소를 입력하세요.',
+              'fastText 기반 문맥 설명 · 생성형 LLM을 사용하지 않습니다.\n127.0.0.1은 이 화면을 실행하는 기기입니다. 실제 모델과 서버 준비 상태를 확인하세요.',
             ),
             const SizedBox(height: 12),
             TextField(
               controller: endpoint,
-              decoration: const InputDecoration(labelText: 'LLM 전체 API 주소'),
+              decoration: const InputDecoration(
+                labelText: 'fastText 문맥 서비스 API 주소',
+              ),
             ),
-            TextField(
-              controller: model,
-              decoration: const InputDecoration(labelText: '모델 이름'),
-            ),
+            const Text('모델: fasttext-fire-screen · 실제 모델 파일은 별도 준비'),
             SwitchListTile(
               title: const Text('상황 해석 사용'),
               value: enabled,
               onChanged: (v) => setState(() => enabled = v),
             ),
             const Text(
-              '확정 음성·재난·센서·수어·최근 이벤트를 로컬 AI로 분석합니다. 의미 있는 변화가 생기면 자동 분석합니다. 카메라는 연결 상태와 수어 결과만 반영하며 영상·원본 음성을 LLM에 보내지 않습니다. 팀에서 운영하는 로컬 서버 주소를 사용하세요.',
+              '확정 자막과 사건 문맥을 규칙·fastText로 설명합니다. 점수는 실제 위험 확률이 아니며 즉시 경보는 설명 서버를 기다리지 않습니다. 영상과 원본 음성은 보내지 않습니다. 이전 생성형 설정은 자동 호출하지 않고 설명을 꺼 둡니다. 주소·실제 모델을 확인한 뒤 켜세요.',
             ),
             SwitchListTile(
               title: const Text('긴급 안내방송 확인 화면 자동 표시'),
@@ -292,14 +290,7 @@ class _SituationSettingsDialogState extends State<_SituationSettingsDialog> {
 
   @override
   void dispose() {
-    for (final controller in [
-      endpoint,
-      model,
-      address,
-      homeRegion,
-      ledOn,
-      ledOff,
-    ]) {
+    for (final controller in [endpoint, address, homeRegion, ledOn, ledOff]) {
       controller.dispose();
     }
     super.dispose();
@@ -372,7 +363,9 @@ class SituationResponse extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        service.scenarioActuators ? '시연 입력 · 실제 LED·진동 작동 / 신고 전송 없음' : '테스트 · 실제 장치 명령과 신고 전송 없음',
+                        service.scenarioActuators
+                            ? '시연 입력 · 실제 LED·진동 작동 / 신고 전송 없음'
+                            : '테스트 · 실제 장치 명령과 신고 전송 없음',
                         style: TextStyle(
                           color: Color(0xFF8C5300),
                           fontWeight: FontWeight.bold,
@@ -433,7 +426,7 @@ class SituationResponse extends StatelessWidget {
                             : service.confirmSign,
                       ),
                       _label('수어 인식 결과를 확인한 뒤 응답합니다.', size: 14, color: _muted),
-                      if (service.scenarioTestMode)
+                      if (AppConfig.developerTools && service.scenarioTestMode)
                         _TestSignInput(service: service),
                     ],
                   );
@@ -504,11 +497,10 @@ class SituationResponse extends StatelessWidget {
               if (!service.scenarioTestMode)
                 AnimatedBuilder(
                   animation: Listenable.merge([captions, service]),
-                  builder:
-                      (context, child) => _label(
-                        '계속 듣는 음성자막\n${[service.finalCaptionText, if (captions.listening && !captions.serverError) captions.draftText].where((s) => s.isNotEmpty).join('\n')}',
-                        size: 19,
-                      ),
+                  builder: (context, child) => _label(
+                    '계속 듣는 음성자막\n${[service.finalCaptionText, if (captions.listening && !captions.serverError) captions.draftText].where((s) => s.isNotEmpty).join('\n')}',
+                    size: 19,
+                  ),
                 ),
               const SizedBox(height: 16),
               _label(
@@ -565,8 +557,8 @@ class _TestSignInputState extends State<_TestSignInput> {
         decoration: const InputDecoration(labelText: '테스트 수어 · 인식 결과 대신 입력'),
       ),
       TextButton(
-        onPressed:
-            () => widget.service.receiveSign(text.text.trim(), simulated: true),
+        onPressed: () =>
+            widget.service.receiveSign(text.text.trim(), simulated: true),
         child: const Text('테스트 수어 넣기'),
       ),
     ],

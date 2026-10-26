@@ -34,6 +34,7 @@ void main() {
                     child: SizedBox(
                       height: 160,
                       child: HouseStatusCard(
+                        developerTools: true,
                         service: service,
                         onAcknowledge: service.acknowledge,
                       ),
