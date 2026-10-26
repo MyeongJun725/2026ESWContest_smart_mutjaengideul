@@ -83,10 +83,11 @@
   },
   "not_run": [
     "ATLAS UI ARM64 package build",
-    "PR9 independent ARM64 portable build/static ABI rerun (target collection and candidate absent)",
+    "PR9 independent ARM64 portable build/static ABI rerun (target collection and candidate unconfirmed/unavailable here)",
     "PR9 optional OpenCV/ORT geometry tests and extra live vision translation-unit build",
     "Arduino Uno compile (sketch/build manifest not received)",
-    "RPi4/RPi5/Uno physical execution or deployment"
+    "RPi4/RPi5/Uno physical execution or deployment",
+    "Real fastText fire_screen_model.bin load/predict/HTTP and target ARM64 runtime"
   ],
   "reported_pr9_arm64": {
     "source": "docs/sign/word1229-portable-abi.json at ae887ac277bb0e3fc95ad4dc766f678b29bb9876",
@@ -132,5 +133,18 @@
     "included": true,
     "deployed": false,
     "host_cpp_passed": 19
+  },
+  "resume": {
+    "source_checkpoint": "0e09f4ad788aaba186243c325a5d44819a734415",
+    "remote_pr11_before_push": "a55f263a35d4ac22171914ca716c55cb13243e4b",
+    "dirty_or_untracked_on_resume": false,
+    "merge_in_progress": false,
+    "flutter_source_files_compared": 92,
+    "flutter_source_mismatches": 0,
+    "refs_rechecked_unchanged": true,
+    "runtime_probe": "real fasttext import/native tokenize and uv pip check passed",
+    "model_load_predict_http": "not_run; model unconfirmed/unavailable",
+    "context_fake_model_recheck_passed": 8,
+    "affected_flutter_recheck_passed": 13
   }
 }

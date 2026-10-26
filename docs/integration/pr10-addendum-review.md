@@ -94,6 +94,41 @@ GCC 지정으로 해결했다. 이것은 ARM64 또는 `fire_screen_model.bin` �
 미실행이다. `target_execution_performed=false`, `deployed=false`. 카메라·모델·수어 정확도/
 지연·정상 한 손 오차단은 확인하지 않았다. host 통과를 실제 장치 결과로 확대하지 않는다.
 
+## 2026-10-27 중단 복구와 검증 대응
+
+- 재개 시 로컬 `0e09f4ad788aaba186243c325a5d44819a734415`, 원격 #11
+  `a55f263a35d4ac22171914ca716c55cb13243e4b`. 미커밋/미추적 소스와 MERGE_HEAD는 없었다.
+  추가 복구 bundle·상태·로그/소스 SHA256 목록은
+  `/workspace/.cloud-setup/resume-preservation-20261027/`에 보존했다.
+- 위 PR refs와 main/develop은 재조회 때 동일했다. `dcf2bcb`가 #10 merge,
+  `e356983`이 #9 merge, `0e09f4a`가 안전 경계 수정·검증 기록이다.
+  #9 두 C++ 소스 디렉터리는 고정 PR9 SHA와 차이가 없다.
+- 기존 전체 Flutter 로그 `addendum-flutter-verified.log`는 265 pass/1 skip이다.
+  검사 호스트와 현재 `lib`/`test` 92개 파일이 일치한다. 전체 통과 후 nullable 경고
+  한 개를 제거한 변경은 해당 사건/장치 경로 13개를 재검사해 통과했다 (`resume-flutter-affected.log`).
+  후보 pubspec/manifest 버전 조정은 설치 패키지 재현의 증거가 아니다.
+- fastText 최초 실패 명령: `uv pip install --python
+  /workspace/.cloud-setup/fasttext-venv/bin/python fasttext==0.9.3 numpy==1.26.4`.
+  CPython 3.12.14의 sysconfig CXX는 `clang++ -pthread`이나 clang++ 실행 파일이
+  없었다. 패키지의 C++17 probe 실패가 `Unsupported compiler`로 보고됐다.
+  setuptools의 description-file 경고는 이번 실패의 직접 원인이 아니다.
+- `CC=gcc CXX=g++`로 GCC/G++ 14.2.0을 지정해 실제 native wheel 빌드 성공.
+  설치 결과 fastText 0.9.3 / NumPy 1.26.4 / pybind11 3.1.0 / setuptools 84.2.1.
+  실패/해결 로그는 `addendum-fasttext-install.log`, `addendum-fasttext-install-fixed.log`.
+- 재현 명령: `UV_CACHE_DIR=/workspace/.cloud-setup/uv-cache bash
+  SW/fasttext_context/tools/install_host.sh /workspace/.cloud-setup/fasttext-venv`.
+  현재 venv에서 재실행해 의존성 호환 검사와 실제 native `tokenize` API를 확인했다.
+  설치 스크립트는 저장소 밖 venv만 허용하며 서비스/장치를 제어하지 않는다.
+- `tools/check_runtime.py --model <확보한 기존 모델>`은 추후 로드/분류/해시 확인용이며
+  모델을 학습하거나 대체하지 않는다. 현재 작업 공간에서 `fire_screen_model.bin`은
+  확보하지 못했다. 실제 모델 로드/분류/HTTP 응답과 ARM64 런타임 검증은 **미실행**이다.
+  모델이 다른 장치/보관본에 없다고 단정하지 않는다.
+- 설치 런타임에서 문맥/HTTP 8개를 재실행해 통과했다. 이 테스트는 여전히 가짜 모델을
+  주입하므로 실제 모델의 정확도나 실제 모델 HTTP 검증으로 세지 않는다.
+  설치 스크립트와 시작 안내는 기존 CSI 설정을 보존하여 환경 설정 초안에도 저장했다.
+  저장은 새 환경에서의 복원·실행이나 게시를 입증하지 않는다.
+  런타임 probe·설치 로그: `resume-fasttext-runtime.log`; 규칙/HTTP: `resume-context.log`.
+
 ## 장치 자료를 확보할 단계의 일괄 체크리스트
 
 1. AppManager GetInfo/GetStatus와 설치 manifest/패키지 SHA256, 실제 실행 ELF, 빌드 소스
