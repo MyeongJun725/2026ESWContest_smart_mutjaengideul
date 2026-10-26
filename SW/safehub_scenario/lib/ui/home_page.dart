@@ -9,6 +9,7 @@ import '../config/app_config.dart';
 import '../core/alert_coordinator.dart';
 import '../core/house_scenario.dart';
 import 'widgets/house_status_card.dart';
+import 'widgets/editable_dashboard.dart';
 import 'widgets/scenario_event_overlay.dart';
 import '../core/appliance_controls.dart';
 import '../core/event_manager.dart';
@@ -46,6 +47,7 @@ class SafeHubHomePage extends StatefulWidget {
 
 class _SafeHubHomePageState extends State<SafeHubHomePage>
     with SingleTickerProviderStateMixin {
+  bool _layoutEditing = false;
   final EventManager _eventManager = EventManager();
   final ApplianceControls _appliances = ApplianceControls();
   final DisasterService _disasterService = DisasterService();

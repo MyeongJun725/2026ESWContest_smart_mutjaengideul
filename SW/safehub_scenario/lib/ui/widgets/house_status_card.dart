@@ -38,17 +38,53 @@ class HouseStatusCard extends StatelessWidget {
                   : Colors.white,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: const Color(0xFFE5DFD8)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x063E2830),
+              blurRadius: 20,
+              offset: Offset(0, 5),
+            ),
+          ],
         ),
         child: Row(
           children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color:
+                    incident == null
+                        ? const Color(0xFFF6ECEF)
+                        : const Color(0xFFFFE7AE),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(
+                incident == null
+                    ? Icons.home_outlined
+                    : Icons.notifications_active_outlined,
+                color: const Color(0xFF8D2345),
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 18),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  const Text(
+                    '우리 집',
+                    style: TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF625E5A),
+                    ),
+                  ),
                   Text(
                     title,
                     style: const TextStyle(
+                      fontFamily: 'Pretendard',
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
                     ),
@@ -57,10 +93,11 @@ class HouseStatusCard extends StatelessWidget {
                   Text(
                     service.scenarioTestMode
                         ? '시연 모드 · 실제 장치는 작동하지 않아요.'
-                      : detail,
+                        : detail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
+                      fontFamily: 'Pretendard',
                       fontSize: 20,
                       color: Color(0xFF625E5A),
                     ),
@@ -72,16 +109,25 @@ class HouseStatusCard extends StatelessWidget {
             if (service.scenarioTestMode)
               TextButton(
                 onPressed: service.endScenarioTest,
-                child: const Text('시연 종료', style: TextStyle(fontSize: 20)),
+                child: const Text(
+                  '시연 종료',
+                  style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+                ),
               ),
             TextButton(
               onPressed: () => showScenarioTest(context, service),
-              child: const Text('시나리오 테스트', style: TextStyle(fontSize: 20)),
+              child: const Text(
+                '시나리오 테스트',
+                style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+              ),
             ),
             if (incident != null)
               TextButton(
                 onPressed: service.openHelp,
-                child: const Text('상황 응답 · 도움', style: TextStyle(fontSize: 20)),
+                child: const Text(
+                  '상황 응답 · 도움',
+                  style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+                ),
               ),
             IconButton(
               tooltip: '상황 상세 보기',
@@ -105,7 +151,10 @@ class HouseStatusCard extends StatelessWidget {
                                   if (previous != null)
                                     '알림 확인은 위험 해제를 의미하지 않아요.',
                                 ].join('\n\n'),
-                                style: const TextStyle(fontSize: 22),
+                                style: const TextStyle(
+                                  fontFamily: 'Pretendard',
+                                  fontSize: 22,
+                                ),
                               ),
                             ),
                           ),
@@ -203,7 +252,13 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
               '진행: 화면 알림 → 상황 응답 · 도움 → 터치 또는 테스트 수어 → 도움 요청 문안 → 확인했어요',
             ),
             if (error.isNotEmpty)
-              Text(error, style: const TextStyle(color: Colors.red)),
+              Text(
+                error,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  color: Colors.red,
+                ),
+              ),
           ],
         ),
       ),

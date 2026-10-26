@@ -25,6 +25,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
       accent = Color(0xFF8D2345);
   String reaction = '미확인', target = '본인', request = '', draft = '';
   bool details = false;
+  double cameraHeight = 340;
   @override
   void initState() {
     super.initState();
@@ -74,6 +75,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
     maxLines: lines,
     overflow: lines == null ? null : TextOverflow.ellipsis,
     style: TextStyle(
+      fontFamily: 'Pretendard',
       fontSize: size,
       height: 1.4,
       color: color,
@@ -92,10 +94,15 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
       icon: Icon(
         icon ?? (primary ? Icons.check_rounded : Icons.arrow_forward_rounded),
         size: 26,
+        color: primary ? Colors.white : accent,
       ),
       label: Text(
         label,
-        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+        style: const TextStyle(
+          fontFamily: 'Pretendard',
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+        ),
       ),
       style: FilledButton.styleFrom(
         backgroundColor: primary ? accent : const Color(0xFFF2EEEA),
@@ -150,6 +157,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
         SelectableText(
           incident?.evidence ?? '원문을 확인해 주세요.',
           style: const TextStyle(
+            fontFamily: 'Pretendard',
             fontSize: 28,
             height: 1.5,
             fontWeight: FontWeight.w600,
@@ -169,7 +177,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
         icon: Icon(details ? Icons.expand_less : Icons.expand_more),
         label: Text(
           details ? '상세 내용 접기' : '시간·알림 전달 상태 보기',
-          style: const TextStyle(fontSize: 20),
+          style: const TextStyle(fontFamily: 'Pretendard', fontSize: 20),
         ),
       ),
       if (details)
@@ -182,7 +190,10 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
               text('확인은 알림을 읽었다는 뜻이며 위험 해제를 의미하지 않아요.', size: 20),
               TextButton(
                 onPressed: widget.onSignal,
-                child: const Text('빛·진동 다시 알림', style: TextStyle(fontSize: 20)),
+                child: const Text(
+                  '빛·진동 다시 알림',
+                  style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+                ),
               ),
             ],
           ),
@@ -199,13 +210,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
-            child: SizedBox(
-              height: (MediaQuery.sizeOf(context).height - 430).clamp(
-                160.0,
-                540.0,
-              ),
-              child: widget.camera,
-            ),
+            child: SizedBox(height: cameraHeight, child: widget.camera),
           ),
           const SizedBox(height: 14),
           text(
@@ -236,7 +241,9 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
                   reaction = '미확인';
                 }),
             style: ButtonStyle(
-              textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 18)),
+              textStyle: WidgetStateProperty.all(
+                const TextStyle(fontFamily: 'Pretendard', fontSize: 18),
+              ),
               minimumSize: WidgetStateProperty.all(const Size(0, 58)),
             ),
           ),
@@ -253,7 +260,10 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
                         (value) => ChoiceChip(
                           label: Text(
                             value,
-                            style: const TextStyle(fontSize: 20),
+                            style: const TextStyle(
+                              fontFamily: 'Pretendard',
+                              fontSize: 20,
+                            ),
                           ),
                           selected: reaction == value,
                           padding: const EdgeInsets.all(10),
@@ -299,7 +309,12 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
       box(
         SelectableText(
           draft,
-          style: const TextStyle(fontSize: 26, height: 1.6, color: ink),
+          style: const TextStyle(
+            fontFamily: 'Pretendard',
+            fontSize: 26,
+            height: 1.6,
+            color: ink,
+          ),
         ),
       ),
       const SizedBox(height: 20),
@@ -326,136 +341,219 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
     builder:
         (context, _) => BlockSemantics(
           child: Material(
-            color: const Color(0xB3242424),
+            color: const Color(0x802B2529),
             child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1440),
-                    child: Material(
-                      color: const Color(0xFFFFFEFC),
-                      borderRadius: BorderRadius.circular(24),
-                      clipBehavior: Clip.antiAlias,
-                      child: Padding(
-                        padding: const EdgeInsets.all(28),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
+              child: LayoutBuilder(
+                builder: (context, bounds) {
+                  final helpPage = helping && draft.isEmpty;
+                  final height = (helpPage
+                          ? 820.0
+                          : draft.isNotEmpty
+                          ? 670.0
+                          : 610.0)
+                      .clamp(0.0, bounds.maxHeight - 32);
+                  cameraHeight = (height - (simulated ? 340 : 310)).clamp(
+                    150.0,
+                    430.0,
+                  );
+                  final time = incident?.receivedAt;
+                  final received =
+                      time == null
+                          ? ''
+                          : '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')} 수신';
+                  return Center(
+                    child: Container(
+                      width: (helpPage ? 1280.0 : 1000.0).clamp(
+                        0.0,
+                        bounds.maxWidth - 32,
+                      ),
+                      height: height,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEFDFC),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFFF7F2ED)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x2631252B),
+                            blurRadius: 40,
+                            offset: Offset(0, 18),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Padding(
+                            padding: const EdgeInsets.all(26),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Icon(
-                                  helping
-                                      ? Icons.front_hand_outlined
-                                      : Icons.campaign_outlined,
-                                  color: accent,
-                                  size: 32,
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 48,
+                                      height: 48,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF7E8ED),
+                                        borderRadius: BorderRadius.circular(15),
+                                      ),
+                                      child: Icon(
+                                        helping
+                                            ? Icons.front_hand_outlined
+                                            : Icons.campaign_outlined,
+                                        color: accent,
+                                        size: 27,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: text(
+                                        kindName,
+                                        size: 18,
+                                        bold: true,
+                                        color: accent,
+                                      ),
+                                    ),
+                                    if (simulated)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFF3D6),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: text(
+                                          '시연',
+                                          size: 16,
+                                          bold: true,
+                                          color: const Color(0xFF513A12),
+                                        ),
+                                      )
+                                    else
+                                      text(received, size: 16, color: muted),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      tooltip: '알림 창 닫기',
+                                      onPressed:
+                                          helping
+                                              ? closeHelp
+                                              : widget.onAcknowledge,
+                                      iconSize: 26,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 52,
+                                        minHeight: 52,
+                                      ),
+                                      icon: const Icon(
+                                        Icons.close_rounded,
+                                        color: muted,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(height: 20),
+                                Semantics(
+                                  liveRegion: true,
+                                  child: text(headline, size: 34, bold: true),
+                                ),
+                                const SizedBox(height: 18),
                                 Expanded(
-                                  child: text(
-                                    kindName,
-                                    size: 20,
-                                    bold: true,
-                                    color: accent,
-                                  ),
-                                ),
-                                if (simulated)
-                                  text(
-                                    '시연 · 장치 작동 없음',
-                                    size: 18,
-                                    color: accent,
-                                  ),
-                                const SizedBox(width: 12),
-                                IconButton(
-                                  tooltip: '알림 창 닫기',
-                                  onPressed:
-                                      helping
-                                          ? closeHelp
-                                          : widget.onAcknowledge,
-                                  iconSize: 32,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 56,
-                                    minHeight: 56,
-                                  ),
-                                  icon: const Icon(Icons.close),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Semantics(
-                              liveRegion: true,
-                              child: text(headline, size: 36, bold: true),
-                            ),
-                            const SizedBox(height: 18),
-                            Expanded(
-                              child: SingleChildScrollView(
-                                child:
-                                    draft.isNotEmpty
-                                        ? report()
-                                        : helping
-                                        ? help()
-                                        : notice(),
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            if (simulated)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: text(
-                                  '시연 모드 · 실제 장치와 신고는 작동하지 않아요.',
-                                  size: 20,
-                                  color: accent,
-                                ),
-                              ),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: button(
-                                    draft.isNotEmpty
-                                        ? '다시 선택하기'
-                                        : helping
-                                        ? '괜찮아요'
-                                        : '도움이 필요해요',
-                                    () {
-                                      if (draft.isNotEmpty) {
-                                        setState(() => draft = '');
-                                      } else if (helping) {
-                                        closeHelp();
-                                      } else {
-                                        service.openHelp();
-                                      }
-                                    },
-                                    icon:
+                                  child: SingleChildScrollView(
+                                    child:
                                         draft.isNotEmpty
-                                            ? Icons.arrow_back
-                                            : Icons.front_hand_outlined,
+                                            ? report()
+                                            : helping
+                                            ? help()
+                                            : notice(),
                                   ),
                                 ),
-                                const SizedBox(width: 16),
-                                if (!helping || draft.isNotEmpty)
-                                  Expanded(
-                                    child: button(
-                                      draft.isNotEmpty
-                                          ? '확인하고 돌아가기'
-                                          : incident?.kind ==
-                                              HouseScenario.broadcast
-                                          ? '방송 확인했어요'
-                                          : '알림 확인했어요',
-                                      helping
-                                          ? closeHelp
-                                          : widget.onAcknowledge,
-                                      primary: true,
+                                const SizedBox(height: 16),
+                                if (simulated)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 14),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFF3D6),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.science_outlined,
+                                            color: Color(0xFF513A12),
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: text(
+                                              '시연 모드 · 실제 장치와 신고는 작동하지 않아요.',
+                                              size: 18,
+                                              color: const Color(0xFF513A12),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: button(
+                                        draft.isNotEmpty
+                                            ? '다시 선택하기'
+                                            : helping
+                                            ? '괜찮아요'
+                                            : '도움이 필요해요',
+                                        () {
+                                          if (draft.isNotEmpty) {
+                                            setState(() => draft = '');
+                                          } else if (helping) {
+                                            closeHelp();
+                                          } else {
+                                            service.openHelp();
+                                          }
+                                        },
+                                        icon:
+                                            draft.isNotEmpty
+                                                ? Icons.arrow_back_rounded
+                                                : Icons.front_hand_outlined,
+                                      ),
+                                    ),
+                                    if (!helping || draft.isNotEmpty) ...[
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: button(
+                                          draft.isNotEmpty
+                                              ? '확인하고 돌아가기'
+                                              : incident?.kind ==
+                                                  HouseScenario.broadcast
+                                              ? '방송 확인했어요'
+                                              : '알림 확인했어요',
+                                          helping
+                                              ? closeHelp
+                                              : widget.onAcknowledge,
+                                          primary: true,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ),

@@ -18,6 +18,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
     maxLines: lines,
     overflow: TextOverflow.ellipsis,
     style: TextStyle(
+      fontFamily: 'Pretendard',
       fontSize: size,
       height: 1.4,
       color: color,
@@ -37,6 +38,13 @@ extension _HomeDashboard on _SafeHubHomePageState {
       color: Colors.white,
       borderRadius: BorderRadius.circular(24),
       border: Border.all(color: _line),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x073E2830),
+          blurRadius: 20,
+          offset: Offset(0, 6),
+        ),
+      ],
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -81,13 +89,26 @@ extension _HomeDashboard on _SafeHubHomePageState {
       foregroundColor: selected ? _accent : _secondary,
       backgroundColor: selected ? const Color(0xFFF7EDEF) : Colors.transparent,
       minimumSize: const Size(80, 48),
-      textStyle: const TextStyle(fontSize: 16),
+      textStyle: const TextStyle(fontFamily: 'Pretendard', fontSize: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
   );
 
-  Widget _modernHeader() => SizedBox(
-    height: 64,
+  Widget _modernHeader() => Container(
+    height: 72,
+    padding: const EdgeInsets.symmetric(horizontal: 18),
+    decoration: BoxDecoration(
+      color: const Color(0xF2FFFFFF),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: const Color(0xFFEAE5DF)),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x073E2830),
+          blurRadius: 18,
+          offset: Offset(0, 5),
+        ),
+      ],
+    ),
     child: Row(
       children: [
         const Icon(Icons.home_rounded, size: 34, color: _accent),
@@ -129,6 +150,18 @@ extension _HomeDashboard on _SafeHubHomePageState {
         ),
         const SizedBox(width: 12),
         IconButton(
+          tooltip: '화면 배치 편집',
+          onPressed:
+              () => setState(() {
+                _currentPage = _SafeHubPage.home;
+                _layoutEditing = !_layoutEditing;
+              }),
+          icon: Icon(
+            Icons.dashboard_customize_outlined,
+            color: _layoutEditing ? _accent : _secondary,
+          ),
+        ),
+        IconButton(
           tooltip: 'AI·알림 설정',
           onPressed: () => showSituationSettings(context, _situation),
           icon: const Icon(Icons.auto_awesome_outlined, color: _secondary),
@@ -142,69 +175,158 @@ extension _HomeDashboard on _SafeHubHomePageState {
     ),
   );
 
-  Widget _modernDashboard(SafeHubAlert? alert) => Column(
-    children: [
-      HouseStatusCard(
+  Widget _modernDashboard(SafeHubAlert? alert) => EditableDashboard(
+    editing: _layoutEditing,
+    onEditingChanged: (value) => setState(() => _layoutEditing = value),
+    tiles: {
+      'status': HouseStatusCard(
         service: _situation,
         onAcknowledge: _situation.acknowledge,
       ),
-      const SizedBox(height: 18),
-      Expanded(
+      'camera': _modernCamera(),
+      'captions': _modernCaptions(),
+      'notices': _notificationSummary(),
+      'help': _helpSummary(),
+      'csi': _csiSummary(),
+    },
+  );
+  Widget _helpSummary() => Material(
+    color: _accent,
+    borderRadius: BorderRadius.circular(22),
+    child: InkWell(
+      onTap: _situation.openHelp,
+      borderRadius: BorderRadius.circular(22),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(flex: 62, child: _modernCamera()),
-            const SizedBox(width: 20),
+            const Icon(
+              Icons.front_hand_outlined,
+              color: Colors.white,
+              size: 32,
+            ),
+            const SizedBox(width: 14),
             Expanded(
-              flex: 38,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _modernCaptions()),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 62,
-                    child: OutlinedButton.icon(
-                      onPressed: _showEventDetails,
-                      icon: const Icon(Icons.notifications_none),
-                      label: Text(
-                        _recentEvents.isEmpty
-                            ? '받은 알림 · 기록 보기'
-                            : '받은 알림 ${_recentEvents.length}건 · 기록 보기',
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        textStyle: const TextStyle(fontSize: 21),
-                        foregroundColor: _charcoal,
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(color: _line),
-                      ),
-                    ),
+                  _label(
+                    '도움이 필요해요',
+                    size: 24,
+                    color: Colors.white,
+                    weight: FontWeight.w700,
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 70,
-                    child: FilledButton.icon(
-                      onPressed: _situation.openHelp,
-                      icon: const Icon(Icons.front_hand_outlined, size: 28),
-                      label: const Text('도움이 필요해요'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _accent,
-                        foregroundColor: Colors.white,
-                        textStyle: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                  _label(
+                    '수어 또는 터치로 알려주세요',
+                    size: 18,
+                    color: const Color(0xFFF7E9ED),
                   ),
                 ],
               ),
             ),
+            const Icon(Icons.arrow_forward_rounded, color: Colors.white),
           ],
         ),
       ),
-    ],
+    ),
   );
+  Widget _csiSummary() => AnimatedBuilder(
+    animation: _situation,
+    builder:
+        (context, _) => Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            onTap: () => _navigate(_SafeHubPage.wifiSensing),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              decoration: BoxDecoration(
+                border: Border.all(color: _line),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.sensors, color: _accent, size: 26),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _label(
+                      _situation.sensorStatus.replaceFirst(
+                        'CSI 분류:',
+                        'CSI 활동:',
+                      ),
+                      size: 22,
+                      weight: FontWeight.w600,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_rounded, color: _secondary),
+                ],
+              ),
+            ),
+          ),
+        ),
+  );
+
+  Widget _notificationSummary() {
+    final event = _recentEvents.isEmpty ? null : _recentEvents.first;
+    final summary =
+        event != null
+            ? (event['event'] == 'llm_conversation'
+                ? '${event['reply']}'
+                : _getEventName(event))
+            : _latestDisaster != null
+            ? '${_latestDisaster!['MSG_CN'] ?? '재난 안내를 확인하세요.'}'
+            : '새로 받은 알림을 이곳에서 확인해요.';
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () {
+          if (event == null && _latestDisaster != null) {
+            _showDisasterDetails(_latestDisaster!);
+          } else {
+            _showEventDetails();
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: _line),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.notifications_none_rounded,
+                    color: _accent,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _label('최근 알림', size: 20, weight: FontWeight.w700),
+                  ),
+                  _label('모아보기', size: 16, color: _secondary),
+                  const SizedBox(width: 5),
+                  const Icon(Icons.chevron_right, color: _secondary),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _label(summary, size: 20, lines: 2),
+              if (event == null && _latestDisaster != null) ...[
+                const SizedBox(height: 5),
+                _label('참고 재난 안내 · 적용 지역을 확인하세요', size: 16, color: _secondary),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _modernCamera() => _card(
     title: '수어로 이야기해요',
@@ -215,52 +337,26 @@ extension _HomeDashboard on _SafeHubHomePageState {
       children: [
         Expanded(child: _cameraPlaceholder()),
         const SizedBox(height: 12),
-        _label(
-          _signText == '수어 인식 대기 중' ? '수어를 기다리고 있어요' : '인식한 수어  $_signText',
-          size: 28,
-          weight: FontWeight.w700,
-        ),
-        const SizedBox(height: 6),
-        _label('인식한 수어가 여기에 표시돼요.', size: 20, color: _secondary),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: _openSignTranslation,
-          icon: const Icon(Icons.chat_bubble_outline, size: 18),
-          label: const Text('수어 대화 열기'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _charcoal,
-            minimumSize: const Size.fromHeight(56),
-            textStyle: const TextStyle(fontSize: 20),
-            side: const BorderSide(color: _line),
-          ),
-        ),
-        const SizedBox(height: 10),
-        AnimatedBuilder(
-          animation: _situation,
-          builder:
-              (context, _) => InkWell(
-                onTap: () => _navigate(_SafeHubPage.wifiSensing),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.sensors, color: _accent, size: 26),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _label(
-                          _situation.sensorStatus.replaceFirst(
-                            'CSI 분류:',
-                            'CSI 활동:',
-                          ),
-                          size: 22,
-                          weight: FontWeight.w600,
-                        ),
-                      ),
-                      const Icon(Icons.arrow_forward, color: _secondary),
-                    ],
-                  ),
-                ),
+        Row(
+          children: [
+            Expanded(
+              child: _label(
+                _signText == '수어 인식 대기 중'
+                    ? '수어를 기다리고 있어요'
+                    : '인식한 수어  $_signText',
+                size: 26,
+                weight: FontWeight.w700,
               ),
+            ),
+            TextButton.icon(
+              onPressed: _openSignTranslation,
+              icon: const Icon(Icons.chat_bubble_outline, size: 21),
+              label: const Text(
+                '수어 대화',
+                style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+              ),
+            ),
+          ],
         ),
       ],
     ),
@@ -484,7 +580,11 @@ class _FinalCaptionBody extends StatelessWidget {
                       : captions.listening
                       ? '듣고 있어요'
                       : '자막 일시정지',
-                  style: const TextStyle(color: _secondary, fontSize: 13),
+                  style: const TextStyle(
+                    fontFamily: 'Pretendard',
+                    color: _secondary,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],
@@ -500,6 +600,7 @@ class _FinalCaptionBody extends StatelessWidget {
                             : '말씀하시면\n여기에 바로 표시돼요.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
+                          fontFamily: 'Pretendard',
                           color: _secondary,
                           fontSize: 24,
                           height: 1.6,
@@ -519,6 +620,7 @@ class _FinalCaptionBody extends StatelessWidget {
                                       ? const ValueKey('final-caption')
                                       : null,
                               style: TextStyle(
+                                fontFamily: 'Pretendard',
                                 fontSize: index == 0 ? 27 : 20,
                                 height: 1.5,
                                 fontWeight:
