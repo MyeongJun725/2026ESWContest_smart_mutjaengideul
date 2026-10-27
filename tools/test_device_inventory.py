@@ -16,6 +16,8 @@ class InventoryTests(unittest.TestCase):
             subprocess.run(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
                             'commit', '-qm', 'fixture'], cwd=root, check=True)
             digest = hashlib.sha256((root / 'service.py').read_bytes()).hexdigest()
+            # A Windows working copy may have CRLF; compare the committed LF blob.
+            (root / 'service.py').write_bytes(b'print("source")\r\n')
             result = compare('\n'.join(['SAFEHUB_INVENTORY_V1\tpi4',
                 f'process-source\t{digest}\t/data/app/service.py',
                 f'installed-source\t{"0"*64}\t/data/app/local.py',

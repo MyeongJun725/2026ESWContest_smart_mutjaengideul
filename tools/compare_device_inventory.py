@@ -15,12 +15,14 @@ def compare(inventory, root=ROOT):
     role = lines[0].split('\t')[1]
     if lines[-1] != f'inventory-complete\t{role}':
         raise ValueError('Incomplete inventory; do not treat missing output as absent files')
-    paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
+    paths = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', '-z', 'HEAD'], cwd=root).decode().split('\0')
     index = {}
     for name in filter(None, paths):
-        path = root / name
-        if path.is_file() and path.suffix in ('.py', '.sh', '.cpp', '.hpp', '.dart', '.service'):
-            index.setdefault(hashlib.sha256(path.read_bytes()).hexdigest(), []).append(name)
+        path = Path(name)
+        if path.suffix in ('.py', '.sh', '.cpp', '.hpp', '.dart', '.service'):
+            # Git blobs avoid false mismatches from Windows autocrlf or local edits.
+            content = subprocess.check_output(['git', 'show', f'HEAD:{name}'], cwd=root)
+            index.setdefault(hashlib.sha256(content).hexdigest(), []).append(name)
     sources, binaries, models = [], [], []
     for line in lines[1:]:
         fields = line.split('\t')
