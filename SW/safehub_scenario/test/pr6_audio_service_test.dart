@@ -40,6 +40,7 @@ void main() {
     player = _Player();
     audio = AudioService(
       player: player,
+      localFilePlayback: false,
       operationTimeout: const Duration(milliseconds: 20),
     );
   });

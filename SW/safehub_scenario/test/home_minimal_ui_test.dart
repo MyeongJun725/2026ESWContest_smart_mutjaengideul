@@ -60,7 +60,12 @@ void main() {
     expect(find.text('괜찮아요'), findsOneWidget);
     expect(t.takeException(), isNull);
     await capture(t, key, 'original-help');
+    await t.tap(find.text('괜찮아요'));
+    await t.pumpAndSettle();
+    expect(find.text('도움이 필요하신가요?'), findsNothing);
     await t.pumpWidget(const SizedBox());
+    await t.pump();
+    await t.pump(const Duration(seconds: 6));
   });
 
   testWidgets('large sign result preserves conversation action and last-result status', (t) async {
