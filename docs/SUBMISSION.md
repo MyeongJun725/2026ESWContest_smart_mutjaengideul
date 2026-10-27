@@ -1,57 +1,73 @@
-# GitHub 제출 확인
+# 제출과 장치 소스 대조
 
-현재 제품 소스는 `integration/scenario-stability-20261026`, 검토 PR은
-[#11](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11)입니다.
-PR #10(#8/#7 포함), #9 소스 후보와 #6의 필요한 안정화를 통합했습니다.
-최신 UI는 `SW/safehub_scenario`이며 옛 UI를 함께 실행하지 않습니다.
-최신 [소스 포함 관계·미사용 정리·외부 준비 목록](integration/final-source-audit-20261027.md)을
-먼저 확인하세요. 공개 PR 통합 완료와 실제 장치 전체 재현 완료는 다릅니다.
+통합 기준은 **develop**, 최종 제출 대상은 **main**이다. main 병합 전 PR에서 변경·Checks·장치
+미확인 항목을 확인한다. [최종 통합 기록](integration/submission-ready-20261028.md)을 기준으로 한다.
 
-## 제출 직전 확인할 것
+## GitHub에 포함된 구성
 
-1. **제출 대상 브랜치와 SHA:** 대회가 main을 읽는다면 현재 PR 브랜치만 push한 상태와 다릅니다.
-   main/develop 직접 반영·최종 병합은 사용자 지시 전에는 하지 않았습니다.
-   PR의 head와 실제 제출할 ref를 확정한 뒤 해당 코드의 README·검사 결과를 확인하세요.
-2. **검증 범위:** PR Checks의 GitHub 실행 결과와 [직접 실행 기록](integration/submission-audit-20261027.md)을
-   구분합니다. CI의 fake 모델·loopback·C++ fixture는 실제 장치 시험이 아닙니다.
-   스타일 info는 출력하며 기능 오류/경고는 실패 처리합니다.
-3. **실행 자료:** ATLAS SDK·runner/plugin·IPK/ELF와 실제 설치 소스 대응,
-   fastText 실제 모델/해시·Uno 스케치·펌웨어와 장치 설정 보관본을 확보해야 실기 재현을 판단할 수 있습니다.
-   현재 미확인/미확보 항목을 “없음”이나 “실물 통과”로 바꾸지 않습니다.
-4. **재현 안내와 출처:** root README의 장비 없는 제품 화면 경로와
-   [외부 소스 고지](../THIRD_PARTY_NOTICES.md)를 사용합니다. 비공개 SDK·개인 데이터는 제출 소스에 넣지 않습니다.
-5. **복구 지점:** [백업 브랜치](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/tree/backup/pr11-before-product-cleanup-20261027)와
-   [복원 절차](integration/product-scope-20261027.md)를 유지합니다. 정리 전 847개 파일 복원 검사를 완료했습니다.
+- 현재 UI 원본은 `SW/safehub_scenario` 한 곳이다. 옛 `SW/safehub_app`과 거실 배경 UI는 제거했다.
+  버건디/아이보리 배치, 도움 요청 버튼, 카메라 아래 큰 수어 결과를 유지한다.
+- #11의 #10(#8/#7 포함)·#9·#6 선택 안정화에 #14 장치 후속 소스와 #12/#13의 필요한
+  음성·최소 UI 보완을 통합한다. #8을 중복 병합하거나 #6의 옛 UI 전체를 가져오지 않는다.
+- YAMNet/STT 공유 PCM, 긴급 내장 음성, TTS, CSI 낙상 정책, Pi4 추적/정지 지지 손/관절 표시 소스가 있다.
+- SDK·설치 바이너리·실제 모델/참조·개인 설정은 별도다. Uno `.ino`/현재 펌웨어, 최종 장치
+  빌드 자료는 미확인/미확보이며 자동으로 통합 완료로 표시하지 않는다.
 
-## 비장비 소스 검사 명령
+## 실행 중인 라즈베리파이와 비교
 
-Python 3.12의 저장소 밖 가상 환경에서 필요한 가벼운 검사 의존성만 설치합니다.
-CSI 학습 스택과 실제 fastText 모델을 이 검사 때문에 설치할 필요는 없습니다.
+원래 경로의 ELF 해시만 보면 안 된다. #14 보고에서는 원래 파일을 남기고 wrapper가 새 release
+ELF를 실행했다. `/proc/PID/exe`와 해당 소스 archive/빌드 manifest를 대조한다.
 
-```sh
-python3 tools/audit_product_sources.py
-python3 -m venv /tmp/safehub-checks
-/tmp/safehub-checks/bin/python -m pip install -r tools/requirements-checks.txt
-/tmp/safehub-checks/bin/python -m unittest discover -s SW/tts_server/tests -p 'test_*.py' -v
-/tmp/safehub-checks/bin/python -m unittest discover -s SW/safehub_scenario/tool -p 'test_*.py' -v
-/tmp/safehub-checks/bin/python -m unittest discover -s SW/fasttext_context/tests -p 'test_*.py' -v
-/tmp/safehub-checks/bin/python -m unittest discover -s SW/uno_bridge/tests -p 'test_*.py' -v
-/tmp/safehub-checks/bin/python -m unittest discover -s SW/rpi4_vision_atlas/tests -p 'test_*.py' -v
-/tmp/safehub-checks/bin/python tools/run_hub_checks.py
+클라우드에서 사설망에 접근하지 못하면 **저장소를 받은 Windows PC의 저장소 루트**에서 실행한다.
+`<PI4-IP>`와 `<PI5-IP>`를 현재 주소로 바꾼다. 서비스·카메라·MQTT·펌웨어를 조작하지 않고 해시와
+경로만 읽는다. 결과는 저장소 밖 사용자 폴더에 저장한다.
+
+```powershell
+Get-Content -Raw .\tools\collect_device_inventory.sh | ssh root@<PI4-IP> "tr -d '\r' | sh -s -- pi4" | Set-Content -Encoding utf8 "$env:USERPROFILE\safehub-pi4-inventory.tsv"
+Get-Content -Raw .\tools\collect_device_inventory.sh | ssh root@<PI5-IP> "tr -d '\r' | sh -s -- pi5" | Set-Content -Encoding utf8 "$env:USERPROFILE\safehub-pi5-inventory.tsv"
+python .\tools\compare_device_inventory.py "$env:USERPROFILE\safehub-pi4-inventory.tsv" > "$env:USERPROFILE\safehub-pi4-compare.json"
+python .\tools\compare_device_inventory.py "$env:USERPROFILE\safehub-pi5-inventory.tsv" > "$env:USERPROFILE\safehub-pi5-compare.json"
 ```
 
-전체 계약·부팅 stub·Windows 도구·호스트 C++와 Flutter의 정확한 명령은
-[source-checks.yml](../.github/workflows/source-checks.yml)에 있습니다.
-허브는 과거 실제 발행 스크립트가 섞여 있었으므로 임의의 `test_*.py`를 일괄 실행하지 않습니다.
-선별한 assertion 스크립트만 연결 차단 runner로 실행합니다.
+명시된 배치 경로·읽을 수 있는 파일만 조사한다. 일치 파일이 있어도 실행 중 로드 여부까지 증명하지
+않는다. 미일치 파일은 검토 대상이지 자동 삭제 대상이 아니다. ELF/kernel을 소스 SHA로 역변환하지
+않으며 장치 전체 일치는 미확인으로 남긴다. Pi5 설치 manifest/kernel/IPK와 소스/빌드 archive는
+별도로 확보해 대조한다. 비밀번호·설정 원문·모델·녹음·전체 백업을 공개 Git에 올리지 않는다.
 
-Flutter 호스트는 README의 고정 SDK/host lock으로 검사합니다. 기본 제품 화면을 확인하려면:
+| 남은 항목 | 확인할 것 |
+|---|---|
+| Pi4 | 현재 `/proc/PID/exe` 해시, wrapper, 최종 release `status.json`, 소스/도구 archive. #14 최종 경로는 `sign-landmarks-v2-20261028/vision_sign_preserve_tracks`로 보고됨 |
+| Pi5 | 현재 manifest/kernel/IPK 해시·빌드 출처. #14의 1.5.7은 작성자 보고이고 이번 1.6.0 소스 후보의 설치를 뜻하지 않음 |
+| 수어 | ONNX 두 모델·active targets·runtime data 해시/출처. 아프다/괜찮다/쓰러지다/점등·소등 반복, 무동작 오탐·양손 관측 기록 |
+| 음향 | YAMNet/embedding 모델·선택 siren/bell 참조와 서비스 옵션. 다른 소리·거리·소음 조건 오탐/미탐은 미검증 |
+| CSI | 낙상/일상 학습 모델. #14 인수인계 당시 Pi5에 낙상 라벨 모델이 없다고 보고됨 |
+| Uno | 최종 `.ino`/펌웨어·핀/시리얼 계약과 실제 LED·진동·팬·커튼 동작 |
+| 전체 | 재부팅, MQTT 끊김/복구, 실제 마이크→UI→장치와 물리 출력 |
+
+## main 제출 순서
+
+1. develop 통합 PR의 Checks와 제한을 확인한다. 장치 일치 미확인을 “운영 장치 완전 재현”으로 쓰지 않는다.
+2. main PR의 **base=main / compare=develop**과 diff를 확인한다. 병합 전 양쪽 SHA와 기존 main 백업을 남긴다.
+3. 사용자가 최종 검토 후 main PR을 병합한다. main/develop 소스 tree 일치와 제출 SHA/URL을 기록한다.
+   이번 통합 작업은 main 병합·장치 배포를 하지 않는다.
+4. 제출 안내는 main으로 통일한다. 다른 브랜치·닫힌 PR·Git 이력은 main의 파일에 섞이지 않는다.
+   정리를 위해 삭제하거나 이력을 다시 쓰지 않는다. 복구 백업은 보존한다.
+
+필수 수어 참조·diagnostics·라이선스·검사·문서를 용량이나 오래된 이름만 보고 지우지 않는다.
+LG 비공개 SDK/문서의 공개 권한을 runner 소스의 라이선스만으로 추정하지 않는다.
+
+## 이후 수정
+
+최신 develop에서 기능 브랜치→수정·관련 검사→develop PR→Checks→병합 순서로 진행한다.
+main 제출 PR의 diff와 Checks도 갱신한다. 장치 적용은 별도로 실행본·개인 설정·모델/참조를
+백업하고 빌드 SHA/옵션·산출물 해시를 기록한 다음 진행한다.
 
 ```sh
-python3 SW/safehub_scenario/tool/run_ui_preview.py --check-only
-python3 SW/safehub_scenario/tool/run_ui_preview.py
+python tools/audit_product_sources.py
+python -m unittest discover -s tools -p 'test_*.py' -v
+python SW/safehub_scenario/tool/run_ui_preview.py --check-only
 ```
 
-시연·CSI 수집/학습 도구는 `--developer-tools`가 필요합니다. 실제 연결용 개발 빌드에서
-이 옵션을 켜면 장치 시험 명령이 가능하므로 장비 조작 승인과 별도로 다룹니다.
-이번 작업에서는 실제 서비스 제어·실행본 교체·모터 시험·펌웨어 플래시를 하지 않았습니다.
+전체 명령은 [source-checks.yml](../.github/workflows/source-checks.yml)에 있다.
+Flutter 3.35.7 / Dart 3.9.2와 host lock을 사용한다. 과거 허브 `test_*.py`에는 실제 발행 코드가
+섞일 수 있으므로 [선별된 차단 runner](../tools/run_hub_checks.py)만 실행한다.
