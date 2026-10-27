@@ -37,6 +37,7 @@ def main():
     def connected(client, userdata, flags, reason, properties):
         if reason.is_failure:
             return
+        recent_sign_packets.clear()  # Packet IDs are reusable in a clean session.
         client.subscribe(SIGN_TRANSLATION_TOPIC, qos=1)
         client.subscribe(SHORTCUT_COMMAND_TOPIC, qos=1)
         client.subscribe("safehub/control/livingroom/aircon/command", qos=1)

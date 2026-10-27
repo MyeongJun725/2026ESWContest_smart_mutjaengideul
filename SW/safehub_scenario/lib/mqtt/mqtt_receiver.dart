@@ -12,7 +12,7 @@ import '../core/safety_event_normalizer.dart';
 // Keep disposal effective if a TCP connect completes after settings were changed.
 class _OwnedMqttClient extends MqttServerClient {
   _OwnedMqttClient(String host, String id, int port)
-    : super.withPort(host, id, port, maxConnectionAttempts: 1);
+      : super.withPort(host, id, port, maxConnectionAttempts: 1);
 
   bool _closed = false;
 
@@ -90,10 +90,10 @@ class MqttReceiver {
     this.maxRetryDelay = const Duration(seconds: 15),
     MqttServerClient Function(String, String, int)? clientFactory,
     Timer Function(Duration, void Function())? retryTimerFactory,
-  }) : assert(initialRetryDelay > Duration.zero),
-       assert(maxRetryDelay >= initialRetryDelay),
-       _clientFactory = clientFactory ?? _OwnedMqttClient.new,
-       _retryTimerFactory = retryTimerFactory ?? Timer.new;
+  })  : assert(initialRetryDelay > Duration.zero),
+        assert(maxRetryDelay >= initialRetryDelay),
+        _clientFactory = clientFactory ?? _OwnedMqttClient.new,
+        _retryTimerFactory = retryTimerFactory ?? Timer.new;
 
   Future<void> connect() {
     if (_disposed || _connected) return Future<void>.value();
@@ -126,6 +126,7 @@ class MqttReceiver {
 
     client.onConnected = () {
       if (!_current(client)) return;
+      _signPackets.clear(); // MQTT packet IDs belong to this clean session.
       _connected = true;
       print('[MQTT] connected broker=$broker port=$port');
       onConnectionChanged?.call(true);
@@ -150,6 +151,7 @@ class MqttReceiver {
 
     client.onAutoReconnect = () {
       if (!_current(client)) return;
+      _signPackets.clear(); // Keep logical safety message IDs across sessions.
       _connected = false;
       print('[MQTT] auto reconnecting');
       onConnectionChanged?.call(false);
@@ -162,9 +164,8 @@ class MqttReceiver {
       onConnectionChanged?.call(true);
     };
 
-    client.connectionMessage = MqttConnectMessage()
-        .withClientIdentifier(clientId)
-        .startClean();
+    client.connectionMessage =
+        MqttConnectMessage().withClientIdentifier(clientId).startClean();
 
     try {
       await client.connect();
@@ -378,33 +379,49 @@ class MqttReceiver {
 
   bool publishHardwareTestFan(bool powerOn) {
     final client = _client;
-    if (_disposed || !_connected || client == null ||
-        client.connectionStatus?.state != MqttConnectionState.connected) return false;
+    if (_disposed ||
+        !_connected ||
+        client == null ||
+        client.connectionStatus?.state != MqttConnectionState.connected)
+      return false;
     try {
-    final builder = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({
-      'source': 'manual_test', 'action': 'set_power', 'power_on': powerOn,
-    }));
-    client.publishMessage('safehub/control/livingroom/aircon/command',
-        MqttQos.atLeastOnce, builder.payload!, retain: false);
-    return true;
-    } catch (_) { return false; }
+      final builder = MqttClientPayloadBuilder()
+        ..addUTF8String(jsonEncode({
+          'source': 'manual_test',
+          'action': 'set_power',
+          'power_on': powerOn,
+        }));
+      client.publishMessage('safehub/control/livingroom/aircon/command',
+          MqttQos.atLeastOnce, builder.payload!,
+          retain: false);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   bool publishCurtain(String action) {
     if (!{'up', 'down', 'stop'}.contains(action)) return false;
     final client = _client;
-    if (_disposed || !_connected || client == null ||
-        client.connectionStatus?.state != MqttConnectionState.connected) return false;
+    if (_disposed ||
+        !_connected ||
+        client == null ||
+        client.connectionStatus?.state != MqttConnectionState.connected)
+      return false;
     try {
-      final builder = MqttClientPayloadBuilder()..addUTF8String(jsonEncode({
-        'source': 'manual_test',
-        'action': action == 'stop' ? 'stop' : 'set_power',
-        'power_on': action == 'up',
-      }));
+      final builder = MqttClientPayloadBuilder()
+        ..addUTF8String(jsonEncode({
+          'source': 'manual_test',
+          'action': action == 'stop' ? 'stop' : 'set_power',
+          'power_on': action == 'up',
+        }));
       client.publishMessage('safehub/control/livingroom/curtain/command',
-          MqttQos.atLeastOnce, builder.payload!, retain: false);
+          MqttQos.atLeastOnce, builder.payload!,
+          retain: false);
       return true;
-    } catch (_) { return false; }
+    } catch (_) {
+      return false;
+    }
   }
 
   bool publishShortcutCommand(String payload) {

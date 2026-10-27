@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -30,8 +31,8 @@ class _Client extends MqttServerClient {
   final status = MqttClientConnectionStatus();
   final stream =
       StreamController<List<MqttReceivedMessage<MqttMessage>>>.broadcast(
-        sync: true,
-      );
+    sync: true,
+  );
   final subscriptions = <String>[];
   final subscriptionQos = <String, MqttQos>{};
   MqttPublishMessage? subscriptionEvent;
@@ -113,6 +114,43 @@ void main() {
     for (final client in clients) {
       await client.stream.close();
     }
+  });
+
+  test('clean reconnect resets packet cache but keeps safety incident IDs',
+      () async {
+    final signs = <String>[];
+    final incidents = <Map<String, dynamic>>[];
+    final client = _Client();
+    final scoped = MqttReceiver(
+        broker: 'localhost',
+        port: 1883,
+        eventManager: EventManager(),
+        onSignTextReceived: signs.add,
+        onEventReceived: incidents.add,
+        clientFactory: (_, __, ___) => client);
+    addTearDown(scoped.disconnect);
+    final pending = scoped.connect();
+    client.accept();
+    await pending;
+    const sign = 'safehub/vision/livingroom/translation';
+    const source = '{"text":"도움"}';
+    final event = jsonEncode({
+      'message_id': 'incident-stays-seen',
+      'event': 'fall_detected',
+      'priority': 9
+    });
+    scoped.handlePayload(sign, source, packetId: 71);
+    scoped.handlePayload(sign, source, packetId: 71, duplicate: true);
+    scoped.handlePayload('safehub/csi/bedroom/event', event);
+    expect(signs, ['도움']);
+    expect(incidents, hasLength(1));
+    client.onAutoReconnect!();
+    client.onAutoReconnected!();
+    scoped.handlePayload(sign, source, packetId: 71, duplicate: true);
+    scoped.handlePayload(sign, source, packetId: 71, duplicate: true);
+    scoped.handlePayload('safehub/csi/bedroom/event', event);
+    expect(signs, ['도움', '도움']);
+    expect(incidents, hasLength(1));
   });
 
   test(
@@ -213,9 +251,8 @@ void main() {
       const payload = '{"event":"fall_detected","message_id":"subscribe-1"}';
       final connecting = receiver.connect();
       final builder = MqttClientPayloadBuilder()..addUTF8String(payload);
-      clients.single.subscriptionEvent = MqttPublishMessage()
-          .toTopic(topic)
-          .publishData(builder.payload!);
+      clients.single.subscriptionEvent =
+          MqttPublishMessage().toTopic(topic).publishData(builder.payload!);
       clients.single.accept();
       await connecting;
       expect(
