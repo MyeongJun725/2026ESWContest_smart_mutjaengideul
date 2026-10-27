@@ -29,6 +29,19 @@ class ProductScopeTests(unittest.TestCase):
             finally:
                 app.close()
 
+    def test_closed_controller_storage_is_not_reused_for_next_root(self):
+        with tempfile.TemporaryDirectory() as first:
+            app = Controller(first, inference_only=True)
+            app.close()
+        with tempfile.TemporaryDirectory() as second:
+            app = Controller(second, inference_only=True)
+            try:
+                app.command('stop_recognition', {})
+                self.assertEqual(app.db.DATA, Path(second).resolve())
+                self.assertTrue((Path(second) / 'workspace.json').is_file())
+            finally:
+                app.close()
+
     def test_cli_rejects_training_in_product_mode_before_starting(self):
         with patch('sys.argv', ['bridge.py', '--inference-only', '--allow-training']), patch('bridge.Controller') as controller:
             with self.assertRaises(SystemExit) as error:

@@ -44,6 +44,16 @@ class Controller:
         # Configure isolated storage before the processing engine is imported.
         os.environ['WIFI_SENSING2_DATA_DIR'] = str(Path(data_dir).resolve())
         import server
+        # The runtime module may already be cached by a previous, closed host
+        # controller. Bind storage to this requested root before reading settings.
+        data = Path(data_dir).resolve()
+        if server.DATA != data:
+            server.DATA = data
+            server.SESSIONS, server.SEGMENTS, server.MODELS = (
+                data / name for name in ('sessions', 'segments', 'models'))
+            server.CACHE.clear()
+        for folder in (server.SESSIONS, server.SEGMENTS, server.MODELS):
+            folder.mkdir(parents=True, exist_ok=True)
         import services
         import teaching
         from stream import Stream
