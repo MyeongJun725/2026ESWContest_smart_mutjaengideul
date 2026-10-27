@@ -134,6 +134,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   int _cameraGeneration = 0;
   bool _cameraConnected = false;
   bool _cameraDecodeInProgress = false;
+  Uint8List? _pendingCameraFrame;
   bool _showSignOverlay = false;
 
   Map<String, dynamic>? _latestDisaster;
@@ -262,6 +263,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
           setState(() {
             _cameraGeneration++;
+            _pendingCameraFrame = null;
             _cameraConnected = connected;
 
             if (!connected) {
@@ -284,6 +286,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     }
 
     if (_cameraDecodeInProgress) {
+      // Keep only the latest frame while decoding; never build a display queue.
+      _pendingCameraFrame = frame;
       return;
     }
 
@@ -300,6 +304,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
         if (!mounted || !_cameraConnected || generation != _cameraGeneration) {
           image.dispose();
+          _decodePendingCameraFrame();
           return;
         }
 
@@ -308,8 +313,17 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
         _cameraImage.value = image;
 
         previousImage?.dispose();
+        _decodePendingCameraFrame();
       },
     );
+  }
+
+  void _decodePendingCameraFrame() {
+    final pending = _pendingCameraFrame;
+    _pendingCameraFrame = null;
+    if (mounted && _cameraConnected && pending != null) {
+      _handleCameraFrame(pending);
+    }
   }
 
   void _startDisasterPolling() {
@@ -705,6 +719,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     );
     unawaited(_cameraStreamService.dispose());
     _cameraGeneration++;
+    _pendingCameraFrame = null;
     _cameraImage.value?.dispose();
     _cameraImage.dispose();
     _alertPulseController.dispose();

@@ -37,6 +37,62 @@ ui.Image _image() {
 }
 
 void main() {
+  testWidgets(
+    'slow decode retains only the newest pending frame and clears it on reconnect',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      mockAudioPlugins(tester);
+      final camera = _Camera();
+      final callbacks = <void Function(ui.Image)>[];
+      final decoded = <Uint8List>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SafeHubHomePage(
+            cameraService: camera,
+            cameraDecoder: (bytes, _, __, ___, callback) {
+              decoded.add(bytes);
+              callbacks.add(callback);
+            },
+          ),
+        ),
+      );
+      camera.connection(true);
+      final first = Uint8List(320 * 240 * 4)..[0] = 1;
+      final middle = Uint8List(320 * 240 * 4)..[0] = 2;
+      final latest = Uint8List(320 * 240 * 4)..[0] = 3;
+      camera.frame(first);
+      camera.frame(middle);
+      camera.frame(latest);
+      expect(decoded, [same(first)]);
+      final firstImage = _image();
+      callbacks.removeAt(0)(firstImage);
+      expect(decoded, [same(first), same(latest)]);
+      expect(decoded, isNot(contains(same(middle))));
+      // A queued old-session frame must not start after reconnection.
+      camera.frame(middle);
+      camera.connection(false);
+      camera.connection(true);
+      final newSession = Uint8List(320 * 240 * 4)..[0] = 4;
+      camera.frame(newSession);
+      final stale = _image();
+      callbacks.removeAt(0)(stale);
+      expect(stale.debugDisposed, isTrue);
+      expect(decoded, [same(first), same(latest), same(newSession)]);
+      // Disposal also discards a pending frame and releases the in-flight image.
+      camera.frame(middle);
+      await tester.pumpWidget(const SizedBox());
+      final afterDispose = _image();
+      callbacks.removeAt(0)(afterDispose);
+      expect(afterDispose.debugDisposed, isTrue);
+      expect(firstImage.debugDisposed, isTrue);
+      expect(decoded, hasLength(3));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final reconnect in [false, true]) {
     testWidgets(
       'late decode is discarded after disconnect (reconnect=$reconnect)',
