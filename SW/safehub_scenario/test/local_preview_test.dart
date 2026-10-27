@@ -38,6 +38,8 @@ void mockAudioPlugins(WidgetTester tester) {
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
+    // Let bounded asynchronous native-player disposal finish before mocks leave.
+    await tester.pump(const Duration(seconds: 6));
     for (final name in channels) {
       messenger.setMockMethodCallHandler(MethodChannel(name), null);
     }
@@ -73,7 +75,7 @@ void main() {
       expect(
         find.byKey(
           ValueKey(
-            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-낙상 감지',
           ),
         ),
         findsOneWidget,
@@ -84,7 +86,7 @@ void main() {
       await tester.tap(
         find.byKey(
           ValueKey(
-            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-낙상 감지',
           ),
         ),
       );

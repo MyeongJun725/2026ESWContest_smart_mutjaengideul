@@ -9,8 +9,10 @@ class HouseIncident {
     this.evidence,
     this.receivedAt, {
     this.relevance = '상황 확인 필요',
+    this.origin = 'text',
   });
-  final String id, evidence, relevance;
+  final String id, relevance, origin;
+  String evidence;
   final HouseScenario kind;
   final DateTime receivedAt;
   String response = '';
@@ -22,9 +24,9 @@ class HouseIncident {
           ? 2
           : 1;
   String get title => switch (kind) {
-        HouseScenario.broadcast => '위험을 알리는 말이 들렸어요. 방송을 확인해 주세요.',
+        HouseScenario.broadcast => origin == 'sound' ? '경보음 감지 · 위급상황인지 확인해 주세요.' : '위험을 알리는 말이 들렸어요. 방송을 확인해 주세요.',
         HouseScenario.disaster => '새 재난 알림이 도착했어요. 적용 지역을 확인해 주세요.',
-        HouseScenario.assistance => '도움이 필요한 상황인지 확인해 주세요.',
+        HouseScenario.assistance => origin == 'csi' ? '낙상 의심 신호가 감지됐어요. 상태를 확인해 주세요.' : '도움이 필요한 상황인지 확인해 주세요.',
       };
   String get nextAction => response.isEmpty
       ? '수어 또는 터치로 확인 여부를 알려주세요.'
@@ -35,6 +37,7 @@ class HouseIncident {
           : '응답을 기록했어요. 추가 도움이 필요한지 확인하세요.';
   Map<String, dynamic> toJson() => {
         'scenario': kind.name,
+        'origin': origin,
         'evidence': evidence.substring(0, evidence.length.clamp(0, 500)),
         'relevance': relevance,
         'received_at': receivedAt.toIso8601String(),
@@ -83,6 +86,16 @@ class HouseScenarioFlow extends ChangeNotifier {
     );
   }
 
+  bool soundAlarm(String id, String label, {DateTime? now}) {
+    const sirens = {'Siren', 'Civil defense siren', 'Police car (siren)',
+      'Ambulance (siren)', 'Fire engine, fire truck (siren)'};
+    if (!{'Fire alarm', 'Smoke detector, smoke alarm', ...sirens}.contains(label)) return false;
+    final kind = sirens.contains(label) ? '사이렌' : '화재경보음';
+    return _submit(HouseIncident('sound:$id', HouseScenario.broadcast,
+        '$kind 소리가 의심됩니다. 주변 상황과 안내를 확인해 주세요.\nYAMNet 음향 분류 결과 · 실제 화재·재난이나 발생 장소를 확정하지 않습니다.',
+        now ?? DateTime.now(), origin: 'sound', relevance: '음성자막 없이 경보음에서 감지 · 주변 확인 필요'));
+  }
+
   bool disaster({
     required String id,
     required String text,
@@ -121,12 +134,13 @@ class HouseScenarioFlow extends ChangeNotifier {
     );
   }
 
-  bool assistance(String id, String text, {DateTime? now}) => _submit(
+  bool assistance(String id, String text, {DateTime? now, String origin = 'text'}) => _submit(
         HouseIncident(
           'assistance:$id',
           HouseScenario.assistance,
           text,
           now ?? DateTime.now(),
+          origin: origin,
           relevance: '센서 의심 신호 또는 사용자 요청 · 낙상·의식불명 확정 아님',
         ),
       );
@@ -134,6 +148,21 @@ class HouseScenarioFlow extends ChangeNotifier {
   bool _submit(HouseIncident incident) {
     if (!_seen.add(incident.id)) return false;
     if (_seen.length > 128) _seen.remove(_seen.first);
+    // Sound and text are independent triggers, but near-simultaneous evidence
+    // belongs to one alert rather than opening duplicate popups.
+    if (incident.kind == HouseScenario.broadcast) {
+      for (final previous in [if (active != null) active!, ..._pending]) {
+        if (previous.kind == HouseScenario.broadcast &&
+            (previous.origin != incident.origin || incident.origin == 'sound') &&
+            incident.receivedAt.difference(previous.receivedAt).abs() <= const Duration(seconds: 30)) {
+          if (!previous.evidence.contains(incident.evidence)) {
+            previous.evidence = '${previous.evidence}\n\n추가 감지 근거:\n${incident.evidence}';
+          }
+          notifyListeners();
+          return false;
+        }
+      }
+    }
     if (simulated) incident.delivery = '테스트: 화면 알림 · LED·진동 모의 표시 (실제 명령 없음)';
     if (active == null) {
       active = incident;

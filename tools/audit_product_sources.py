@@ -45,7 +45,11 @@ def audit(source):
         missing.append({"file": "lib/main.dart", "uri": "entrypoint"})
     pubspec = (source / "pubspec.yaml").read_text(encoding="utf-8")
     assets = re.findall(r"^\s*-\s+(?:asset:\s*)?(assets/\S+)\s*$", pubspec, re.M)
-    missing_assets = [name for name in assets if not (source / name).is_file()]
+    missing_assets = [
+        name for name in assets
+        if not ((source / name).is_dir() if name.endswith("/")
+                else (source / name).is_file())
+    ]
     return {
         "dart_files": len(files),
         "reachable_from_main": len(files & reached),

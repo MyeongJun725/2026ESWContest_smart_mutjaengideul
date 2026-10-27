@@ -3,6 +3,42 @@ import 'package:safehub_app/core/house_scenario.dart';
 import 'package:safehub_app/services/situation_service.dart';
 
 void main() {
+  test('okay sign closes live help without touching or resolving a hazard', () {
+    final s = SituationService(settings: SituationSettings(enabled: false));
+    addTearDown(s.dispose);
+    s.receiveSign('아프다');
+    expect(s.helpOpen, isTrue);
+    s.receiveSign('괜찮다');
+    expect(s.helpOpen, isFalse);
+    expect(s.flow.active, isNull);
+    expect(s.pendingSign, isEmpty);
+    expect(s.flow.lastAcknowledged!.response, contains('괜찮다'));
+    expect(s.flow.lastAcknowledged!.toJson()['risk_resolved'], isFalse);
+  });
+
+  test('okay does not acknowledge a fire and remains an ordinary sign outside help', () {
+    final s = SituationService(settings: SituationSettings(enabled: false));
+    addTearDown(s.dispose);
+    s.receiveSign('괜찮다');
+    expect(s.pendingSign, '괜찮다');
+    s.observeBroadcast('화재가 발생했습니다.');
+    final fire = s.flow.active;
+    s.openHelp();
+    s.receiveSign('괜찮아요');
+    expect(s.helpOpen, isFalse);
+    expect(s.flow.active, same(fire));
+    expect(fire!.acknowledged, isFalse);
+  });
+
+  test('a negated okay phrase does not dismiss assistance', () {
+    final s = SituationService(settings: SituationSettings(enabled: false));
+    addTearDown(s.dispose);
+    s.receiveSign('구조');
+    s.receiveSign('괜찮지 않다');
+    expect(s.helpOpen, isTrue);
+    expect(s.flow.active!.kind, HouseScenario.assistance);
+  });
+
   test(
     'real fire captions preempt a test and an elevator prohibition is not a fire negation',
     () {

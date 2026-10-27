@@ -24,6 +24,8 @@
 #include "sign_runtime.hpp"
 #include "active_targets.hpp"
 #include "raw_tcp_streamer.hpp"
+#include "recognition_light.hpp"
+#include "landmark_preview.hpp"
 
 namespace {
 
@@ -205,7 +207,8 @@ void write_frame_json(std::ofstream& output,
                       double capture_ms,
                       const vision_runtime::InferenceBudget& budget,
                       const PalmScanDiagnostics& palm_diagnostics,
-                      const std::vector<Hand>& hands) {
+                      const std::vector<Hand>& hands,
+                      const vision_runtime::RecognitionLight* light = nullptr) {
     output << std::setprecision(12)
            << "{\"frame_index\":" << frame_index
            << ",\"image_size_wh\":[" << width << ',' << height << ']'
@@ -213,6 +216,11 @@ void write_frame_json(std::ofstream& output,
            << ",\"mirror_input\":true"
            << ",\"processing_ms\":" << processing_ms
            << ",\"capture_monotonic_ms\":" << capture_ms
+           << ",\"recognition_light_reference\":" << (light ? light->reference : 0)
+           << ",\"recognition_light_measured\":" << (light ? light->measured : 0)
+           << ",\"recognition_light_gain\":" << (light ? light->gain : 1)
+           << ",\"recognition_light_gamma\":" << (light ? light->gamma : 1)
+           << ",\"recognition_light_clipped_fraction\":" << (light ? light->clipped_fraction : 0)
            << ",\"hand_inferences\":" << budget.hand_calls
            << ",\"palm_inferences\":" << budget.palm_calls
            << ",\"palm_candidates\":" << palm_diagnostics.candidates
@@ -457,6 +465,8 @@ int main(int argc, char** argv) {
 
         bool capture_done = false;
         std::string capture_error;
+        const bool show_landmarks=environment_or_default("SIGN_SHOW_LANDMARKS","0")=="1";
+        vision_runtime::LandmarkPreview landmark_preview;
 
         const auto pipeline_begin =
             std::chrono::steady_clock::now();
@@ -516,7 +526,8 @@ int main(int argc, char** argv) {
                         stream_time - last_stream_time >=
                         kStreamInterval
                     ) {
-                        camera_streamer.sendFrame(frame);
+                        const auto overlay=show_landmarks ? landmark_preview.snapshot(stream_time) : nullptr;
+                        camera_streamer.sendFrame(overlay ? *overlay : frame);
                         last_stream_time = stream_time;
                     }
 
@@ -563,6 +574,7 @@ int main(int argc, char** argv) {
         });
 
         std::vector<Palm> tracked_palms;
+        std::vector<Palm> missing_palms;
         std::vector<Hand> latest_hands;
 
         cv::Mat latest_processed_frame;
@@ -571,6 +583,18 @@ int main(int argc, char** argv) {
         vision_runtime::TwoHandTrackingBackoff tracking_backoff_policy;
         vision_runtime::LostSecondHandRecovery second_hand_recovery_policy;
         double last_palm_scan_ms = -1e9;
+        const auto light_profile=environment_or_default("SIGN_LIGHT_PROFILE", "");
+        vision_runtime::RecognitionLight recognition_light;
+        if (!light_profile.empty()) {
+            std::ifstream saved_light(light_profile);
+            std::string version;double value=0;
+            if (saved_light >> version >> value && version=="SAFEHUB_LIGHT_V1") {
+                try { recognition_light.setReference(value); }
+                catch (const std::exception& e) {
+                    std::cerr << "[light] ignored invalid saved reference: " << e.what() << '\n';
+                }
+            }
+        }
 
         size_t consumed_sequence = 0;
         size_t processed_frames = 0;
@@ -777,68 +801,60 @@ int main(int argc, char** argv) {
                     frame_age_ms
                 );
 
-            const cv::Mat& frame =
+            const cv::Mat& raw_frame =
                 *frame_ptr;
 
             const std::size_t previous_tracks = tracked_palms.size();
             const double capture_ms = std::chrono::duration<double, std::milli>(
                 capture_time.time_since_epoch()).count();
+            cv::Mat recognition_frame;
+            if (!light_profile.empty()) {
+                const fs::path request=light_profile+".recalibrate";
+                if (fs::exists(request)) {
+                    recognition_light.calibrate(capture_ms);
+                    fs::remove(request);
+                    std::cerr << "[light] calibrating current raw camera lighting; preview unchanged\n";
+                }
+                recognition_frame=recognition_light.apply(raw_frame,capture_ms);
+                if (recognition_light.calibration_finished) {
+                    try {
+                        if (fs::exists(light_profile)) fs::copy_file(light_profile,
+                            light_profile+".before-"+std::to_string(static_cast<long long>(capture_ms)));
+                        const auto temporary=light_profile+".tmp";
+                        { std::ofstream file(temporary);file << "SAFEHUB_LIGHT_V1\n" << std::setprecision(12)
+                            << recognition_light.reference << '\n';
+                          if (!file) throw std::runtime_error("Could not save light reference"); }
+                        fs::rename(temporary,light_profile);
+                        std::cerr << "[light] reference saved=" << recognition_light.reference
+                                  << " clipped_fraction=" << recognition_light.clipped_fraction << '\n';
+                    } catch (const std::exception& e) {
+                        std::cerr << "[light] persistence failed; memory reference remains active: " << e.what() << '\n';
+                    }
+                }
+            }
+            const cv::Mat& frame=light_profile.empty() ? raw_frame : recognition_frame;
             vision_runtime::InferenceBudget inference_budget;
             PalmScanDiagnostics palm_diagnostics;
             const bool tracking_backoff = tracking_backoff_policy.beginFrame();
             const bool second_hand_recovery = second_hand_recovery_policy.beginFrame(capture_ms);
-            bool used_palm_detector =
+            if (!second_hand_recovery_policy.recovering(capture_ms)) missing_palms.clear();
+            const auto inference_tracks = second_hand_recovery
+                ? recovery_track_inputs(tracked_palms, missing_palms) : tracked_palms;
+            const bool scan_requested =
                 force_detection || tracking_backoff || second_hand_recovery ||
                 capture_ms - last_palm_scan_ms >= 700;
 
-            auto scan_palms = [&]() {
+            auto scan_palms = [&](const std::vector<Hand>& retained_hands) {
                 if (!inference_budget.takePalm()) return std::vector<Palm>{};
                 last_palm_scan_ms = capture_ms;
-                return palms(frame, palm_model, &palm_diagnostics);
-            };
-
-            std::vector<Palm> inputs =
-                used_palm_detector
-                    ? scan_palms()
-                    : tracked_palms;
-
-            if (used_palm_detector) {
-                ++palm_frames;
-            }
-
-            const bool attempted_tracking = !used_palm_detector;
-            bool failure = false;
-            bool tracking_fallback = false;
-            vision_runtime::TrackingRoiRetryDiagnostics roi_retry;
-
-            auto hands = run_hands(
-                frame,
-                inputs,
-                hand_model,
-                failure,
-                attempted_tracking,
-                roi_retry,
-                &inference_budget
-            );
-
-            // Same-frame fallback if tracking failed.
-            if (
-                !used_palm_detector &&
-                (failure || hands.empty()) &&
-                inference_budget.hand_calls < vision_runtime::InferenceBudget::max_hand_calls
-            ) {
-                tracking_fallback = true;
-                used_palm_detector = true;
-                ++palm_frames;
-
-                inputs = scan_palms();
+                auto inputs = palms(frame, palm_model, &palm_diagnostics);
                 // Prefer candidates associated with the failed track. Do not
                 // blindly prefer distant false candidates during close overlap.
                 std::stable_sort(inputs.begin(), inputs.end(), [&](const Palm& a, const Palm& b) {
                     auto distance = [&](const Palm& p) {
                         double nearest = 1e9;
                         for (const auto& old : tracked_palms) {
-                            const bool retained = std::any_of(hands.begin(), hands.end(), [&](const Hand& h) {
+                            const bool retained = std::any_of(retained_hands.begin(), retained_hands.end(), [&](const Hand& h) {
                                 return h.palm.tracked_side == old.tracked_side;
                             });
                             if (!retained) nearest = std::min(nearest, cv::norm(p.points[0]-old.points[0]));
@@ -847,23 +863,33 @@ int main(int argc, char** argv) {
                     };
                     return distance(a) < distance(b);
                 });
-                const auto fresh_hands = run_hands(
-                    frame,
-                    inputs,
-                    hand_model,
-                    failure,
-                    false,
-                    roi_retry,
-                    &inference_budget
-                );
-                vision_runtime::mergeFreshHands(hands, fresh_hands, hand_geometry);
-            }
+                return inputs;
+            };
+            vision_runtime::TrackingRoiRetryDiagnostics roi_retry;
+            auto observation = observe_frame_hands(
+                frame, inference_tracks, hand_model, scan_requested,
+                !tracking_backoff && (!force_detection ||
+                    (second_hand_recovery && !missing_palms.empty())), scan_palms,
+                roi_retry, inference_budget);
+            auto hands = std::move(observation.hands);
+            const bool used_palm_detector = observation.used_palm_detector;
+            const bool attempted_tracking = observation.attempted_tracking;
+            const bool tracking_fallback = observation.tracking_fallback;
+            const bool failure = observation.any_failure;
+            if (used_palm_detector) ++palm_frames;
+            // Match classifier side selection. Two detections labelled as the
+            // same hand are not evidence that the missing opposite hand returned.
+            const auto current_tracking_hands=strongest_hand_per_side(hands);
+            const auto accepted_tracks=current_tracking_hands.size();
 
             tracking_backoff_policy.observe(
-                attempted_tracking, tracking_fallback, previous_tracks, hands.size()
+                attempted_tracking, tracking_fallback, previous_tracks, accepted_tracks
             );
 
-            second_hand_recovery_policy.observe(previous_tracks, hands.size(), capture_ms);
+            second_hand_recovery_policy.observe(previous_tracks, accepted_tracks, capture_ms);
+            if (previous_tracks==2 && accepted_tracks<2)
+                missing_palms=missing_track_regions(tracked_palms,hands);
+            if (accepted_tracks>=2) missing_palms.clear();
 
             tracked_palms.clear();
 
@@ -871,7 +897,7 @@ int main(int argc, char** argv) {
 
             for (
                 const auto& hand_result :
-                hands
+                current_tracking_hands
             ) {
                 tracked_palms.push_back(
                     tracked_palm_from_hand(
@@ -899,6 +925,12 @@ int main(int argc, char** argv) {
 
             latest_processed_frame =
                 frame.clone();
+            if (show_landmarks) {
+                std::vector<vision_runtime::PreviewHand> preview_hands;
+                for(const auto& hand_result:hands)
+                    preview_hands.push_back({hand_geometry(hand_result),hand_result.handedness>.5});
+                landmark_preview.publish(raw_frame,preview_hands,capture_time);
+            }
 
             if (!hands.empty()) {
                 ++detected_frames;
@@ -952,7 +984,8 @@ int main(int argc, char** argv) {
                 capture_ms,
                 inference_budget,
                 palm_diagnostics,
-                hands
+                hands,
+                light_profile.empty() ? nullptr : &recognition_light
             );
 
             ++processed_frames;

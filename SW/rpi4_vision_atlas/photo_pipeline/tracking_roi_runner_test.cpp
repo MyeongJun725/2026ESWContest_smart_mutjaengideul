@@ -71,5 +71,99 @@ int main(){
     auto surviving=run_hands(image,palms,broken,failure,true,broken_diag);
     assert(failure && surviving.size()==1 && broken.next==2);
     assert(broken_diag.candidates.size()==2 && broken_diag.candidates[1].invalid_crop);
+    // A scheduled scan used to bypass tracking completely. A detector miss
+    // must not erase the hand inferred successfully in this same frame.
+    for (bool empty_scan : {false, true}) {
+        auto tracked=std::vector<Palm>{palms[0]};
+        Model scheduled{{{false,.95,.9,350,250}}};
+        if (!empty_scan) scheduled.replies.push_back({false,.2,.1,0,0});
+        vision_runtime::TrackingRoiRetryDiagnostics d;
+        vision_runtime::InferenceBudget budget;
+        unsigned scans=0;
+        auto observation=observe_frame_hands(image,tracked,scheduled,true,true,
+            [&](const std::vector<Hand>& kept) {
+                ++scans; assert(kept.size()==1 && kept[0].xy[0]==cv::Point2f(350,250));
+                assert(budget.takePalm());
+                return empty_scan ? std::vector<Palm>{} : std::vector<Palm>{palms[1]};
+            },d,budget);
+        assert(observation.hands.size()==1 && observation.attempted_tracking);
+        assert(observation.used_palm_detector && scans==1);
+        assert(observation.hands[0].xy[0]==cv::Point2f(350,250));
+        assert(scheduled.next==(empty_scan?1:2));
+    }
+    // Recovery keeps the live tracked hand, discards the detector's duplicate,
+    // and admits a distinct newly observed hand, without exceeding five calls.
+    Model recovery{{{false,.95,.9,350,250},{false,.96,.9,351,251},{false,.98,.1,500,100}}};
+    vision_runtime::TrackingRoiRetryDiagnostics recovery_diag;
+    vision_runtime::InferenceBudget recovery_budget;
+    auto recovered=observe_frame_hands(image,{palms[0]},recovery,true,true,
+        [&](const std::vector<Hand>&){assert(recovery_budget.takePalm());return palms;},
+        recovery_diag,recovery_budget);
+    assert(recovered.hands.size()==2 && recovery.next==3);
+    assert(recovered.hands[0].confidence==.95 && recovered.hands[1].xy[0]==cv::Point2f(500,100));
+    // Two valid current tracks do not need another palm or hand inference.
+    Model complete{{{false,.95,.9,350,250},{false,.96,.1,500,100}}};
+    vision_runtime::TrackingRoiRetryDiagnostics complete_diag;
+    vision_runtime::InferenceBudget complete_budget;
+    auto current=observe_frame_hands(image,palms,complete,true,true,
+        [&](const std::vector<Hand>&)->std::vector<Palm>{assert(false);return {};},
+        complete_diag,complete_budget);
+    assert(current.hands.size()==2 && !current.used_palm_detector && complete.next==2);
+    // A failed ROI is not returned as a hand from the previous frame.
+    Model lost{{{false,.1,.9,0,0}}};
+    vision_runtime::TrackingRoiRetryDiagnostics lost_diag;
+    vision_runtime::InferenceBudget lost_budget;
+    auto missing=observe_frame_hands(image,{palms[0]},lost,true,true,
+        [&](const std::vector<Hand>& kept){assert(kept.empty());assert(lost_budget.takePalm());return std::vector<Palm>{};},
+        lost_diag,lost_budget);
+    assert(missing.hands.empty() && lost.next==1);
+    // Worst case: two original tracks + one retry + two fresh candidates.
+    Model bounded{{{false,.95,.9,350,250},{false,.4,.1,0,0},{true,.4,.1,0,0},
+                   {false,.2,.1,0,0},{false,.97,.1,500,100}}};
+    vision_runtime::TrackingRoiRetryDiagnostics bounded_diag;
+    vision_runtime::InferenceBudget bounded_budget;
+    auto bounded_result=observe_frame_hands(image,palms,bounded,true,true,
+        [&](const std::vector<Hand>& kept){assert(kept.size()==1);assert(bounded_budget.takePalm());return palms;},
+        bounded_diag,bounded_budget);
+    assert(bounded_result.hands.size()==2 && bounded.next==5 && bounded_budget.hand_calls==5);
+    assert(bounded_budget.palm_calls==1 && bounded_diag.attempted==1);
+    // Explicit tracking backoff must not run even an available old ROI.
+    Model bypass{{{false,.96,.1,500,100}}};
+    vision_runtime::TrackingRoiRetryDiagnostics bypass_diag;
+    vision_runtime::InferenceBudget bypass_budget;
+    auto bypass_result=observe_frame_hands(image,palms,bypass,true,false,
+        [&](const std::vector<Hand>& kept){assert(kept.empty());assert(bypass_budget.takePalm());return std::vector<Palm>{palms[1]};},
+        bypass_diag,bypass_budget);
+    assert(bypass_result.hands.size()==1 && !bypass_result.attempted_tracking && bypass.next==1);
+    // A lost second ROI remains an inference input only, never a result.
+    auto regions=missing_track_regions(palms,current.hands);
+    assert(regions.empty()); // both current hands were freshly observed
+    regions=missing_track_regions(palms,{current.hands[0]});
+    assert(regions.size()==1 && regions[0].tracked_side==palms[1].tracked_side);
+    auto retry_inputs=recovery_track_inputs({palms[0]},regions);
+    assert(retry_inputs.size()==2);
+    assert(recovery_track_inputs({palms[0]},{palms[0]}).size()==1);
+    Model second_roi{{{false,.95,.9,350,250},{false,.96,.1,500,100}}};
+    vision_runtime::TrackingRoiRetryDiagnostics second_roi_diag;
+    vision_runtime::InferenceBudget second_roi_budget;
+    auto second_observation=observe_frame_hands(image,retry_inputs,second_roi,true,true,
+        [&](const std::vector<Hand>&)->std::vector<Palm>{assert(false);return {};},
+        second_roi_diag,second_roi_budget);
+    assert(second_observation.hands.size()==2 && second_roi.next==2);
+    // A cached region rejected by fresh inference does not create a hand.
+    Model hidden_roi{{{false,.95,.9,350,250},{false,.1,.1,0,0}}};
+    vision_runtime::TrackingRoiRetryDiagnostics hidden_diag;
+    vision_runtime::InferenceBudget hidden_budget;
+    auto hidden_observation=observe_frame_hands(image,retry_inputs,hidden_roi,true,true,
+        [&](const std::vector<Hand>&){assert(hidden_budget.takePalm());return std::vector<Palm>{};},
+        hidden_diag,hidden_budget);
+    assert(hidden_observation.hands.size()==1 && hidden_roi.next==2);
+    auto same_side=current.hands;
+    same_side[1].handedness=same_side[0].handedness;
+    same_side[1].confidence=.99;
+    const auto side_tracks=strongest_hand_per_side(same_side);
+    assert(side_tracks.size()==1 && side_tracks[0].confidence==.99);
+    assert(same_side.size()==2); // raw observations remain available for diagnosis
+    assert(missing_track_regions(palms,same_side).size()==1);
     std::cout<<"PASS: shared production runner scope, one-call bound, side/wrist/duplicate rejection\n";
 }

@@ -28,7 +28,7 @@ Map<String, dynamic> fixture() => {
   'connected': true,
   'error': '모의 신호',
   'rate_hz': 60.0,
-  'behaviors': ['정지', '낙상', '걷기'],
+  'behaviors': ['정지', '낙상', '일상', '걷기'],
   'records': [
     for (var i = 0; i < 3; i++)
       {
@@ -89,8 +89,8 @@ void main() {
         }),
       );
       await mount(tester, service, allowDummy: false);
-      await tester.ensureVisible(find.text('행동 추가'));
-      await tester.tap(find.text('행동 추가'));
+      await tester.ensureVisible(find.text('3초 준비 후 기록'));
+      await tester.tap(find.text('3초 준비 후 기록'));
       await tester.pump();
       expect(find.byType(AlertDialog), findsNothing);
       await tester.tap(find.text('2. 기록 · 학습'));
@@ -418,11 +418,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byType(CheckboxListTile).first);
     await tester.pump();
-    await tester.ensureVisible(find.text('선택 기록 학습 시작'));
-    await tester.tap(find.text('선택 기록 학습 시작'));
+    await tester.ensureVisible(find.text('선택 기록으로 낙상 모델 학습'));
+    await tester.tap(find.text('선택 기록으로 낙상 모델 학습'));
     await tester.pump();
     final command = requests.lastWhere((r) => r.url.path == '/command/train');
     expect(jsonDecode(command.body)['ids'], ['record-0']);
+    expect(jsonDecode(command.body)['fall_only'], isTrue);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     service.close();
@@ -461,7 +462,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('3. 현재 행동'));
       await tester.pump();
-      expect(find.text('판단 대기'), findsOneWidget);
+      expect(find.text('실측 신호 연결 필요'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       service.close();
@@ -498,12 +499,13 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('3. 현재 행동'));
     await tester.pump();
-    expect(find.text('걷기'), findsNWidgets(2));
+    expect(find.text('실측 신호 연결 필요'), findsOneWidget);
+    expect(find.text('걷기'), findsNothing);
     fail = true;
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump();
     expect(find.text('걷기'), findsNothing);
-    expect(find.text('판단 대기'), findsOneWidget);
+    expect(find.text('CSI 신호 대기'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     service.close();
   });

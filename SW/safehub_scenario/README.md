@@ -1,6 +1,6 @@
 # SafeHub 현재 UI
 
-이 폴더가 PR #11 통합 후보의 UI·빌드 진입점입니다. #10의 새 UI·장치 제어와
+이 폴더가 제출 통합본의 유일한 UI·빌드 진입점입니다. #10의 새 UI·장치 제어와
 #6 안정화, #9 수어 후보 소스를 함께 검토합니다. #10에 #8/#7이 포함돼 있습니다.
 옛 `SW/safehub_app`을 복사하거나 함께 실행할 필요는 없습니다.
 필수 runner·manifest·record_atlas·폰트는 이 폴더에 있습니다. 현재 UI가 사용하지 않는 옛 배경 이미지는 제거했습니다.
@@ -35,7 +35,8 @@ ATLAS 빌드는 이 폴더에서 팀의 ATLAS SDK와
 ## 기능과 시연
 
 현재 소스에는 방송 자막·재난 안내·수어/터치 도움 흐름, 카메라, 가전/단축키,
-CSI 상태·기존 모델 선택·추론, fastText 문맥 설명이 있습니다.
+CSI 낙상 준비 상태·기존 모델 선택·추론, fastText 문맥 설명이 있습니다.
+#14의 공유 PCM YAMNet·긴급 내장 음성과 #13의 도움 버튼·큰 수어 결과를 함께 유지합니다.
 수집·학습과 시나리오/장치 테스트는 개발 모드로 분리했습니다.
 팬·커튼·수어 단축키와 기존 LED·진동 경보를 유지하고 미지원 가전 카드는 제외했습니다.
 [승인된 제품 범위·복원 방법](../../docs/integration/product-scope-20261027.md)을 확인하세요.
@@ -53,22 +54,24 @@ CSI 상태·기존 모델 선택·추론, fastText 문맥 설명이 있습니다
 
 - 설치 앱 ID: `com.atlas.app.safehub_scenario_pr7`
 - Dart package / 실행 파일: `safehub_app` — 옛 UI 폴더를 참조한다는 뜻이 아닙니다.
-- 소스 후보: pubspec 1.4.0+1 / manifest 1.4.0
+- 소스 후보: pubspec 1.6.0+1 / manifest 1.6.0 (미설치 제출 후보)
 - 기본 설정 경로: 앱 계정의 `SafeHubScenarioData`; `SAFEHUB_SCENARIO_CONFIG_FILE` 등 명시적 override가 우선합니다.
 
 1.2.0은 과거 사용자 확인, 1.4.0 설치는 #10 작성자 보고입니다.
-현재 장치 버전·배치·IPK·ELF·보관본은 **미확인/미확보**이며 없다고 단정하지 않습니다.
-runner의 버전 번호를 맞춘 것만으로 설치본 재현을 선언하지 않습니다.
+#14에는 1.5.7 후속 설치·Pi4 별도 release 배포 보고가 있습니다. 이 클라우드에서 현재 장치를
+직접 읽지 않았으므로 정확한 소스/실행본 일치는 미확인입니다. 모델·보관본은 미확인/미확보를
+유지하며 없다고 단정하지 않습니다. [장치 대조 절차](../../docs/SUBMISSION.md)를 사용하세요.
 
 ## 검증
 
-[현재 소스·누락 의존성 점검](../../docs/integration/final-source-audit-20261027.md)을 기준으로 합니다.
-최신 전체 Flutter 255 pass / 0 fail / 1 opt-in 실제 fastText skip입니다.
-이전 272개에서 미사용 파일 녹음 전용 검사 18개를 제거하고 카메라 pending 회귀 1개를 추가했습니다.
-현행 마이크/자막 검사와 별도 TTS 서버 HTTP 계약 검사 8개도 유지합니다.
-정적 분석은 error 0 / warning 0 / info 102, 기본 명령 exit 1입니다.
-Preview web release 빌드는 통과했으나 ATLAS 패키지 빌드·재부팅·실제 모델·마이크부터
-물리 장치까지의 동작은 미검증입니다. 모델·비공개 SDK·인증정보·개인 설정은 포함하지 않습니다.
+[최종 통합 기록](../../docs/integration/submission-ready-20261028.md)을 기준으로 합니다.
+Flutter 289 pass / 0 fail / 1 실제 fastText opt-in skip,
+분석 error 0 / warning 0 / info 106 (`--no-fatal-infos` 통과), 제품 web release 성공입니다.
+호스트 검사는 ATLAS 링크·IPK 설치·실제 인식률·물리 장치 검증을 대신하지 않습니다.
+모델·비공개 SDK·인증정보·개인 설정은 포함하지 않습니다.
+ATLAS kernel을 수동 빌드하는 팀 경로에서는 [tool/atlas_main.dart](tool/atlas_main.dart)의
+RecordAtlas 등록을 포함해야 합니다. #14의 중간 MissingPluginException 실패와 후속 수정은
+[장치 작업 기록](../../docs/integration/device-pr11-20261027.md)에 구분돼 있습니다.
 
 제품 빌드는 `APP_LOCAL_PREVIEW=false`, `SAFEHUB_DEVELOPER_TOOLS=false`를 사용합니다.
 일반 화면에서 시연·장치 시험은 숨기고 실제 경보·도움 요청은 유지합니다.

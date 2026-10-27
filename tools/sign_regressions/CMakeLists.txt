@@ -31,23 +31,30 @@ function(regression name source)
   add_test(NAME ${name} COMMAND ${name})
   set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY "${REPO}" TIMEOUT 90)
 endfunction()
-foreach(name hand_coverage_quality_test sign_runtime_regression class_15_inference_parity_regression
+foreach(name active_targets_static_support_test hand_coverage_quality_test sign_runtime_regression class_15_inference_parity_regression
     class_id_coverage_regression hand_input_regression temporal_resample_regression
     temp_eligibility_regression temp_min_frames_regression temp_positive_full_regression
     temp_negative_full_regression aircon_cold_last40_regression hot_rescue_regression)
   regression(${name} "${SIGN}/tests/${name}.cpp")
 endforeach()
+set(OPENCV_INCLUDE_ROOT "" CACHE PATH "Optional installed OpenCV include directory")
 set(OPENCV_SOURCE_ROOT "" CACHE PATH "Optional OpenCV 4.9 source checkout")
 set(OPENCV_BUILD_ROOT "" CACHE PATH "Optional built OpenCV 4.9 tree")
 set(ORT_HEADERS "" CACHE PATH "Optional ONNX Runtime session headers")
 set(PAHO_HEADERS "" CACHE PATH "Optional Paho MQTT C headers")
-if(OPENCV_SOURCE_ROOT AND OPENCV_BUILD_ROOT AND ORT_HEADERS)
-  set(CV_HEADERS "${OPENCV_SOURCE_ROOT}/modules/core/include"
-      "${OPENCV_SOURCE_ROOT}/modules/imgproc/include" "${OPENCV_BUILD_ROOT}")
+if((OPENCV_INCLUDE_ROOT OR (OPENCV_SOURCE_ROOT AND OPENCV_BUILD_ROOT)) AND ORT_HEADERS)
+  if(OPENCV_INCLUDE_ROOT)
+    set(CV_HEADERS "${OPENCV_INCLUDE_ROOT}")
+  else()
+    set(CV_HEADERS "${OPENCV_SOURCE_ROOT}/modules/core/include"
+        "${OPENCV_SOURCE_ROOT}/modules/imgproc/include" "${OPENCV_BUILD_ROOT}")
+  endif()
   # These are host tests with scripted model outputs, not ONNX recognition tests.
   regression(tracking_roi_runner_test "${VISION}/photo_pipeline/tracking_roi_runner_test.cpp")
   regression(vision_crop_nms_test "${VISION}/tests/vision_crop_nms_test.cpp")
-  foreach(name tracking_roi_runner_test vision_crop_nms_test)
+  regression(recognition_light_test "${VISION}/tests/recognition_light_test.cpp")
+  regression(landmark_preview_test "${VISION}/tests/landmark_preview_test.cpp")
+  foreach(name tracking_roi_runner_test vision_crop_nms_test recognition_light_test landmark_preview_test)
     target_include_directories(${name} PRIVATE ${CV_HEADERS} "${ORT_HEADERS}")
     if(MSVC)
       target_link_libraries(${name} PRIVATE

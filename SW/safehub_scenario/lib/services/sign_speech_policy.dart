@@ -1,18 +1,41 @@
 class SignSpeechPolicy {
-  SignSpeechPolicy({
-    this.cooldown = const Duration(seconds: 4),
-  });
+  SignSpeechPolicy({this.cooldown = const Duration(seconds: 4)});
 
   final Duration cooldown;
 
   String? _lastSign;
   DateTime? _lastSpokenAt;
 
+  static bool isHelpSign(String sign) {
+    final label = sign.replaceAll(RegExp(r'[\s.!?,·]'), '');
+    return const {
+      '구조',
+      '도움',
+      '도와주세요',
+      '도와줘',
+      '아프다',
+      '아파요',
+      '쓰러짐',
+      '쓰러지다',
+      '낙상',
+    }.contains(label);
+  }
+
+  bool isBlocked(
+    String sign, {
+    required bool helpOpen,
+    required bool hasActiveAlert,
+    required bool hasOtherIncident,
+  }) => hasActiveAlert || hasOtherIncident || (helpOpen && !isHelpSign(sign));
+
   String phraseFor(String sign) {
     final cleanSign = sign.trim();
 
     return switch (cleanSign) {
       '아프다' => '아파요. 도움이 필요합니다.',
+      '아파요' => '아파요. 도움이 필요합니다.',
+      '구조' || '도움' || '도와주세요' || '도와줘' => '도움이 필요합니다.',
+      '쓰러짐' || '쓰러지다' || '낙상' => '쓰러짐을 알렸어요. 도움이 필요합니다.',
       '괜찮다' => '괜찮습니다.',
       '점등' => '조명을 켜 주세요.',
       '소등' => '조명을 꺼 주세요.',
@@ -27,10 +50,7 @@ class SignSpeechPolicy {
     return sign.trim() == '아프다';
   }
 
-  bool shouldSpeak(
-    String sign, {
-    DateTime? now,
-  }) {
+  bool shouldSpeak(String sign, {DateTime? now}) {
     final cleanSign = sign.trim();
 
     if (cleanSign.isEmpty) {

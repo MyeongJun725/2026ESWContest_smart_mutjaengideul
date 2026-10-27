@@ -1,4 +1,4 @@
-# Same runtime pins as the team's voice-server-port; Whisper is not required.
+# Voice-server-port runtime; edge-tts 7.3.1 fixes the observed 7.2.8 HTTP 403.
 fastapi==0.141.1
 uvicorn==0.53.0
-edge-tts==7.2.8
+edge-tts==7.3.1

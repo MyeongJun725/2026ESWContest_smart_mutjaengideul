@@ -58,7 +58,7 @@ void main() {
         );
         await t.tap(
           find.byKey(
-            ValueKey(developer ? 'navigation-신호 관리' : 'navigation-활동 상태'),
+            ValueKey(developer ? 'navigation-신호 관리' : 'navigation-낙상 감지'),
           ),
         );
         await t.pump();
@@ -70,7 +70,7 @@ void main() {
           find.text('2. 기록 · 학습'),
           developer ? findsOneWidget : findsNothing,
         );
-        if (!developer) expect(find.text('현재 모델의 행동 예측'), findsOneWidget);
+        if (!developer) expect(find.text('낙상 감지 상태'), findsOneWidget);
         expect(t.takeException(), isNull);
         await t.pumpWidget(const SizedBox());
         await t.pump();

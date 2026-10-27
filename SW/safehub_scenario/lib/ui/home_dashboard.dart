@@ -135,7 +135,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
               selected: _currentPage == _SafeHubPage.signTranslation,
             ),
             _nav(
-              widget.developerTools ? '신호 관리' : '활동 상태',
+              widget.developerTools ? '신호 관리' : '낙상 감지',
               Icons.sensors,
               () => _navigate(_SafeHubPage.wifiSensing),
               selected: _currentPage == _SafeHubPage.wifiSensing,
@@ -222,13 +222,13 @@ extension _HomeDashboard on _SafeHubHomePageState {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _label(
-                        '도움이 필요해요',
+                        '도움 요청',
                         size: 24,
                         color: Colors.white,
                         weight: FontWeight.w700,
                       ),
                       _label(
-                        '수어 또는 터치로 알려주세요',
+                        '수어·터치로 선택',
                         size: 18,
                         color: const Color(0xFFF7E9ED),
                       ),
@@ -261,8 +261,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _label(
-                      _situation.sensorStatus
-                          .replaceFirst('CSI 분류:', 'CSI 활동:'),
+                      _situation.sensorStatus,
                       size: 22,
                       weight: FontWeight.w600,
                     ),
@@ -342,28 +341,8 @@ extension _HomeDashboard on _SafeHubHomePageState {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: _cameraPlaceholder()),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _label(
-                    _signText == '수어 인식 대기 중'
-                        ? '수어를 기다리고 있어요'
-                        : '인식한 수어  $_signText',
-                    size: 26,
-                    weight: FontWeight.w700,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _openSignTranslation,
-                  icon: const Icon(Icons.chat_bubble_outline, size: 21),
-                  label: const Text(
-                    '수어 대화',
-                    style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
-                  ),
-                ),
-              ],
-            ),
+            SignResultStrip(sign: _signText, connected: _cameraConnected,
+              onConversation: _openSignTranslation),
           ],
         ),
       );
@@ -435,6 +414,10 @@ class _FinalCaptionBody extends StatelessWidget {
                   ),
                 ],
               ),
+              if (available) ...[
+                const SizedBox(height: 8),
+                Text(situation.soundStatus, style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16, color: _secondary)),
+              ],
               const SizedBox(height: 16),
               Expanded(
                 child: lines.isEmpty

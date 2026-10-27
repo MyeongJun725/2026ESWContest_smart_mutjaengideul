@@ -50,6 +50,18 @@ Future<void> tap(WidgetTester t, String label) async {
 }
 
 void main() {
+  testWidgets('okay sign dismisses the help screen without a tap', (t) async {
+    final s = createService();
+    s.receiveSign('쓰러지다');
+    await mount(t, s);
+    expect(find.byType(ScenarioEventOverlay), findsOneWidget);
+    s.receiveSign('괜찮다');
+    await t.pumpAndSettle();
+    expect(find.byType(ScenarioEventOverlay), findsNothing);
+    expect(find.text('SafeHub 홈'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets(
     'broadcast keeps source, simulated delivery and acknowledgement semantics',
     (t) async {

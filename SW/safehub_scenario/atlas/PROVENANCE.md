@@ -6,11 +6,12 @@ manifest ID/entry, display name and manifest version are adapted for the
 user-confirmed Scenario app. The Dart package and executable remain `safehub_app`;
 the installed app ID remains `com.atlas.app.safehub_scenario_pr7`.
 
-The candidate version `1.4.0` follows the PR #10 author report. The earlier
-user observation was 1.2.0; the current installed version is unconfirmed. It does not
-prove that this runner, its permissions/plugins or the source layout match the
-installed IPK. Obtain the current installed manifest, runner, source changes, build
-arguments/tool versions and IPK/ELF hashes before declaring that correspondence.
+The submission source candidate is `1.6.0` (pubspec `1.6.0+1`), not an
+installed-device claim. The earlier user observation was 1.2.0; PR #10 reported
+1.4.0 and PR #14's later device notes report 1.5.7. The cloud integration has not
+read the current installed manifest or verified the final ELF/kernel against
+this source tree. Obtain the installed manifest, source/build archive, tool
+versions and IPK/ELF hashes before declaring that correspondence.
 The media-player permission and plugin registration are retained from the
 existing runner; no new permission is invented. Validate them with the installed
 package, the ATLAS SDK and hardware before deployment.

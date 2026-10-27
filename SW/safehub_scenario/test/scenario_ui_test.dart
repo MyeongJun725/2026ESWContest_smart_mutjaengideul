@@ -73,7 +73,7 @@ void main() {
       await tester.tap(
         find.byKey(
           ValueKey(
-            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-낙상 감지',
           ),
         ),
       );
@@ -83,7 +83,7 @@ void main() {
         AppConfig.developerTools ? findsOneWidget : findsNothing,
       );
       if (!AppConfig.developerTools)
-        expect(find.text('현재 모델의 행동 예측'), findsOneWidget);
+        expect(find.text('낙상 감지 상태'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await capture(tester, key, 'unified-signal');
       await tester.tap(find.byKey(const ValueKey('navigation-홈')));
@@ -132,11 +132,11 @@ void main() {
     }
     expect(find.byTooltip('AI·알림 설정'), findsOneWidget);
     expect(find.text('수어로 이야기해요').hitTestable(), findsOneWidget);
-    expect(find.text('도움이 필요해요').hitTestable(), findsOneWidget);
+    expect(find.text('도움 요청').hitTestable(), findsOneWidget);
     expect(find.text('최근 알림'), findsOneWidget);
     expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
     await capture(tester, key, 'scenario-home');
-    await tester.tap(find.text('도움이 필요해요'));
+    await tester.tap(find.text('도움 요청'));
     await tester.pump();
     expect(find.byType(ScenarioEventOverlay), findsOneWidget);
     await tester.tap(find.text('다른 사람이 아파요'));
@@ -157,6 +157,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
   });
 
   testWidgets('touch response screen fits an 800 by 480 display', (
@@ -193,5 +194,6 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
   });
 }

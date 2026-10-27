@@ -124,7 +124,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('최근 알림'), findsOneWidget);
       expect(find.text('음성 자막'), findsOneWidget);
-      final help = tester.getRect(find.text('도움이 필요해요').hitTestable());
+      final help = tester.getRect(find.text('도움 요청').hitTestable());
       expect(help.left, greaterThanOrEqualTo(0));
       expect(help.right, lessThanOrEqualTo(size.width));
       expect(help.bottom, lessThanOrEqualTo(size.height));

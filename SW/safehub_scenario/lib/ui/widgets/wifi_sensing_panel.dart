@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../core/csi_fall_state.dart';
 import '../../services/wifi_sensing_service.dart';
 
 class WifiSensingPanel extends StatefulWidget {
@@ -26,9 +27,9 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
   final Set<String> _selected = {};
   List<String> _deleted = [];
   final _round = TextEditingController(text: '회차 1');
-  int _page = 0, _seconds = 8, _channel = 0;
+  int _page = 0, _seconds = 4, _channel = 0;
   String? _port;
-  String _label = '정지', _error = '', _notice = '', _portsError = '';
+  String _label = '일상', _error = '', _notice = '', _portsError = '';
   bool _busy = false;
   bool _dwt = true, _pca = true, _lowpass = true;
   int _stageGeneration = 0;
@@ -113,7 +114,7 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
           _error = '';
           final ids = (state['records'] as List).map((r) => r['id']).toSet();
           _selected.removeWhere((id) => !ids.contains(id));
-          if (!(state['behaviors'] as List).contains(_label)) _label = '정지';
+          if (!['일상', '낙상'].contains(_label)) _label = '일상';
         });
       } catch (error) {
         if (mounted && generation == _stageGeneration) {
@@ -377,7 +378,7 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
     final collecting =
         capture != null &&
         ['preparing', 'recording'].contains(capture['state']);
-    final behaviors = List<String>.from(_state?['behaviors'] ?? ['정지', '낙상']);
+    const behaviors = ['일상', '낙상'];
     return [
       _card('수신기 연결', [
         Wrap(
@@ -518,7 +519,9 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
           style: TextStyle(fontSize: 12),
         ),
       ]),
-      _card('행동을 선택하고 기록', [
+      _card('낙상 학습용 신호 기록', [
+        const Text('낙상과 일상 동작 두 종류를 기록하세요. 일상에는 걷기·앉기·정지를 섞어 기록합니다. 같은 회차에 두 종류를 모두 수집하고, 다음 회차에서 반복하세요.'),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -540,20 +543,6 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
                           _label = v!;
                         }),
               ),
-            ),
-            _button('행동 추가', () async {
-              final name = await _input('행동 추가', '예: 걷기, 앉기, 호흡');
-              if (name != null) await _command('add_behavior', {'name': name});
-            }),
-            _button(
-              '행동 삭제',
-              ['정지', '낙상'].contains(_label)
-                  ? null
-                  : () async {
-                    if (await _confirm('$_label 범주를 삭제할까요? 기존 측정 기록은 유지됩니다.')) {
-                      await _command('remove_behavior', {'name': _label});
-                    }
-                  },
             ),
             SizedBox(
               width: 150,
@@ -613,7 +602,7 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
     return [
       _card('학습에 사용할 기록만 선택', [
         const Text(
-          '학습 단위는 최신 모델과 같은 4초입니다. 행동 2종 이상, 행동마다 서로 다른 측정 회차 3개 이상이 필요합니다.',
+          '낙상 / 일상 두 종류로 학습합니다. 걷기·앉기·정지 기록은 일상으로 묶으며 원본 라벨은 유지합니다. 두 종류가 모두 있는 측정 회차 3개 이상이 필요합니다.',
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -710,12 +699,12 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
         ),
         const SizedBox(height: 10),
         _button(
-          '선택 기록 학습 시작',
+          '선택 기록으로 낙상 모델 학습',
           _state?['training_allowed'] != true ||
                   _selected.isEmpty ||
                   training['state'] == 'running'
               ? null
-              : () => _command('train', {'ids': _selected.toList()}),
+              : () => _command('train', {'ids': _selected.toList(), 'fall_only': true}),
           primary: true,
         ),
       ]),
@@ -776,7 +765,7 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
             ),
             _button(
               recog?['running'] == true ? '인식 중지' : '새 신호 인식 시작',
-              model == null
+              model == null || (recog?['running'] != true && !CsiFallState.supportsFall(model))
                   ? null
                   : recog?['running'] != true &&
                       (_state?['fresh'] != true ||
@@ -792,9 +781,9 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
           ],
         ),
       ]),
-      _card('현재 행동', [
+      _card('낙상 감지 상태', [
         Text(
-          result?['label'] ?? '판단 대기',
+          CsiFallState.fromState(_state).headline,
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 42,
@@ -809,7 +798,7 @@ class _WifiSensingPanelState extends State<WifiSensingPanel> {
         ),
         const SizedBox(height: 20),
         if (result != null)
-          for (final entry in (result['scores'] as Map).entries)
+          for (final entry in (result['scores'] as Map).entries.where((entry) => CsiFallState.fallLabels.contains(entry.key)))
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(

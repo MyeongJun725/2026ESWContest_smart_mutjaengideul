@@ -13,9 +13,10 @@ python3 -m venv /tmp/safehub-tts
 /tmp/safehub-tts/bin/python -m uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-마지막 명령은 서버를 실제로 실행하는 명령이다. 이번 클라우드에서는 실행하지 않았다.
+마지막 명령은 서버를 직접 실행할 때 사용하는 예시다.
 앱 `TTS_SERVER_URL`은 같은 장치라면 `http://127.0.0.1:8000`으로 설정한다.
-다른 서버를 사용하던 개인 설정을 자동 변경하지 않으며 부팅 unit도 추가하지 않았다.
+설정 화면의 `TTS 서버 주소`에 입력하고 연결 확인 후 저장한다.
+Pi5 내부의 주소이므로 Wi-Fi IP가 바뀌어도 같은 값을 사용한다.
 
 - `POST /tts`, JSON `{"text":"도움이 필요합니다"}` → `audio/mpeg`.
 - 빈 문자열 400, 잘못된 형식 422, 외부 합성 실패/빈 결과 502, 시간 초과 504.
@@ -32,5 +33,20 @@ python3 -m venv /tmp/safehub-tts
 /tmp/safehub-tts/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-검사는 fake 합성기다. 실제 인터넷 합성·음질·ARM64 설치·ATLAS 스피커는 미검증이다.
-FastAPI/uvicorn/edge-tts 고정 버전은 팀의 원래 voice-server-port 기록을 유지했다.
+위 단위 검사는 fake 합성기를 사용한다.
+
+2026-10-27 Pi5에서는 `/opt/safehub-tts/venv`와 `safehub-tts.service`를
+설치하고 localhost:8000의 health·실제 합성 응답을 확인했다. 7.2.8에서
+외부 합성 요청이 HTTP 403으로 실패하여 edge-tts를 7.3.1로 고정했다.
+FastAPI·uvicorn 버전은 유지했다. `safehub-tts.service`는 loopback에만
+바인딩하며, ATLAS의 `/opt/safehub-system/boot.sh`에서 시작한다.
+부팅 스크립트 원본과 설치 전 앱·프로필은 별도로 백업했다.
+
+앱 1.5.7은 ATLAS의 GStreamer/PulseAudio 경로로 재생한다.
+고정 번역 메시지 → 실제 서버 합성 → SafeHub 재생 스트림 생성과,
+모의 MQTT 위험 이벤트 → 내장 안내 재생을 확인했다.
+이는 실제 카메라·CSI 인식이나 물리 스피커의 음량·가청성 검증과는 다르다.
+재부팅 후 자동 시작은 아직 시험하지 않았다.
+
+위험 안내 4종은 앱의 `assets/audio/`에 포함되어 서버·인터넷 없이 재생한다.
+일반 수어/문장 합성은 이 서버와 인터넷이 필요하다.

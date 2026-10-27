@@ -12,6 +12,16 @@ class TtsService {
     http.Client? client,
   }) : _client = client ?? http.Client();
 
+  Future<bool> checkHealth() async {
+    final base = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (base.isEmpty) return false;
+    final response = await _client.get(Uri.parse('$base/health'))
+        .timeout(const Duration(seconds: 3));
+    if (response.statusCode != 200) return false;
+    final data = jsonDecode(response.body);
+    return data is Map && data['status'] == 'ok' && data['voice'] is String;
+  }
+
   Future<Uint8List> synthesize(String text) async {
     final cleanText = text.trim();
 
