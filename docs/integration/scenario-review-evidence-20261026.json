@@ -128,7 +128,7 @@
     "status_contexts_each": 0,
     "combined_state": "pending; no statuses present, not a running-CI claim"
   },
-  "current_review": "product-scope-20261027.md",
+  "current_review": "submission-audit-20261027.md",
   "pr9_source_integration": {
     "included": true,
     "deployed": false,
@@ -158,7 +158,7 @@
     "pending_product_decisions": 6,
     "source_isolation_test": "Scenario-only fixture without safehub_app/wifi_sensing succeeds"
   },
-  "previous_review": "pr10-addendum-review.md",
+  "previous_review": "product-scope-20261027.md",
   "product_scope": {
     "user_approved_all_recommendations": true,
     "recorded_at": "2026-10-27T03:38:05.433410+09:00",
@@ -189,5 +189,43 @@
     "physical_device_execution": false,
     "backup_archive_restored_files_verified": 847,
     "flutter_source_files_compared": 93
-  }
+  },
+  "submission_audit": {
+    "recorded_at": "2026-10-27T09:39:05.873296+09:00",
+    "base_sha": "82494552e7bc44cffc45022cb9ea6dc68707b967",
+    "backup_ref": "backup/pr11-before-submission-audit-20261027",
+    "shared_broadcast_cases": 20,
+    "direct_runs": {
+      "flutter_passed": 272,
+      "flutter_failed": 0,
+      "flutter_skipped": 1,
+      "context_python_passed": 9,
+      "uno_python_passed": 15,
+      "vision_python_passed": 22,
+      "source_packaging_passed": 6,
+      "windows_tools_passed": 14,
+      "boot_stub_passed": 4,
+      "hub_runner_guard_passed": 1,
+      "hub_assertion_scripts_passed": 14,
+      "cpp_ctest_passed": 19,
+      "product_web_build_exit": 0,
+      "analysis_errors": 0,
+      "analysis_warnings": 0,
+      "analysis_infos": 103,
+      "strict_analysis_exit": 1,
+      "ci_analysis_exit": 0,
+      "actionlint_exit": 0
+    },
+    "ci_local_commands_replayed": true,
+    "live_probe_discovered": {
+      "deleted": true,
+      "execution_failed_at": "DNS resolution",
+      "broker_connected": false,
+      "packet_published": false
+    },
+    "device_operations_performed": false,
+    "real_fasttext_model_test": "skipped; unconfirmed/unavailable",
+    "github_ci": "Inspect PR11 Checks for current head; local replay is not a hosted CI claim"
+  },
+  "direct_runs_scope_note": "Earlier snapshots are retained for provenance; current results are under submission_audit.direct_runs and current_review."
 }

@@ -64,7 +64,7 @@
       "qos": 1,
       "retain": false,
       "publisher": "RPi5",
-      "subscriber": "ESP32",
+      "subscriber": "Uno through included RPi4 MQTT/USB bridge; ESP32 is the earlier contract consumer",
       "description": "비상 LED 제어 명령",
       "payload_schema": {
         "message_id": "string(UUID)",
@@ -73,14 +73,14 @@
         "action": "string",
         "timestamp": "integer (Unix timestamp)"
       },
-      "implementation_status": "UI publishing API exists; PR #10 Uno MQTT/USB consumer is reviewed separately. Delivery/serial echo is not physical action confirmation."
+      "implementation_status": "Scenario UI publisher and Uno MQTT/USB consumer are included in the product review candidate. Packet acceptance or serial echo is not physical action confirmation; actual device execution is unverified."
     },
     "actuator_bedshaker_command": {
       "topic": "safehub/actuator/bedshaker/command",
       "qos": 1,
       "retain": false,
       "publisher": "RPi5",
-      "subscriber": "ESP32",
+      "subscriber": "Uno through included RPi4 MQTT/USB bridge; ESP32 is the earlier contract consumer",
       "description": "베드셰이커 제어 명령",
       "payload_schema": {
         "message_id": "string(UUID)",
@@ -90,7 +90,7 @@
         "duration_sec": "integer",
         "timestamp": "integer (Unix timestamp)"
       },
-      "implementation_status": "UI publishing API exists; PR #10 Uno MQTT/USB consumer is reviewed separately. Delivery/serial echo is not physical action confirmation."
+      "implementation_status": "Scenario UI publisher and Uno MQTT/USB consumer are included in the product review candidate. Packet acceptance or serial echo is not physical action confirmation; actual device execution is unverified."
     },
     "system_heartbeat": {
       "topic": "safehub/system/heartbeat",
@@ -114,14 +114,14 @@
       "payload_schema": {
         "text": "nonempty string"
       },
-      "duplicate_handling": "QoS 1 DUP + packet identifier + unchanged payload: bounded 128-packet process-local cache. A new publication may repeat the same text."
+      "duplicate_handling": "QoS 1 DUP + packet identifier + unchanged payload: bounded 128-packet clean-session cache. Reconnection resets packet IDs; logical safety incident IDs use a separate process-local cache. A new publication may repeat the same text."
     },
     "device_control_command": {
       "topic": "safehub/control/{room}/{device}/command",
       "qos": 1,
       "retain": false,
       "publisher": "RPi5 sign shortcut hub",
-      "subscriber": "device adapter (Uno candidate in PR #10); Scenario UI currently observes livingroom/aircon",
+      "subscriber": "included Uno MQTT/USB adapter; Scenario UI observes livingroom/aircon command state",
       "payload_schema": {
         "source": "string (sign_shortcut; manual_test is a PR #10 extension)",
         "action": "set_power (stop for curtain in PR #10 only)",
@@ -152,7 +152,7 @@
       }
     }
   },
-  "architecture_note": "Current reviewed path: RPi4 C++ sign classification publishes translation text and sends camera frames over TCP. RPi5 runs the Python hub, Scenario Flutter UI, local STT and optional context services. Existing GRU/landmark code and assets are preserved as legacy or user work, not reset. SW/wifi_sensing uses local HTTP; an offline CSI envelope adapter alone is not a live alarm integration. PR #9 and PR #10 sources are included as undeployed review candidates.",
+  "architecture_note": "Current source path: RPi4 C++ sign/vision candidate publishes translation and TCP video; RPi5 runs Scenario UI, local STT, fastText context and the sign shortcut hub. The included Uno bridge consumes existing actuator and fan/curtain contracts. The old Flutter UI, standalone CSI desktop app, mock vision and generative server were removed. Existing landmark envelopes remain documented only for wire compatibility. Product CSI provides HTTP state/existing-model selection/inference; it does not publish global CSI alarm topics. PR9/PR10 source inclusion is not physical deployment confirmation.",
   "change_policy": "Topic 이름, JSON Key, QoS, retain 및 데이터 타입 변경 시 팀 합의 후 version을 올린다.",
   "status": "review_candidate_not_a_deployment_claim"
 }
