@@ -35,7 +35,9 @@ void mockAudioPlugins(WidgetTester tester) {
     }
     return null;
   });
-  addTearDown(() {
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
     for (final name in channels) {
       messenger.setMockMethodCallHandler(MethodChannel(name), null);
     }
@@ -63,22 +65,42 @@ void main() {
       await tester.pumpWidget(const SafeHubApp());
       await tester.pump();
       expect(
-        find.textContaining(
-          AppConfig.localPreview ? '장비 연결 전 체험 ·' : '실제 장비 연결 모드 ·',
+        find.textContaining(AppConfig.localPreview ? '미리보기' : '홈 연결 확인'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('연결 설정'), findsOneWidget);
+      expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
+      expect(
+        find.byKey(
+          ValueKey(
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+          ),
         ),
         findsOneWidget,
       );
-      expect(find.text('연결 설정'), findsOneWidget);
-      expect(find.text('수어 인식 대기 중'), findsOneWidget);
-      expect(find.text('신호 수집 · 모델 관리'), findsOneWidget);
       expect(find.text('연결 중'), findsNothing);
       expect(tester.takeException(), isNull);
 
-      await tester.tap(find.text('신호 수집 · 모델 관리'));
+      await tester.tap(
+        find.byKey(
+          ValueKey(
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+          ),
+        ),
+      );
       await tester.pump();
-      expect(find.text('1. 신호 수집'), findsOneWidget);
-      expect(find.text('2. 기록 · 학습'), findsOneWidget);
-      expect(find.text('3. 현재 행동'), findsOneWidget);
+      expect(
+        find.text('1. 신호 수집'),
+        AppConfig.developerTools ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('2. 기록 · 학습'),
+        AppConfig.developerTools ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('3. 현재 행동'),
+        AppConfig.developerTools ? findsOneWidget : findsNothing,
+      );
       expect(
         find.text('장비 없이 모의 신호'),
         AppConfig.localPreview ? findsOneWidget : findsNothing,
@@ -116,7 +138,7 @@ void main() {
       await tester.pumpWidget(const SafeHubApp());
       await tester.pump();
       final previousHomeState = tester.state(find.byType(SafeHubHomePage));
-      await tester.tap(find.text('연결 설정'));
+      await tester.tap(find.byTooltip('연결 설정'));
       await tester.pumpAndSettle();
       expect(find.byType(ConnectionSettingsPage), findsOneWidget);
       for (final key in [
@@ -145,8 +167,9 @@ void main() {
         'http://127.0.0.1:8765',
       );
 
-      final settingsRoute =
-          ModalRoute.of(tester.element(find.byType(ConnectionSettingsPage)))!;
+      final settingsRoute = ModalRoute.of(
+        tester.element(find.byType(ConnectionSettingsPage)),
+      )!;
       await tester.ensureVisible(
         find.byKey(const ValueKey('save_connection_settings')),
       );
@@ -174,12 +197,10 @@ void main() {
       expect(AppConfig.cameraConfigured, isFalse);
       expect(AppConfig.disasterConfigured, isFalse);
       expect(AppConfig.csiServiceUrl, 'http://127.0.0.1:8765');
-      expect(find.text('수어 인식 대기 중'), findsOneWidget);
+      expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
       expect(find.text('연결 중'), findsNothing);
       expect(
-        find.textContaining(
-          AppConfig.localPreview ? '장비 연결 전 체험 ·' : '실제 장비 연결 모드 ·',
-        ),
+        find.textContaining(AppConfig.localPreview ? '미리보기' : '홈 연결 확인'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);

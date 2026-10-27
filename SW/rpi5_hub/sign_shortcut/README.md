@@ -318,7 +318,6 @@ Topic/QoS 구독 계약, CSI routing, 잘못된 메시지 처리,
 다음 테스트는 자동 테스트에 포함하지 않습니다.
 
 ```text
-tests/test_mqtt_sender.py
 ```
 
 이 파일은 실제 `raspberrypi5.local` MQTT Broker를 요구하는

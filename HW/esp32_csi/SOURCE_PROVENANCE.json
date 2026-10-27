@@ -1,0 +1,16 @@
+{
+  "source_commit": "d6be7c7f74a4e715cff73979f2a5d16c1cb31d0c",
+  "original_directory": "WiFi-CSI-Sensing/firmware-c6/",
+  "unchanged_files_sha256": {
+    "CMakeLists.txt": "6a04ef678488d71959d58d998c54155d4526215158c7ef501f1b1e0b961e3329",
+    "package_firmware.py": "c16397e2443aeb42dc70e4b2da164ac34cca320d97d0ffb3fa3705146a84a835",
+    "platformio.ini": "2872084d9acdf92203dfffaeab020a4a564ec70a3486a112d389145ad89d8b48",
+    "sdkconfig.defaults": "86e041fc4506d3179e89b502d20c6c92c79c087e8b765528f198ed4a975e0e48",
+    "src/CMakeLists.txt": "7b9f8236e5c9c1bfd6d46c6a69887829649be0146d7900bb39789d4ff27fe557",
+    "src/idf_component.yml": "8dd9e9091089feb84b15317d26ac49ad8b4e0d2098f6c25b4e6234681e622e00",
+    "src/main.c": "422f35ba7cbaa6c35a19c0f70027dca45a2ea33fb274ba863e1041a7be7879f1",
+    "LICENSE-C6.txt": "fc5a94038cb9090d530cdd2ffa81ef812f977ce0926119f0c8b023f858e9d477",
+    "ESP-IDF-LICENSE.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  "binary_build_or_flash_performed": false
+}

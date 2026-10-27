@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-app_id=com.atlas.app.safehub_app
+app_id=${SAFEHUB_APP_ID:-com.atlas.app.safehub_scenario_pr7}
 app_status() {
     busctl --system --timeout=10 call com.atlas.AppManager1 \
         /com/atlas/AppManager1 com.atlas.AppManager1 GetStatus s "$1"

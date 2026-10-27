@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -29,8 +30,12 @@ class _Client extends MqttServerClient {
   final completion = Completer<MqttClientConnectionStatus?>();
   final status = MqttClientConnectionStatus();
   final stream =
-      StreamController<List<MqttReceivedMessage<MqttMessage>>>.broadcast();
+      StreamController<List<MqttReceivedMessage<MqttMessage>>>.broadcast(
+    sync: true,
+  );
   final subscriptions = <String>[];
+  final subscriptionQos = <String, MqttQos>{};
+  MqttPublishMessage? subscriptionEvent;
   int connects = 0, disconnects = 0;
 
   @override
@@ -48,7 +53,16 @@ class _Client extends MqttServerClient {
 
   @override
   Subscription? subscribe(String topic, MqttQos qosLevel) {
+    expect(
+      stream.hasListener,
+      isTrue,
+      reason: "Register updates before every subscribe",
+    );
+    subscriptionQos[topic] = qosLevel;
     subscriptions.add(topic);
+    if (topic == 'safehub/csi/bedroom/event' && subscriptionEvent != null) {
+      stream.add([MqttReceivedMessage<MqttMessage>(topic, subscriptionEvent!)]);
+    }
     return null;
   }
 
@@ -102,6 +116,43 @@ void main() {
     }
   });
 
+  test('clean reconnect resets packet cache but keeps safety incident IDs',
+      () async {
+    final signs = <String>[];
+    final incidents = <Map<String, dynamic>>[];
+    final client = _Client();
+    final scoped = MqttReceiver(
+        broker: 'localhost',
+        port: 1883,
+        eventManager: EventManager(),
+        onSignTextReceived: signs.add,
+        onEventReceived: incidents.add,
+        clientFactory: (_, __, ___) => client);
+    addTearDown(scoped.disconnect);
+    final pending = scoped.connect();
+    client.accept();
+    await pending;
+    const sign = 'safehub/vision/livingroom/translation';
+    const source = '{"text":"도움"}';
+    final event = jsonEncode({
+      'message_id': 'incident-stays-seen',
+      'event': 'fall_detected',
+      'priority': 9
+    });
+    scoped.handlePayload(sign, source, packetId: 71);
+    scoped.handlePayload(sign, source, packetId: 71, duplicate: true);
+    scoped.handlePayload('safehub/csi/bedroom/event', event);
+    expect(signs, ['도움']);
+    expect(incidents, hasLength(1));
+    client.onAutoReconnect!();
+    client.onAutoReconnected!();
+    scoped.handlePayload(sign, source, packetId: 71, duplicate: true);
+    scoped.handlePayload(sign, source, packetId: 71, duplicate: true);
+    scoped.handlePayload('safehub/csi/bedroom/event', event);
+    expect(signs, ['도움', '도움']);
+    expect(incidents, hasLength(1));
+  });
+
   test(
     'initial failure retries and subscribes when a broker starts later',
     () async {
@@ -122,6 +173,10 @@ void main() {
         'safehub/vision/livingroom/translation',
         'safehub/control/livingroom/aircon/command',
       ]);
+      expect(
+        clients.last.subscriptionQos['safehub/vision/livingroom/translation'],
+        MqttQos.atLeastOnce,
+      );
       expect(timers.where((timer) => timer.isActive), isEmpty);
     },
   );
@@ -186,6 +241,28 @@ void main() {
       expect(timers, isEmpty);
       clients.single.onAutoReconnected?.call();
       expect(changes.last, isTrue);
+    },
+  );
+
+  test(
+    'subscription-time delivery is received and reconnect retry is deduplicated',
+    () async {
+      const topic = 'safehub/csi/bedroom/event';
+      const payload = '{"event":"fall_detected","message_id":"subscribe-1"}';
+      final connecting = receiver.connect();
+      final builder = MqttClientPayloadBuilder()..addUTF8String(payload);
+      clients.single.subscriptionEvent =
+          MqttPublishMessage().toTopic(topic).publishData(builder.payload!);
+      clients.single.accept();
+      await connecting;
+      expect(
+        receiver.eventManager.getNextEvent()?['message_id'],
+        'subscribe-1',
+      );
+      clients.single.onAutoReconnect?.call();
+      clients.single.onAutoReconnected?.call();
+      receiver.handlePayload(topic, payload);
+      expect(receiver.eventManager.getNextEvent(), isNull);
     },
   );
 }

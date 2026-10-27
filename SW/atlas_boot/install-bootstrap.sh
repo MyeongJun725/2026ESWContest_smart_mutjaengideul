@@ -4,7 +4,8 @@ source_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # This bootstrap is for the hub, not the camera board's existing service.
 test -f /opt/safehub-system/boot.sh
 test -f /opt/safehub-csi/service/bridge.py
-test -d /data/share/usr/atlas/apps/com.atlas.app.safehub_app
+app_id=${SAFEHUB_APP_ID:-com.atlas.app.safehub_scenario_pr7}
+test -d "/data/share/usr/atlas/apps/$app_id"
 target=/etc/systemd/system/safehub-bootstrap.service
 backup=/opt/safehub-system/backups
 mkdir -p "$backup"

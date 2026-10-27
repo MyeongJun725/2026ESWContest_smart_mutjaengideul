@@ -6,7 +6,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:safehub_app/services/wifi_sensing_service.dart';
 import 'package:safehub_app/ui/widgets/wifi_action_status.dart';
-import 'package:safehub_app/ui/widgets/disaster_overlay.dart';
+import 'package:safehub_app/core/house_scenario.dart';
+import 'package:safehub_app/services/situation_service.dart';
+import 'package:safehub_app/ui/widgets/scenario_event_overlay.dart';
 import 'wifi_sensing_panel_test.dart' show fixture, utf8Response;
 
 Map<String, dynamic> liveState() {
@@ -52,6 +54,52 @@ void main() {
     );
     await tester.pump();
   }
+
+  testWidgets(
+    'product can select an existing model without capture or training',
+    (t) async {
+      final state = liveState();
+      state['model'] = null;
+      final actions = <String>[];
+      final service = WifiSensingService(
+        baseUrl: 'http://localhost',
+        client: MockClient((request) async {
+          if (request.method == 'POST') {
+            actions.add(request.url.path);
+            expect(jsonDecode(request.body), {'id': 'model'});
+            state['model'] = (state['models'] as List).first;
+            state['recognition']['running'] = false;
+            return utf8Response('{"ok":true}', 200);
+          }
+          return utf8Response(jsonEncode(state), 200);
+        }),
+      );
+      addTearDown(service.close);
+      await t.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 650,
+              child: WifiActionStatus(
+                service: service,
+                allowModelSelection: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.pump();
+      await t.tap(find.byType(DropdownButtonFormField<String>));
+      await t.pumpAndSettle();
+      await t.tap(find.text('model').last);
+      await t.pumpAndSettle();
+      expect(actions, ['/command/select_model']);
+      expect(find.text('행동 인식 시작'), findsOneWidget);
+      expect(find.text('기록 · 학습'), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
 
   testWidgets('home polls lightweight state and clears action on disconnect', (
     tester,
@@ -140,57 +188,57 @@ void main() {
   });
 
   for (final size in [const Size(800, 480), const Size(1920, 1080)]) {
-    testWidgets('disaster remains visible when CSI disconnects at $size', (
-      tester,
-    ) async {
-      tester.view.physicalSize = size;
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final state = liveState();
-      final service = WifiSensingService(
-        baseUrl: 'http://localhost',
-        client: MockClient((_) async => utf8Response(jsonEncode(state), 200)),
-      );
-      addTearDown(service.close);
-      var acknowledged = false;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                DisasterOverlay(
-                  disaster: const {
-                    'DST_SE_NM': '지진',
-                    'EMRG_STEP_NM': '긴급재난',
-                    'MSG_CN': '테스트용 재난 안내',
-                  },
-                  pulseAnimation: const AlwaysStoppedAnimation(0),
-                  onAcknowledge: () => acknowledged = true,
-                  activityStatus: WifiActionStatus(
-                    service: service,
-                    compact: true,
+    testWidgets(
+      'current disaster response remains actionable when CSI disconnects at $size',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final state = liveState();
+        final service = WifiSensingService(
+          baseUrl: 'http://localhost',
+          client: MockClient((_) async => utf8Response(jsonEncode(state), 200)),
+        );
+        addTearDown(service.close);
+        final situation = SituationService(
+          settings: SituationSettings(enabled: false),
+        );
+        addTearDown(situation.dispose);
+        situation.startScenarioTest(HouseScenario.disaster, '테스트용 재난 안내');
+        var acknowledged = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Stack(
+                children: [
+                  WifiActionStatus(service: service, compact: true),
+                  ScenarioEventOverlay(
+                    service: situation,
+                    camera: const ColoredBox(color: Colors.black),
+                    onAcknowledge: () => acknowledged = true,
+                    onSignal: () {},
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
-      expect(find.text('현재 모델 예측: 걷기'), findsOneWidget);
-      state['fresh'] = false;
-      state['connected'] = false;
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump();
-      expect(find.text('현재 모델 예측: 걷기'), findsNothing);
-      expect(find.text('현재 행동: 확인 불가'), findsOneWidget);
-      expect(find.text('테스트용 재난 안내'), findsOneWidget);
-      expect(find.textContaining('대피 여부는 확인할 수 없습니다'), findsOneWidget);
-      await tester.tap(find.text('확인했습니다'));
-      expect(acknowledged, isTrue);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
-    });
+        );
+        await tester.pump();
+        expect(find.text('현재 모델 예측: 걷기'), findsOneWidget);
+        state['fresh'] = false;
+        state['connected'] = false;
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+        expect(find.text('현재 모델 예측: 걷기'), findsNothing);
+        expect(find.text('현재 행동: 확인 불가'), findsOneWidget);
+        expect(find.textContaining('테스트용 재난 안내'), findsOneWidget);
+        await tester.ensureVisible(find.text('알림 확인했어요'));
+        await tester.tap(find.text('알림 확인했어요'));
+        expect(acknowledged, isTrue);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
   }
 }

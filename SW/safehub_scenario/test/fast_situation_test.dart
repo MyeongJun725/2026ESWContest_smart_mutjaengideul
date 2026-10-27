@@ -27,18 +27,15 @@ void main() {
       late Map<String, dynamic> request;
       final events = <List<Object>>[];
       final service = SituationService(
-        clientFactory:
-            () => MockClient((r) async {
-              expect(r.url.port, 9380);
-              request = jsonDecode(
-                jsonDecode(r.body)['messages'][1]['content'],
-              );
-              return answer('화재가 발생했다는 안내입니다.', caption: '화재가 발생했습니다.');
-            }),
+        clientFactory: () => MockClient((r) async {
+          expect(r.url.port, 9380);
+          request = jsonDecode(jsonDecode(r.body)['messages'][1]['content']);
+          return answer('화재가 발생했다는 안내입니다.', caption: '화재가 발생했습니다.');
+        }),
       );
       addTearDown(service.dispose);
-      service.onConversation =
-          (source, reply, sign) => events.add([source, reply, sign]);
+      service.onConversation = (source, reply, sign) =>
+          events.add([source, reply, sign]);
       service.addEvidence('확정 음성자막', '화재가 발생했습니다.', analyze: false);
       await service.analyze();
       expect(request['task'], '집 안 화면 상태 분석');
@@ -57,21 +54,21 @@ void main() {
     () async {
       final service = SituationService(
         debounce: const Duration(days: 1),
-        clientFactory:
-            () => MockClient((r) async {
-              final input = jsonDecode(
-                jsonDecode(r.body)['messages'][1]['content'],
-              );
-              expect(input['task'], '선택한 문맥에 맞춰 수어에 응답');
-              expect(input['source'], '아프다');
-              return answer('어디가 아프신가요?');
-            }),
+        clientFactory: () => MockClient((r) async {
+          final input = jsonDecode(
+            jsonDecode(r.body)['messages'][1]['content'],
+          );
+          expect(input['task'], '선택한 문맥에 맞춰 수어에 응답');
+          expect(input['source'], '감사');
+          return answer('함께 있어 주셔서 고맙습니다.');
+        }),
       );
       addTearDown(service.dispose);
-      service.receiveSign('아프다');
+      // Help/pain signs open the immediate safety UI; use a conversational sign here.
+      service.receiveSign('감사');
       service.confirmSign();
       await service.analyze();
-      expect(service.signQuestion, '어디가 아프신가요?');
+      expect(service.signQuestion, '함께 있어 주셔서 고맙습니다.');
     },
   );
 
@@ -81,7 +78,7 @@ void main() {
       clientFactory: () => MockClient((_) => result.future),
     );
     addTearDown(service.dispose);
-    service.receiveSign('아프다');
+    service.receiveSign('감사');
     service.confirmSign();
     final pending = service.analyze();
     service.receiveSign('괜찮아');

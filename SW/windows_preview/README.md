@@ -1,8 +1,15 @@
-# SafeHub Windows 런처
+# SafeHub Scenario Windows 개발 호스트
 
 Python CSI 서비스와 Flutter Windows 앱의 시작·종료를 관리하는 WinExe입니다. 실제 모드에서 장비가 없으면 연결 대기로 표시합니다.
 
-## 실행 파일 다운로드
+> Windows 런처·패키징은 유지한 **개발 도구**입니다. CSI 학습을 허용하는 개발 런처를 Pi 제품 service로 사용하지 않습니다.
+> 준비 UI는 기본적으로 제품 화면이며 `--developer-tools`가 있을 때만 개발 화면을 표시합니다.
+> 현재 원본 UI는 `SW/safehub_scenario`입니다. 출력은 저장소 밖 새 폴더만 허용합니다.
+> 이 클라우드에서 Windows 실행 파일을 새로 빌드·실행한 결과는 아닙니다.
+
+## 과거 실행 파일 다운로드
+
+아래 링크는 2026-10-04의 과거 배포본으로 현재 #11 후보와 같은 실행본이라는 근거가 아닙니다.
 
 [Windows x64 전달용 ZIP](https://github.com/MyeongJun725/2026ESWContest_smart_mutjaengideul/releases/download/safehub-windows-preview-20261004/SafeHub-Windows-x64-20261004.zip)을 모두 압축 풀고 `SafeHub 시작.exe`를 실행합니다. Python·Visual Studio를 별도로 설치할 필요가 없습니다. 실제 CSI 보드와 수어·카메라 서버는 별도로 연결합니다. 아래 빌드 절차는 소스에서 실행본을 만드는 개발자용 안내입니다.
 
@@ -16,7 +23,7 @@ Python CSI 서비스와 Flutter Windows 앱의 시작·종료를 관리하는 Wi
 
 ## Windows 앱 준비
 
-필요한 도구는 Python 3.12, Flutter SDK, Visual Studio의 **Desktop development with C++** 구성 요소와 Windows SDK입니다. 이 저장소의 기본 앱은 ATLAS용이므로 Windows에서는 별도 호스트 복사본을 만듭니다. 원래 `SW/safehub_app/pubspec.yaml`과 노트북 WifiSensing 앱·데이터는 수정하지 않습니다.
+필요한 도구는 Python 3.12, Flutter SDK, Visual Studio의 **Desktop development with C++** 구성 요소와 Windows SDK입니다. 이 저장소의 기본 앱은 ATLAS용이므로 Windows에서는 별도 호스트 복사본을 만듭니다. 원래 `SW/safehub_scenario/pubspec.yaml`과 노트북 WifiSensing 앱·데이터는 수정하지 않습니다.
 
 아래 명령은 저장소 루트에서 PowerShell로 실행합니다. Flutter 경로는 설치한 위치로 바꾸고 출력 폴더는 **아직 존재하지 않는 새 경로**를 선택합니다.
 
@@ -30,10 +37,10 @@ Set-Location $previewHost
 & $flutterExe pub get
 python $audioPatch --host-dir $previewHost
 & $flutterExe pub get
-& $flutterExe build windows --release --dart-define=APP_LOCAL_PREVIEW=true
+& $flutterExe build windows --release --dart-define=APP_LOCAL_PREVIEW=true --dart-define=SAFEHUB_DEVELOPER_TOOLS=false
 ```
 
-준비 스크립트는 `flutter create --platforms=windows --no-pub`로 호스트를 생성하고, 실제 `lib`/`assets`를 복사한 뒤 호스트의 pubspec에서 `audioplayers_atlas`와 `record_atlas`만 제외합니다. Windows용 오디오·녹음 플러그인은 유지됩니다. 표준 라이브러리만 사용하며 기존 출력 폴더는 덮어쓰지 않습니다. 준비 실패 시 남은 폴더를 자동 삭제하지 않습니다.
+준비 스크립트는 `flutter create --platforms=windows --no-pub`로 호스트를 생성하고, 실제 `lib`/`assets`를 복사한 뒤 호스트의 pubspec에서 `audioplayers_atlas`와 `record_atlas`만 제외합니다. Windows용 오디오·녹음 플러그인은 유지됩니다. 표준 라이브러리만 사용하며 기존 출력 폴더는 덮어쓰지 않습니다. 호스트 pubspec 처리는 현재 UI의 `tool/host_support.py`를 공유하며 CSI/옛 UI 도우미를 사용하지 않습니다. 준비 실패 시 남은 폴더를 자동 삭제하지 않습니다.
 
 처음부터 준비와 빌드까지 연속 실행하려면 두 번째 명령에 `--build`를 추가합니다. `--build`는 최초 `pub get` → 아래 Windows 오디오 소유권 패치 → `pub get` → 빌드를 실행합니다. 기본 실행은 소스 준비만 하며, `--check-only`는 경로·입력 파일·pubspec만 검사합니다. 사전 검사 성공은 의존성 설치나 컴파일 성공을 뜻하지 않습니다.
 
@@ -70,7 +77,9 @@ Set-Location $previewHost
 
 스크립트의 원본 보존·해시 검사·재실행·사용자 수정 거부 검사는 `python SW/windows_preview/test_patch_windows_audio.py`로 실행한다. GUI의 반복 열기/닫기와 음성 재생 검증은 별도로 필요하다.
 
-### Flutter 3.29.3과 VS 2026을 함께 쓰는 경우
+### 과거 Flutter 3.29.3 / VS 2026 기록 (현재 host lock과 구별)
+
+현재 고정 host lock은 Flutter 3.35.7 / Dart 3.9.2에서 검사했으며 최소 Flutter 3.35.6 / Dart 3.9.0을 요구합니다. 아래 절차는 과거 환경 기록이며 현재 Windows 빌드 검증을 뜻하지 않습니다.
 
 이 노트북에서 확인한 조합은 Flutter 3.29.3 / VS 2026 / Windows SDK 10.0.26100.0입니다. 이 Flutter 버전은 VS 2026 CMake generator를 직접 선택하지 못하므로 일반 빌드가 generator 선택 오류로 끝났습니다. 최신 Flutter에서 정상 빌드되면 아래 수동 절차는 필요하지 않습니다.
 
@@ -150,7 +159,7 @@ py -3.12 -m venv .venv-safehub
 }
 ```
 
-Flutter 앱은 `--dart-define=APP_LOCAL_PREVIEW=true`로 빌드합니다. 기본 CSI 주소는 `http://127.0.0.1:8765`이며, 포트를 바꾸는 경우 앱의 `CSI_SERVICE_URL` 빌드 설정도 일치시켜야 합니다. 기존 WifiSensing 데이터와 분리된 새 `data_dir`을 지정합니다.
+Flutter 앱은 `--dart-define=APP_LOCAL_PREVIEW=true --dart-define=SAFEHUB_DEVELOPER_TOOLS=false`로 빌드합니다. 기본 CSI 주소는 `http://127.0.0.1:8765`이며, 포트를 바꾸는 경우 앱의 `CSI_SERVICE_URL` 빌드 설정도 일치시켜야 합니다. 기존 WifiSensing 데이터와 분리된 새 `data_dir`을 지정합니다.
 
 ## 실행 동작
 

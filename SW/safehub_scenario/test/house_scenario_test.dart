@@ -65,7 +65,12 @@ void main() {
       expect(service.evidence, isEmpty);
       expect(service.liveFlow.active, isNull);
       service.acknowledge();
-      expect(service.flow.active, isNull);
+      if (kind == HouseScenario.assistance) {
+        expect(service.flow.active, isNull);
+      } else {
+        // The help sign waits behind the hazard, then opens its own confirmation.
+        expect(service.flow.active!.kind, HouseScenario.assistance);
+      }
       expect(commands, 0);
       service.endScenarioTest();
     }

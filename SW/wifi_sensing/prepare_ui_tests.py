@@ -119,7 +119,7 @@ def main() -> None:
     parser.add_argument('output', type=Path, help='New or empty folder outside the repository')
     parser.add_argument('--full', action='store_true', help='Copy the complete SafeHub app and tests')
     args = parser.parse_args()
-    source = Path(__file__).resolve().parents[1] / 'safehub_app'
+    source = Path(__file__).resolve().parents[1] / 'safehub_scenario'
     try:
         count = prepare(source, args.output, full=args.full)
     except (OSError, ValueError) as error:

@@ -1,0 +1,16 @@
+[Unit]
+Description=SafeHub local fastText context classifier
+After=local-fs.target
+RequiresMountsFor=/data/safehub/fasttext /opt/safehub-csi
+
+[Service]
+Type=simple
+ExecStart=/data/safehub/fasttext/venv/bin/python -u /data/safehub/fasttext/app/server.py --model /data/safehub/fasttext/fire_screen_model.bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+Restart=on-failure
+RestartSec=3
+Nice=5
+MemoryMax=160M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+[
+  {
+    "file": "assets/fonts/OFL.txt",
+    "upstream_repository": "orioncactus/pretendard",
+    "upstream_commit": "7aeb0698819be2b4097dae8ec8fe6a795e5cf3ae",
+    "url": "https://raw.githubusercontent.com/orioncactus/pretendard/7aeb0698819be2b4097dae8ec8fe6a795e5cf3ae/LICENSE",
+    "sha256": "cc2582fa6dbd72ddfd229e709c0bae635f75a151ed1787adab9729a531b48a1f",
+    "upstream_sha256": "82e9c8a4b203261f10ddba1296422d64914ff3d4b7bd8a12896d03f0f088d70a",
+    "note": "Existing repository notice preserved byte-for-byte; upstream differs only by one trailing space."
+  },
+  {
+    "file": "atlas/LICENSE",
+    "upstream_repository": "sony/flutter-embedded-linux",
+    "upstream_commit": "1653fa656bf9fe9fa5f84789a59b0c07671a8fc8",
+    "url": "https://raw.githubusercontent.com/sony/flutter-embedded-linux/1653fa656bf9fe9fa5f84789a59b0c07671a8fc8/LICENSE",
+    "sha256": "012ee9b765b005d6023eca9ab855caaf7c6ba30540a13db3be23652f724caeb5"
+  }
+]

@@ -81,6 +81,15 @@ class WindowsAudioPatchTests(unittest.TestCase):
                 audio_patch.apply_patch(self.host, self.package)
         self.assertFalse((self.host / "vendor").exists())
 
+    def test_other_repository_folders_are_also_protected(self):
+        # A destination anywhere in this repository must fail before writes,
+        # including the legacy UI that is still retained pending scope selection.
+        repository = Path(audio_patch.__file__).resolve().parents[2]
+        for relative in ("SW/safehub_app", "SW/safehub_scenario", "SW/windows_preview"):
+            with self.subTest(relative=relative):
+                with self.assertRaisesRegex(ValueError, "outside the source repository"):
+                    audio_patch.apply_patch(repository / relative, self.package)
+
     def test_resolved_package_path_can_be_read_without_running_flutter(self):
         (self.host / ".dart_tool").mkdir()
         (self.host / ".dart_tool/package_config.json").write_text(json.dumps({

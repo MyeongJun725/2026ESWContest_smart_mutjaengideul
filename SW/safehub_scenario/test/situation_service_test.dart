@@ -35,15 +35,19 @@ http.Response reply(Map<String, dynamic> data) => http.Response.bytes(
 
 void main() {
   test(
-    'LiteRT-LM request sends finalized text to the supplied model',
+    'legacy protocol fixture preserves supplied model and finalized text',
     () async {
       late http.Request request;
-      final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'),
-        clientFactory:
-            () => MockClient((r) async {
-              request = r;
-              return reply(output());
-            }),
+      final service = SituationService(
+        settings: SituationSettings(
+          model: 'legacy-contract-fixture',
+          fastProtocol: false,
+          endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+        ),
+        clientFactory: () => MockClient((r) async {
+          request = r;
+          return reply(output());
+        }),
       );
       addTearDown(service.dispose);
       service.addEvidence('확정 음성자막', '화재가 발생했습니다. 안내방송입니다.', analyze: false);
@@ -53,7 +57,7 @@ void main() {
         request.url.toString(),
         'http://127.0.0.1:9379/v1/chat/completions',
       );
-      expect(body['model'], 'gemma4-e2b');
+      expect(body['model'], 'legacy-contract-fixture');
       expect(body['stream'], false);
       expect(body.containsKey('audio'), false);
       expect(service.announcement, contains('화재'));
@@ -62,9 +66,14 @@ void main() {
   );
 
   test('fabricated evidence cannot open an alarm', () async {
-    final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'),
-      clientFactory:
-          () => MockClient((_) async => reply(output(quote: '없는 원문'))),
+    final service = SituationService(
+      settings: SituationSettings(
+        model: 'legacy-contract-fixture',
+        fastProtocol: false,
+        endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+      ),
+      clientFactory: () =>
+          MockClient((_) async => reply(output(quote: '없는 원문'))),
     );
     addTearDown(service.dispose);
     service.addEvidence('확정 음성자막', '화재가 발생했습니다', analyze: false);
@@ -76,7 +85,12 @@ void main() {
 
   for (final text in ['화재가 발생했습니다는 훈련 예시입니다', '화재가 발생했습니다가 아닙니다']) {
     test('training and negated speech are not alarms: $text', () async {
-      final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'),
+      final service = SituationService(
+        settings: SituationSettings(
+          model: 'legacy-contract-fixture',
+          fastProtocol: false,
+          endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+        ),
         clientFactory: () => MockClient((_) async => reply(output())),
       );
       addTearDown(service.dispose);
@@ -87,7 +101,12 @@ void main() {
   }
 
   test('old API record does not become a new broadcast alarm', () async {
-    final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'),
+    final service = SituationService(
+      settings: SituationSettings(
+        model: 'legacy-contract-fixture',
+        fastProtocol: false,
+        endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+      ),
       clientFactory: () => MockClient((_) async => reply(output())),
     );
     addTearDown(service.dispose);
@@ -101,7 +120,12 @@ void main() {
   });
 
   test('acknowledged source is not shown again on reevaluation', () async {
-    final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'),
+    final service = SituationService(
+      settings: SituationSettings(
+        model: 'legacy-contract-fixture',
+        fastProtocol: false,
+        endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+      ),
       clientFactory: () => MockClient((_) async => reply(output())),
     );
     addTearDown(service.dispose);
@@ -115,10 +139,15 @@ void main() {
   test(
     'timeout clears analysis but does not dismiss an existing alert',
     () async {
-      final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'),
+      final service = SituationService(
+        settings: SituationSettings(
+          model: 'legacy-contract-fixture',
+          fastProtocol: false,
+          endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+        ),
         timeout: const Duration(milliseconds: 5),
-        clientFactory:
-            () => MockClient((_) => Completer<http.Response>().future),
+        clientFactory: () =>
+            MockClient((_) => Completer<http.Response>().future),
       );
       addTearDown(service.dispose);
       service.openHelp();
@@ -135,12 +164,16 @@ void main() {
     () async {
       final response = Completer<http.Response>();
       var calls = 0;
-      final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'),
-        clientFactory:
-            () => MockClient((_) {
-              calls++;
-              return response.future;
-            }),
+      final service = SituationService(
+        settings: SituationSettings(
+          model: 'legacy-contract-fixture',
+          fastProtocol: false,
+          endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+        ),
+        clientFactory: () => MockClient((_) {
+          calls++;
+          return response.future;
+        }),
       );
       service.addEvidence('확정 음성자막', '화재가 발생했습니다', analyze: false);
       final first = service.analyze();
@@ -155,7 +188,13 @@ void main() {
   );
 
   test('dummy CSI cannot be represented as a real household observation', () {
-    final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'), );
+    final service = SituationService(
+      settings: SituationSettings(
+        model: 'legacy-contract-fixture',
+        fastProtocol: false,
+        endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+      ),
+    );
     addTearDown(service.dispose);
     service.setSensor({
       'mode': 'dummy',
@@ -172,7 +211,13 @@ void main() {
   });
 
   test('stale CSI classification is explicitly invalidated', () {
-    final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'), );
+    final service = SituationService(
+      settings: SituationSettings(
+        model: 'legacy-contract-fixture',
+        fastProtocol: false,
+        endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+      ),
+    );
     addTearDown(service.dispose);
     service.sensorAt = DateTime.now().subtract(const Duration(seconds: 6));
     service.sensorStatus = 'CSI 분류: 걷기';
@@ -182,7 +227,13 @@ void main() {
   });
 
   test('a sign becomes user-confirmed report text only after confirmation', () {
-    final service = SituationService(settings: SituationSettings(fastProtocol: false, endpoint: 'http://127.0.0.1:9379/v1/chat/completions'), );
+    final service = SituationService(
+      settings: SituationSettings(
+        model: 'legacy-contract-fixture',
+        fastProtocol: false,
+        endpoint: 'http://127.0.0.1:9379/v1/chat/completions',
+      ),
+    );
     addTearDown(service.dispose);
     service.openHelp();
     service.receiveSign('아프다');

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../config/app_config.dart';
 import '../../core/house_scenario.dart';
 import '../../services/situation_service.dart';
 
@@ -7,153 +8,164 @@ class HouseStatusCard extends StatelessWidget {
     super.key,
     required this.service,
     required this.onAcknowledge,
+    this.developerTools = AppConfig.developerTools,
   });
+  final bool developerTools;
   final SituationService service;
   final VoidCallback onAcknowledge;
-
-  Widget _detail(String label, String value) => Expanded(
-    child: Padding(
-      padding: const EdgeInsets.only(right: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF686C73)),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 15),
-          ),
-        ],
-      ),
-    ),
-  );
-
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: service,
     builder: (context, _) {
-      final flow = service.flow;
-      final incident = flow.active;
-      final simulated = service.scenarioTestMode;
+      final incident = service.flow.active;
+      final previous = service.flow.lastAcknowledged;
+      final title = incident != null
+          ? (incident.kind == HouseScenario.assistance
+                ? '도움 요청을 확인해 주세요'
+                : '새 알림이 도착했어요')
+          : previous != null
+          ? '알림을 확인했어요'
+          : '새로운 알림이 없어요';
+      final detail =
+          incident?.evidence ??
+          (previous != null
+              ? '필요하면 내용을 다시 볼 수 있어요.'
+              : '필요하면 수어 또는 터치로 도움을 요청하세요.');
       return Container(
-        height: 248,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         decoration: BoxDecoration(
-          color: simulated ? const Color(0xFFFFF1D6) : const Color(0xFFEEECE8),
-          borderRadius: BorderRadius.circular(24),
+          color: incident != null || service.scenarioTestMode
+              ? const Color(0xFFFFF3D6)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFFE5DFD8)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x063E2830),
+              blurRadius: 20,
+              offset: Offset(0, 5),
+            ),
+          ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
           children: [
-            Row(
-              children: [
-                const Text(
-                  '우리 집 상황',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: incident == null
+                    ? const Color(0xFFF6ECEF)
+                    : const Color(0xFFFFE7AE),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(
+                incident == null
+                    ? Icons.home_outlined
+                    : Icons.notifications_active_outlined,
+                color: const Color(0xFF8D2345),
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '우리 집',
+                    style: TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF625E5A),
+                    ),
+                  ),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    service.scenarioTestMode
+                        ? (service.scenarioActuators
+                              ? '시연 입력 · 실제 LED·진동 연동'
+                              : '화면 테스트 · 실제 장치 작동 없음')
+                        : detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontSize: 20,
+                      color: Color(0xFF625E5A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            if (service.scenarioTestMode)
+              TextButton(
+                onPressed: service.endScenarioTest,
+                child: const Text(
+                  '시연 종료',
+                  style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
                 ),
-                if (simulated)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 12),
-                    child: Text(
-                      '테스트 · 실제 장치 명령 없음',
-                      style: TextStyle(
-                        color: Color(0xFF8C5300),
-                        fontWeight: FontWeight.w700,
+              ),
+            if (developerTools)
+              TextButton(
+                onPressed: () => showScenarioTest(context, service),
+                child: const Text(
+                  '시나리오 테스트',
+                  style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+                ),
+              ),
+            if (incident != null)
+              TextButton(
+                onPressed: service.openHelp,
+                child: const Text(
+                  '상황 응답 · 도움',
+                  style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
+                ),
+              ),
+            IconButton(
+              tooltip: '상황 상세 보기',
+              icon: const Icon(Icons.expand_more),
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('확인한 내용'),
+                  content: SizedBox(
+                    width: 650,
+                    child: SingleChildScrollView(
+                      child: Text(
+                        [
+                          detail,
+                          service.sensorStatus,
+                          if (incident != null) incident.delivery,
+                          if (!service.assessmentStale)
+                            service.assessment!.summary,
+                          if (previous != null) '알림 확인은 위험 해제를 의미하지 않아요.',
+                        ].join('\n\n'),
+                        style: const TextStyle(
+                          fontFamily: 'Pretendard',
+                          fontSize: 22,
+                        ),
                       ),
                     ),
                   ),
-                const Spacer(),
-                if (simulated)
-                  TextButton(
-                    onPressed: service.endScenarioTest,
-                    child: const Text('테스트 종료'),
-                  ),
-                TextButton(
-                  onPressed: () => showScenarioTest(context, service),
-                  child: const Text('시나리오 테스트'),
-                ),
-              ],
-            ),
-            Text(
-              incident?.title ??
-                  (flow.lastAcknowledged != null
-                      ? '알림 확인을 기록했어요. 위험 해제 여부는 별도 확인이 필요해요.'
-                      : '방송·재난·센서 정보를 확인하며 새로운 알림을 기다려요.'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 9),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _detail(
-                  '판단 근거',
-                  incident == null
-                      ? flow.observation
-                      : '${incident.relevance} · ${incident.evidence}',
-                ),
-                _detail(
-                  '알림 전달',
-                  incident?.delivery ?? '화면 수신 대기 · 장치 동작을 확인한 상태가 아닙니다.',
-                ),
-                _detail(
-                  '사용자 응답',
-                  incident == null
-                      ? flow.lastAcknowledged?.response ?? '응답을 요청한 알림 없음'
-                      : incident.response.isEmpty
-                      ? '확인 대기 · 움직임만으로 확인 여부를 판단하지 않아요.'
-                      : incident.response,
-                ),
-              ],
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    incident?.nextAction ?? service.sensorStatus,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-                if (flow.pendingCount > 0) Text('대기 ${flow.pendingCount}건  '),
-                if (incident != null) ...[
-                  TextButton(
-                    onPressed: onAcknowledge,
-                    child: const Text('확인했어요'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: service.openHelp,
-                    child: const Text('상황 응답 · 도움'),
-                  ),
-                ] else
-                  TextButton(
-                    onPressed: service.toggleVoiceChat,
-                    child: Text(
-                      service.voiceChatEnabled ? 'AI 대화 끄기' : 'AI에게 말하기',
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('닫기'),
                     ),
-                  ),
-              ],
-            ),
-            Text(
-              service.voiceReply.isNotEmpty && incident == null
-                  ? '질문: ${service.voiceQuestion} · ${service.voiceReply}'
-                  : service.busy
-                  ? 'AI가 근거를 정리하고 있어요. 경보·응답은 바로 사용할 수 있어요.'
-                  : service.assessmentStale
-                  ? 'AI 설명 대기 · 알림과 응답은 AI 연결 없이도 작동합니다.'
-                  : 'AI 참고 안내: ${service.assessment!.summary}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF686C73)),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -184,6 +196,7 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
   HouseScenario kind = HouseScenario.broadcast;
   late final text = TextEditingController(text: presets[kind]);
   String error = '';
+  bool actuate = true;
   @override
   void dispose() {
     text.dispose();
@@ -201,7 +214,7 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              '화면·응답 흐름만 시험합니다. MQTT 전송, 실제 재난 등록, CSI 기록·학습은 하지 않습니다.',
+              '선택한 상황으로 경고 화면과 LED·진동을 함께 시험합니다. 실제 재난 접수·CSI 검출·119 신고는 아닙니다.',
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<HouseScenario>(
@@ -230,6 +243,13 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
               },
             ),
             const SizedBox(height: 16),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('실제 LED·진동 연동'),
+              subtitle: const Text('켜면 선택 즉시 장치 작동 · 끄면 화면만 시험'),
+              value: actuate,
+              onChanged: (value) => setState(() => actuate = value),
+            ),
             TextField(
               controller: text,
               maxLines: 4,
@@ -240,7 +260,13 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
               '진행: 화면 알림 → 상황 응답 · 도움 → 터치 또는 테스트 수어 → 도움 요청 문안 → 확인했어요',
             ),
             if (error.isNotEmpty)
-              Text(error, style: const TextStyle(color: Colors.red)),
+              Text(
+                error,
+                style: const TextStyle(
+                  fontFamily: 'Pretendard',
+                  color: Colors.red,
+                ),
+              ),
           ],
         ),
       ),
@@ -256,13 +282,17 @@ class _ScenarioTestDialogState extends State<_ScenarioTestDialog> {
             setState(() => error = '입력 문장을 적어주세요.');
             return;
           }
-          if (!widget.service.startScenarioTest(kind, text.text.trim())) {
+          if (!widget.service.startScenarioTest(
+            kind,
+            text.text.trim(),
+            actuate: actuate,
+          )) {
             setState(() => error = '실제 알림이 있습니다. 먼저 확인한 뒤 테스트를 시작하세요.');
             return;
           }
           Navigator.pop(context);
         },
-        child: const Text('화면 테스트 실행'),
+        child: Text(actuate ? '화면·장치 함께 실행' : '화면만 실행'),
       ),
     ],
   );

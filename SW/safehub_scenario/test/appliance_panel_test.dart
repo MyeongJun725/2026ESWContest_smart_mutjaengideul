@@ -11,14 +11,18 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final model = ApplianceControls();
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(
+        MaterialApp(
           home: Scaffold(
-              body: AppliancePanel(
-        controls: model,
-        connected: true,
-        latestSign: '에어컨',
-        loadShortcuts: false,
-      ))));
+            body: AppliancePanel(
+              controls: model,
+              connected: true,
+              latestSign: '에어컨',
+              loadShortcuts: false,
+            ),
+          ),
+        ),
+      );
       await tester.pump();
       expect(find.text('가전 · 수어 단축키'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -28,17 +32,23 @@ void main() {
       expect(model.hubAirconPower, isNull);
       await tester.tap(find.byType(SwitchListTile));
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('상태 미확인'), findsNWidgets(3));
-      model.receiveCommand('safehub/control/livingroom/aircon/command',
-          {'action': 'set_power', 'power_on': true});
-      await tester.pumpWidget(MaterialApp(
+      expect(find.text('상태 미확인'), findsNWidgets(2));
+      model.receiveCommand('safehub/control/livingroom/aircon/command', {
+        'action': 'set_power',
+        'power_on': true,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
           home: Scaffold(
-              body: AppliancePanel(
-        controls: model,
-        connected: true,
-        latestSign: '에어컨',
-        loadShortcuts: false,
-      ))));
+            body: AppliancePanel(
+              controls: model,
+              connected: true,
+              latestSign: '에어컨',
+              loadShortcuts: false,
+            ),
+          ),
+        ),
+      );
       await tester.pump();
       expect(find.text('켜짐 · ON'), findsOneWidget);
       expect(tester.takeException(), isNull);

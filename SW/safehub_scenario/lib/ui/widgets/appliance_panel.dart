@@ -4,7 +4,7 @@ import '../../core/appliance_controls.dart';
 import '../../services/shortcut_store.dart';
 import '../theme/app_theme.dart';
 
-/// No hardware commands are published. Hub commands are observed by the parent.
+/// Commands and observed hub state stay separate from physical state feedback.
 class AppliancePanel extends StatefulWidget {
   final ApplianceControls controls;
   final bool connected;
@@ -13,6 +13,7 @@ class AppliancePanel extends StatefulWidget {
   final bool loadShortcuts;
   final bool allowPreview;
   final bool Function(String payload)? publishShortcutCommand;
+  final bool Function(String device, String action)? publishDeviceCommand;
 
   const AppliancePanel({
     super.key,
@@ -23,6 +24,7 @@ class AppliancePanel extends StatefulWidget {
     this.loadShortcuts = true,
     this.allowPreview = true,
     this.publishShortcutCommand,
+    this.publishDeviceCommand,
   });
   @override
   State<AppliancePanel> createState() => _AppliancePanelState();
@@ -35,8 +37,8 @@ class _AppliancePanelState extends State<AppliancePanel> {
 
   static const List<String> _shortcutSigns = ['에어컨', '점등', '소등', '꺼지다', '감사'];
 
-  static const String _device = 'aircon';
-  static const String _action = 'toggle';
+  String _device = 'aircon';
+  String _action = 'toggle';
 
   String? _selectedSign = '에어컨';
   String? _editing;
@@ -153,10 +155,9 @@ class _AppliancePanelState extends State<AppliancePanel> {
 
     setState(() {
       _editing = null;
-      _message =
-          published
-              ? '앱 저장 및 허브 등록 요청 전송 완료'
-              : '앱에는 저장했지만 허브 전송에 실패했습니다. MQTT 연결을 확인하세요.';
+      _message = published
+          ? '앱 저장 및 허브 등록 요청 전송 완료'
+          : '앱에는 저장했지만 허브 전송에 실패했습니다. MQTT 연결을 확인하세요.';
     });
   }
 
@@ -177,31 +178,28 @@ class _AppliancePanelState extends State<AppliancePanel> {
     ),
   );
 
-  String _actionLabel(String device, String action) =>
-      device == 'curtain'
-          ? {'on': '열기', 'off': '닫기', 'toggle': '열기/닫기 전환'}[action]!
-          : ApplianceControls.actions[action]!;
+  String _actionLabel(String device, String action) => device == 'curtain'
+      ? {'on': '올림', 'off': '내림', 'toggle': '열기/닫기 전환', 'stop': '정지'}[action]!
+      : ApplianceControls.actions[action]!;
 
   Widget _deviceCard(String id, String label) {
-    final bool? state =
-        _preview
-            ? model.preview[id]
-            : id == 'aircon'
-            ? model.hubAirconPower
-            : null;
-    final status =
-        state == null
-            ? '상태 미확인'
-            : id == 'curtain'
-            ? (state ? '열림' : '닫힘')
-            : (state ? '켜짐 · ON' : '꺼짐 · OFF');
+    final bool? state = _preview
+        ? model.preview[id]
+        : id == 'aircon'
+        ? model.hubAirconPower
+        : null;
+    final status = state == null
+        ? '상태 미확인'
+        : id == 'curtain'
+        ? (state ? '열림' : '닫힘')
+        : (state ? '켜짐 · ON' : '꺼짐 · OFF');
     return _card(
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Icon(
             id == 'aircon'
-                ? Icons.ac_unit
+                ? Icons.air
                 : id == 'light'
                 ? Icons.lightbulb_outline
                 : Icons.curtains,
@@ -239,12 +237,26 @@ class _AppliancePanelState extends State<AppliancePanel> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final action in ['on', 'off'])
+              for (final action in [
+                'on',
+                'off',
+                if (id == 'curtain' && !_preview) 'stop',
+              ])
                 OutlinedButton(
-                  onPressed:
-                      _preview
-                          ? () => setState(() => model.applyPreview(id, action))
-                          : null,
+                  onPressed: _preview
+                      ? () => setState(() => model.applyPreview(id, action))
+                      : widget.connected &&
+                            widget.publishDeviceCommand != null &&
+                            id != 'light'
+                      ? () {
+                          final sent = widget.publishDeviceCommand!(id, action);
+                          setState(
+                            () => _message = sent
+                                ? '$label ${_actionLabel(id, action)} 명령 제출 · 실제 장치 확인 필요'
+                                : '명령 전송 실패',
+                          );
+                        }
+                      : null,
                   child: Text(_actionLabel(id, action)),
                 ),
             ],
@@ -274,7 +286,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
                   Text(
                     widget.allowPreview
                         ? '버튼 테스트와 허브 명령 확인을 분리했습니다. 실제 가전은 작동하지 않습니다.'
-                        : '허브에서 받은 명령을 표시합니다. 수동 가전 제어 버튼은 아직 연동되지 않았습니다.',
+                        : '팬과 커튼을 직접 제어할 수 있어요. 표시는 명령 상태이며 실제 위치·회전 피드백은 아닙니다.',
                   ),
                   if (widget.allowPreview)
                     SwitchListTile(
@@ -300,21 +312,19 @@ class _AppliancePanelState extends State<AppliancePanel> {
             ),
             const SizedBox(height: 18),
             LayoutBuilder(
-              builder:
-                  (context, bounds) => Wrap(
-                    spacing: 16,
-                    runSpacing: 16,
-                    children: [
-                      for (final entry in ApplianceControls.devices.entries)
-                        SizedBox(
-                          width:
-                              bounds.maxWidth >= 800
-                                  ? (bounds.maxWidth - 32) / 3
-                                  : bounds.maxWidth,
-                          child: _deviceCard(entry.key, entry.value),
-                        ),
-                    ],
-                  ),
+              builder: (context, bounds) => Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: [
+                  for (final entry in ApplianceControls.productDevices.entries)
+                    SizedBox(
+                      width: bounds.maxWidth >= 800
+                          ? (bounds.maxWidth - 32) / 3
+                          : bounds.maxWidth,
+                      child: _deviceCard(entry.key, entry.value),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(height: 18),
             _card(
@@ -344,19 +354,18 @@ class _AppliancePanelState extends State<AppliancePanel> {
                         ChoiceChip(
                           label: Text(sign),
                           selected: _selectedSign == sign,
-                          onSelected:
-                              _saving || _loading
-                                  ? null
-                                  : (selected) {
-                                    if (!selected) {
-                                      return;
-                                    }
+                          onSelected: _saving || _loading
+                              ? null
+                              : (selected) {
+                                  if (!selected) {
+                                    return;
+                                  }
 
-                                    setState(() {
-                                      _selectedSign = sign;
-                                      _message = '';
-                                    });
-                                  },
+                                  setState(() {
+                                    _selectedSign = sign;
+                                    _message = '';
+                                  });
+                                },
                         ),
                     ],
                   ),
@@ -365,20 +374,58 @@ class _AppliancePanelState extends State<AppliancePanel> {
                       _shortcutSigns.contains(widget.latestSign.trim())) ...[
                     const SizedBox(height: 10),
                     TextButton.icon(
-                      onPressed:
-                          _saving
-                              ? null
-                              : () {
-                                setState(() {
-                                  _selectedSign = widget.latestSign.trim();
-                                  _message = '';
-                                });
-                              },
+                      onPressed: _saving
+                          ? null
+                          : () {
+                              setState(() {
+                                _selectedSign = widget.latestSign.trim();
+                                _message = '';
+                              });
+                            },
                       icon: const Icon(Icons.history_rounded),
                       label: Text('최근 인식 결과 선택: ${widget.latestSign}'),
                     ),
                   ],
                   const SizedBox(height: 18),
+                  DropdownButtonFormField<String>(
+                    value: _device,
+                    decoration: const InputDecoration(labelText: '수어로 제어할 기기'),
+                    items: [
+                      for (final entry
+                          in ApplianceControls.productDevices.entries)
+                        DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        ),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() {
+                            _device = value!;
+                            _action = value == 'curtain' ? 'on' : 'toggle';
+                          }),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _action,
+                    decoration: const InputDecoration(labelText: '실행 동작'),
+                    items: [
+                      for (final action in [
+                        'on',
+                        'off',
+                        'toggle',
+                        if (_device == 'curtain') 'stop',
+                      ])
+                        DropdownMenuItem(
+                          value: action,
+                          child: Text(_actionLabel(_device, action)),
+                        ),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _action = value!),
+                  ),
+                  const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -395,7 +442,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '거실 에어컨',
+                                '수어 이름과 기기·동작을 연결하세요',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
@@ -403,7 +450,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
                               ),
                               SizedBox(height: 4),
                               Text(
-                                '수어를 인식할 때마다 켜기/끄기 전환',
+                                '팬·커튼과 수어 단축키를 제어합니다. LED·진동은 경보 흐름에서 알립니다.',
                                 style: TextStyle(
                                   color: _secondary,
                                   fontSize: 15,
@@ -420,10 +467,9 @@ class _AppliancePanelState extends State<AppliancePanel> {
                     spacing: 12,
                     children: [
                       FilledButton(
-                        onPressed:
-                            _loading || _saving || _store == null
-                                ? null
-                                : _register,
+                        onPressed: _loading || _saving || _store == null
+                            ? null
+                            : _register,
                         child: Text(
                           _saving
                               ? '저장 중'
@@ -434,13 +480,12 @@ class _AppliancePanelState extends State<AppliancePanel> {
                       ),
                       if (_editing != null)
                         TextButton(
-                          onPressed:
-                              _saving
-                                  ? null
-                                  : () => setState(() {
-                                    _editing = null;
-                                    _selectedSign = '에어컨';
-                                  }),
+                          onPressed: _saving
+                              ? null
+                              : () => setState(() {
+                                  _editing = null;
+                                  _selectedSign = '에어컨';
+                                }),
                           child: const Text('수정 취소'),
                         ),
                     ],
@@ -476,7 +521,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '${b.sign} → 거실 ${ApplianceControls.devices[b.device]} → ${_actionLabel(b.device, b.action)}',
+                            '${b.sign} → 거실 ${ApplianceControls.productDevices[b.device] ?? ApplianceControls.devices[b.device]} → ${_actionLabel(b.device, b.action)}',
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
@@ -485,7 +530,7 @@ class _AppliancePanelState extends State<AppliancePanel> {
                           Text(
                             b.hubSupported
                                 ? 'RPi5 허브 지원 형식'
-                                : '현재 허브에서 지원하지 않는 이전 설정',
+                                : '이전 설정 보존 · 현재 제품에서 실행하지 않음',
                           ),
                           Wrap(
                             spacing: 8,
@@ -493,65 +538,63 @@ class _AppliancePanelState extends State<AppliancePanel> {
                             children: [
                               TextButton(
                                 onPressed:
-                                    _saving
-                                        ? null
-                                        : () => setState(() {
-                                          _editing = b.sign;
-                                          _selectedSign = b.sign;
-                                          _message = '위 등록 양식에서 수정하세요.';
-                                        }),
+                                    _saving ||
+                                        !ApplianceControls.productDevices
+                                            .containsKey(b.device)
+                                    ? null
+                                    : () => setState(() {
+                                        _editing = b.sign;
+                                        _selectedSign = b.sign;
+                                        _device = b.device;
+                                        _action = b.action;
+                                        _message = '위 등록 양식에서 수정하세요.';
+                                      }),
                                 child: const Text('수정'),
                               ),
                               TextButton(
-                                onPressed:
-                                    _saving || _store == null
-                                        ? null
-                                        : () async {
-                                          final removed = await _persist(
-                                            () => model.bindings.remove(b.sign),
-                                          );
+                                onPressed: _saving || _store == null
+                                    ? null
+                                    : () async {
+                                        final removed = await _persist(
+                                          () => model.bindings.remove(b.sign),
+                                        );
 
-                                          if (!removed || !mounted) {
-                                            return;
-                                          }
+                                        if (!removed || !mounted) {
+                                          return;
+                                        }
 
-                                          final published =
-                                              _publishShortcutCommand(
-                                                b.removalPayload(),
-                                              );
+                                        final published =
+                                            _publishShortcutCommand(
+                                              b.removalPayload(),
+                                            );
 
-                                          setState(() {
-                                            _editing = null;
-                                            _selectedSign = '에어컨';
-                                            _message =
-                                                published
-                                                    ? '앱 삭제 및 허브 삭제 요청 전송 완료'
-                                                    : '앱에서는 삭제했지만 허브 전송에 실패했습니다.';
-                                          });
-                                        },
+                                        setState(() {
+                                          _editing = null;
+                                          _selectedSign = '에어컨';
+                                          _message = published
+                                              ? '앱 삭제 및 허브 삭제 요청 전송 완료'
+                                              : '앱에서는 삭제했지만 허브 전송에 실패했습니다.';
+                                        });
+                                      },
                                 child: const Text('삭제'),
                               ),
                               TextButton(
-                                onPressed:
-                                    _preview
-                                        ? () => setState(
-                                          () => model.simulateSign(b.sign),
-                                        )
-                                        : null,
+                                onPressed: _preview
+                                    ? () => setState(
+                                        () => model.simulateSign(b.sign),
+                                      )
+                                    : null,
                                 child: const Text('단축키 테스트'),
                               ),
                               TextButton(
-                                onPressed:
-                                    () => setState(
-                                      () => _json = b.registrationPayload(),
-                                    ),
+                                onPressed: () => setState(
+                                  () => _json = b.registrationPayload(),
+                                ),
                                 child: const Text('등록 JSON'),
                               ),
                               TextButton(
-                                onPressed:
-                                    () => setState(
-                                      () => _json = b.removalPayload(),
-                                    ),
+                                onPressed: () =>
+                                    setState(() => _json = b.removalPayload()),
                                 child: const Text('삭제 JSON'),
                               ),
                             ],

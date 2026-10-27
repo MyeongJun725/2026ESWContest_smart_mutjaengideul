@@ -1,0 +1,22 @@
+[Unit]
+Description=SafeHub existing sign-to-aircon command router
+After=safehub-mqtt.service
+Wants=safehub-mqtt.service
+RequiresMountsFor=/data/safehub-sign-control /opt/safehub-csi
+
+[Service]
+Type=simple
+ExecStart=/opt/safehub-csi/python/bin/python3.12 -u /data/safehub-sign-control/app/sign_hub.py
+Environment=PYTHONPATH=/data/safehub-sign-control/packages
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=MQTT_BROKER_HOST=127.0.0.1
+Environment=MQTT_CLIENT_ID=safehub-uno-sign-router
+Environment=SIGN_SHORTCUT_STORE_PATH=/data/safehub-sign-control/state/shortcuts.json
+Environment=SIGN_COOLDOWN_SEC=2.5
+Restart=on-failure
+RestartSec=3
+Nice=5
+MemoryMax=96M
+
+[Install]
+WantedBy=multi-user.target

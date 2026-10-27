@@ -16,35 +16,33 @@ class HouseIncident {
   String response = '';
   String delivery = '화면 안내 중 · LED·진동 전송 전';
   bool acknowledged = false;
-  int get priority =>
-      kind == HouseScenario.assistance
-          ? 3
-          : kind == HouseScenario.broadcast
+  int get priority => kind == HouseScenario.assistance
+      ? 3
+      : kind == HouseScenario.broadcast
           ? 2
           : 1;
   String get title => switch (kind) {
-    HouseScenario.broadcast => '위험을 알리는 말이 들렸어요. 방송을 확인해 주세요.',
-    HouseScenario.disaster => '새 재난 알림이 도착했어요. 적용 지역을 확인해 주세요.',
-    HouseScenario.assistance => '도움이 필요한 상황인지 확인해 주세요.',
-  };
-  String get nextAction =>
-      response.isEmpty
-          ? '수어 또는 터치로 확인 여부를 알려주세요.'
-          : response.contains('도움') ||
+        HouseScenario.broadcast => '위험을 알리는 말이 들렸어요. 방송을 확인해 주세요.',
+        HouseScenario.disaster => '새 재난 알림이 도착했어요. 적용 지역을 확인해 주세요.',
+        HouseScenario.assistance => '도움이 필요한 상황인지 확인해 주세요.',
+      };
+  String get nextAction => response.isEmpty
+      ? '수어 또는 터치로 확인 여부를 알려주세요.'
+      : response.contains('도움') ||
               response.contains('쓰러') ||
               response.contains('아프')
           ? '확인된 내용으로 도움 요청 문안을 준비하세요.'
           : '응답을 기록했어요. 추가 도움이 필요한지 확인하세요.';
   Map<String, dynamic> toJson() => {
-    'scenario': kind.name,
-    'evidence': evidence.substring(0, evidence.length.clamp(0, 500)),
-    'relevance': relevance,
-    'received_at': receivedAt.toIso8601String(),
-    'user_response': response,
-    'delivery': delivery,
-    'acknowledged': acknowledged,
-    'risk_resolved': false,
-  };
+        'scenario': kind.name,
+        'evidence': evidence.substring(0, evidence.length.clamp(0, 500)),
+        'relevance': relevance,
+        'received_at': receivedAt.toIso8601String(),
+        'user_response': response,
+        'delivery': delivery,
+        'acknowledged': acknowledged,
+        'risk_resolved': false,
+      };
 }
 
 /// Alert/acknowledgement flow runs without an LLM or an inference score.
@@ -58,11 +56,16 @@ class HouseScenarioFlow extends ChangeNotifier {
   int get pendingCount => _pending.length;
   static final _hazard = RegExp(r'화재가?\s*(발생|났)|불이\s*났|대피(하|해|\s*바랍)|가스\s*누출');
   static final _nonEmergency = RegExp(
-    r'훈련|연습|테스트|시나리오|예시|가정|실험|예방|아닙|아니|않|없습|없음|취소|해제',
+    r'훈련|연습|테스트|시나리오|예시|가정|실험|예방|오보|취소|해제|화재[^.!?\n]{0,16}(발생하지\s*않|아닙|아니|없습|없음)|불이\s*나지\s*않|대피(하지\s*않|[^.!?\n]{0,8}필요[가\s]*없)',
   );
 
   bool broadcast(String text, {DateTime? now}) {
-    if (!_hazard.hasMatch(text) || _nonEmergency.hasMatch(text)) {
+    final explicit = text
+        .replaceAll(RegExp(r'\r\n?'), '\n')
+        .split(RegExp(r'[.!?\n]+'))
+        .any((clause) =>
+            _hazard.hasMatch(clause) && !_nonEmergency.hasMatch(clause));
+    if (!explicit) {
       observation = '방송·대화 원문 확인 · 긴급 상황으로 확정하지 않았어요.';
       notifyListeners();
       return false;
@@ -111,23 +114,22 @@ class HouseScenarioFlow extends ChangeNotifier {
         HouseScenario.disaster,
         '$text\n지역: ${region.isEmpty ? '미확인' : region} · 발행: $issuedAt',
         stamp,
-        relevance:
-            selected.isEmpty || region.isEmpty
-                ? '집 지역 미확인 · 적용 여부를 확인해 주세요.'
-                : '설정한 지역 관련 알림',
+        relevance: selected.isEmpty || region.isEmpty
+            ? '집 지역 미확인 · 적용 여부를 확인해 주세요.'
+            : '설정한 지역 관련 알림',
       ),
     );
   }
 
   bool assistance(String id, String text, {DateTime? now}) => _submit(
-    HouseIncident(
-      'assistance:$id',
-      HouseScenario.assistance,
-      text,
-      now ?? DateTime.now(),
-      relevance: '센서 의심 신호 또는 사용자 요청 · 낙상·의식불명 확정 아님',
-    ),
-  );
+        HouseIncident(
+          'assistance:$id',
+          HouseScenario.assistance,
+          text,
+          now ?? DateTime.now(),
+          relevance: '센서 의심 신호 또는 사용자 요청 · 낙상·의식불명 확정 아님',
+        ),
+      );
 
   bool _submit(HouseIncident incident) {
     if (!_seen.add(incident.id)) return false;

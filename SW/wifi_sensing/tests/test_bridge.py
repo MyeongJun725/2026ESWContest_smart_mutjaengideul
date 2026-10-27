@@ -261,11 +261,12 @@ class IntegrationTests(unittest.TestCase):
         start.assert_called_once_with('live', 'TEST_PORT', 921600)
 
     def test_13_cli_real_only_flag_and_compatible_default(self):
-        cases = [([], True, False), (['--real-only'], False, False),
-                 (['--passive-receiver'], True, True),
-                 (['--real-only', '--passive-receiver'], False, True)]
-        for flag, allowed, passive in cases:
-            with self.subTest(real_only=not allowed, passive_receiver=passive):
+        cases = [([], True, False, False), (['--real-only'], False, False, False),
+                 (['--passive-receiver'], True, True, False),
+                 (['--real-only', '--passive-receiver'], False, True, False),
+                 (['--real-only', '--inference-only'], False, False, True)]
+        for flag, allowed, passive, inference in cases:
+            with self.subTest(real_only=not allowed, passive_receiver=passive, inference_only=inference):
                 with patch('sys.argv', ['bridge.py', '--data-dir', self.temp.name] + flag):
                     with patch('bridge.Controller') as controller:
                         with patch('bridge.ThreadingHTTPServer') as server:
@@ -273,7 +274,7 @@ class IntegrationTests(unittest.TestCase):
                             main()
                         controller.assert_called_once_with(Path(self.temp.name), False,
                                                            allow_dummy=allowed,
-                                                           passive_receiver=passive)
+                                                           passive_receiver=passive, inference_only=inference)
                         controller.return_value.close.assert_called_once()
 
     def test_14_real_only_http_rejects_synthetic_request(self):
@@ -453,7 +454,7 @@ class IntegrationTests(unittest.TestCase):
                 server.return_value.serve_forever.side_effect = KeyboardInterrupt
                 main()
             controller.assert_called_once_with(Path(self.temp.name), False,
-                                               allow_dummy=False, passive_receiver=True)
+                                               allow_dummy=False, passive_receiver=True, inference_only=False)
             controller.return_value.stream.start.assert_called_once_with(
                 'live', '/dev/serial/by-id/receiver', 921600, wait_for_device=True)
             controller.return_value.close.assert_called_once()

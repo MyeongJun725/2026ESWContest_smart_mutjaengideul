@@ -1,0 +1,231 @@
+{
+  "recorded_at": "2026-10-26T14:21:30.017729+00:00",
+  "refs": {
+    "main": "40551d781e19a8e7974be47334ef4132d1ed4d1d",
+    "develop": "3ecfa82eff1d2c96118d5015697ac34455ec95a3",
+    "pr6": "7061b35dbcfe5200d80311799b8509fbc13e4df8",
+    "pr8": "9037ac901b0ef16a67a4b7a9d519a7d46d18de1e",
+    "pr9": "ae887ac277bb0e3fc95ad4dc766f678b29bb9876",
+    "pr10": "da7248fac4c00f92f7a9a4fa265c733c9e73f765"
+  },
+  "ui_baseline": {
+    "previous_user_observation": "1.2.0",
+    "author_reported_install": "1.4.0",
+    "current_device_version": null,
+    "artifact_archives": "미확인/미확보; absence not established",
+    "candidate_pubspec_version": "1.4.0+1",
+    "app_id": "com.atlas.app.safehub_scenario_pr7",
+    "device_test_window_included": true,
+    "installed_package_source_correspondence": "미확인"
+  },
+  "direct_runs": {
+    "bootstrap_stub": {
+      "passed": 4
+    },
+    "source_packaging": {
+      "passed": 3
+    },
+    "windows_helpers": {
+      "passed": 11
+    },
+    "pr6_offline_adapter": {
+      "passed": 8,
+      "adopted": false
+    },
+    "pr9_cpp_host": {
+      "passed": 19,
+      "compiler": "GCC 14.2.0",
+      "cmake": "3.31.6",
+      "configuration": "Release, assertions enabled",
+      "arch": "x86_64"
+    },
+    "pr9_python_diagnostics": {
+      "passed": 3
+    },
+    "pr10_uno_contract": {
+      "passed": 14
+    },
+    "pr10_context_rules": {
+      "passed": 8,
+      "includes": "HTTP malformed shapes and clause scope; fake model"
+    },
+    "scenario_flutter": {
+      "passed": 265,
+      "failed": 0,
+      "skipped": 1,
+      "exit_code": 0,
+      "skip_reason": "existing opt-in live LLM"
+    },
+    "scenario_web_release": {
+      "passed": true,
+      "exit_code": 0,
+      "local_preview": true,
+      "atlas_build": false
+    },
+    "scenario_analyze": {
+      "errors": 0,
+      "warnings": 11,
+      "info": 100,
+      "exit_code": 1
+    },
+    "hub_scripts": {
+      "scripts_passed": 11,
+      "runner": "each Python assertion script; not unittest count"
+    },
+    "fasttext_import": {
+      "passed": true,
+      "host": "x86_64 CPython3.12",
+      "fasttext": "0.9.3",
+      "numpy": "1.26.4",
+      "compiler": "GCC 14.2; CC=gcc CXX=g++",
+      "real_model_loaded": false
+    }
+  },
+  "not_run": [
+    "ATLAS UI ARM64 package build",
+    "PR9 independent ARM64 portable build/static ABI rerun (target collection and candidate unconfirmed/unavailable here)",
+    "PR9 optional OpenCV/ORT geometry tests and extra live vision translation-unit build",
+    "Arduino Uno compile (sketch/build manifest not received)",
+    "RPi4/RPi5/Uno physical execution or deployment",
+    "Real fastText fire_screen_model.bin load/predict/HTTP and target ARM64 runtime"
+  ],
+  "reported_pr9_arm64": {
+    "source": "docs/sign/word1229-portable-abi.json at ae887ac277bb0e3fc95ad4dc766f678b29bb9876",
+    "candidate_sha256": "5c14f1fc0d7741417b46299b8ad010054ee509167eeda16c7a9b7a48e34d775c",
+    "passed": true,
+    "independently_rerun_here": false,
+    "target_execution_performed": false,
+    "deployed": false
+  },
+  "pr10": {
+    "received": true,
+    "adopted_into_ui_candidate": true,
+    "uno_sketch_received": false,
+    "publisher_ack_is_physical_completion": false
+  },
+  "protected_actions_performed": {
+    "main_develop_push": false,
+    "existing_pr_closed_or_merged": false,
+    "device_execution_replaced": false,
+    "firmware_flash": false
+  },
+  "draft_pr": {
+    "number": 11,
+    "url": "https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11",
+    "draft": true,
+    "base": "develop"
+  },
+  "flutter_sdk": {
+    "version": "3.35.7",
+    "framework_commit": "adc901062556672b4138e18a4dc62a4be8f4b3c2",
+    "engine_revision": "035316565ad77281a75305515e4682e6c4c6f7ca",
+    "dart_version": "3.9.2",
+    "provenance": "official Git tag and SDK bootstrap; no TLS/checksum verification bypass"
+  },
+  "pr_api_state": {
+    "review_count_each": 0,
+    "check_runs_each": 0,
+    "status_contexts_each": 0,
+    "combined_state": "pending; no statuses present, not a running-CI claim"
+  },
+  "current_review": "submission-audit-20261027.md",
+  "pr9_source_integration": {
+    "included": true,
+    "deployed": false,
+    "host_cpp_passed": 19
+  },
+  "resume": {
+    "source_checkpoint": "0e09f4ad788aaba186243c325a5d44819a734415",
+    "remote_pr11_before_push": "a55f263a35d4ac22171914ca716c55cb13243e4b",
+    "dirty_or_untracked_on_resume": false,
+    "merge_in_progress": false,
+    "flutter_source_files_compared": 92,
+    "flutter_source_mismatches": 0,
+    "refs_rechecked_unchanged": true,
+    "runtime_probe": "real fasttext import/native tokenize and uv pip check passed",
+    "model_load_predict_http": "not_run; model unconfirmed/unavailable",
+    "context_fake_model_recheck_passed": 8,
+    "affected_flutter_recheck_passed": 13
+  },
+  "ui_consolidation": {
+    "record": "ui-consolidation-20261027.md",
+    "implementation_commit": "c1c69c7fbb1e3177e558ea2ff4cafe689bca8de8",
+    "scenario_packaging_passed": 5,
+    "windows_python_tools_passed": 14,
+    "preview_web_release_exit": 0,
+    "dart_product_source_changed": false,
+    "legacy_ui_removed": false,
+    "pending_product_decisions": 6,
+    "source_isolation_test": "Scenario-only fixture without safehub_app/wifi_sensing succeeds"
+  },
+  "previous_review": "product-scope-20261027.md",
+  "product_scope": {
+    "user_approved_all_recommendations": true,
+    "recorded_at": "2026-10-27T03:38:05.433410+09:00",
+    "backup_ref": "backup/pr11-before-product-cleanup-20261027",
+    "backup_sha": "d6be7c7f74a4e715cff73979f2a5d16c1cb31d0c",
+    "legacy_ui_removed": true,
+    "old_standalone_csi_and_mock_vision_removed": true,
+    "c6_source_relocated_to": "HW/esp32_csi",
+    "product_csi_inference_only": true,
+    "developer_tools_default": false,
+    "context_model": "fasttext-fire-screen",
+    "real_fasttext_model_test": "skipped; model unavailable/unconfirmed",
+    "direct_runs": {
+      "flutter_passed": 271,
+      "flutter_failed": 0,
+      "flutter_skipped": 1,
+      "developer_mode_passed": 6,
+      "csi_python_passed": 54,
+      "source_packaging_passed": 5,
+      "windows_tools_passed": 14,
+      "cpp_ctest_passed": 19,
+      "web_product_build_exit": 0,
+      "analysis_errors": 0,
+      "analysis_warnings": 0,
+      "analysis_infos": 103,
+      "analysis_exit": 1
+    },
+    "physical_device_execution": false,
+    "backup_archive_restored_files_verified": 847,
+    "flutter_source_files_compared": 93
+  },
+  "submission_audit": {
+    "recorded_at": "2026-10-27T09:39:05.873296+09:00",
+    "base_sha": "82494552e7bc44cffc45022cb9ea6dc68707b967",
+    "backup_ref": "backup/pr11-before-submission-audit-20261027",
+    "shared_broadcast_cases": 20,
+    "direct_runs": {
+      "flutter_passed": 272,
+      "flutter_failed": 0,
+      "flutter_skipped": 1,
+      "context_python_passed": 9,
+      "uno_python_passed": 15,
+      "vision_python_passed": 22,
+      "source_packaging_passed": 6,
+      "windows_tools_passed": 14,
+      "boot_stub_passed": 4,
+      "hub_runner_guard_passed": 1,
+      "hub_assertion_scripts_passed": 14,
+      "cpp_ctest_passed": 19,
+      "product_web_build_exit": 0,
+      "analysis_errors": 0,
+      "analysis_warnings": 0,
+      "analysis_infos": 103,
+      "strict_analysis_exit": 1,
+      "ci_analysis_exit": 0,
+      "actionlint_exit": 0
+    },
+    "ci_local_commands_replayed": true,
+    "live_probe_discovered": {
+      "deleted": true,
+      "execution_failed_at": "DNS resolution",
+      "broker_connected": false,
+      "packet_published": false
+    },
+    "device_operations_performed": false,
+    "real_fasttext_model_test": "skipped; unconfirmed/unavailable",
+    "github_ci": "Inspect PR11 Checks for current head; local replay is not a hosted CI claim"
+  },
+  "direct_runs_scope_note": "Earlier snapshots are retained for provenance; current results are under submission_audit.direct_runs and current_review."
+}
