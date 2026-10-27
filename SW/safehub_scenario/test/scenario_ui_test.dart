@@ -132,11 +132,11 @@ void main() {
     }
     expect(find.byTooltip('AI·알림 설정'), findsOneWidget);
     expect(find.text('수어로 이야기해요').hitTestable(), findsOneWidget);
-    expect(find.text('도움이 필요해요').hitTestable(), findsOneWidget);
+    expect(find.text('도움 요청').hitTestable(), findsOneWidget);
     expect(find.text('최근 알림'), findsOneWidget);
     expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
     await capture(tester, key, 'scenario-home');
-    await tester.tap(find.text('도움이 필요해요'));
+    await tester.tap(find.text('도움 요청'));
     await tester.pump();
     expect(find.byType(ScenarioEventOverlay), findsOneWidget);
     await tester.tap(find.text('다른 사람이 아파요'));

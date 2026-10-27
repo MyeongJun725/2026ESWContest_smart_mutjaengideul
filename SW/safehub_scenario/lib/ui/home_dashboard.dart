@@ -222,13 +222,13 @@ extension _HomeDashboard on _SafeHubHomePageState {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _label(
-                        '도움이 필요해요',
+                        '도움 요청',
                         size: 24,
                         color: Colors.white,
                         weight: FontWeight.w700,
                       ),
                       _label(
-                        '수어 또는 터치로 알려주세요',
+                        '수어·터치로 선택',
                         size: 18,
                         color: const Color(0xFFF7E9ED),
                       ),
@@ -341,28 +341,8 @@ extension _HomeDashboard on _SafeHubHomePageState {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: _cameraPlaceholder()),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _label(
-                    _signText == '수어 인식 대기 중'
-                        ? '수어를 기다리고 있어요'
-                        : '인식한 수어  $_signText',
-                    size: 26,
-                    weight: FontWeight.w700,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _openSignTranslation,
-                  icon: const Icon(Icons.chat_bubble_outline, size: 21),
-                  label: const Text(
-                    '수어 대화',
-                    style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
-                  ),
-                ),
-              ],
-            ),
+            SignResultStrip(sign: _signText, connected: _cameraConnected,
+              onConversation: _openSignTranslation),
           ],
         ),
       );

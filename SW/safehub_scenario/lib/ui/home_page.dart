@@ -14,6 +14,7 @@ import 'widgets/house_status_card.dart';
 import 'widgets/editable_dashboard.dart';
 import 'widgets/hardware_test_dialog.dart';
 import 'widgets/scenario_event_overlay.dart';
+import 'widgets/sign_result_strip.dart';
 import '../core/appliance_controls.dart';
 import '../core/event_manager.dart';
 import '../core/recent_activity.dart';
@@ -474,6 +475,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _situation.receiveSign(cleanText);
     _lastSignAt = DateTime.now();
     final ttsConfigured = AppConfig.ttsServerUrl.trim().isNotEmpty;
+    // Help incidents now have bundled offline speech. Keep ordinary sign TTS
+    // behind the emergency audio lifecycle so both cannot play at once.
     final alertActive = _normalSpeechBlocked;
     final shouldSpeak = ttsConfigured &&
         !alertActive &&

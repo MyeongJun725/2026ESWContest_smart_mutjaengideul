@@ -1,15 +1,69 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:safehub_app/services/sign_speech_policy.dart';
+import 'package:safehub_app/services/situation_service.dart';
 
 void main() {
+  test('help signs remain eligible after they open the help screen', () {
+    for (final sign in ['아프다', '구조', '쓰러지다']) {
+      final situation = SituationService(
+        settings: SituationSettings(enabled: false),
+      );
+      addTearDown(situation.dispose);
+      situation.receiveSign(sign);
+      expect(situation.needsAttention, isTrue);
+      final policy = SignSpeechPolicy();
+      expect(
+        policy.isBlocked(
+          sign,
+          helpOpen: situation.needsAttention,
+          hasActiveAlert: false,
+          hasOtherIncident: false,
+        ),
+        isFalse,
+      );
+      expect(policy.shouldSpeak(sign), isTrue);
+      expect(policy.shouldSpeak(sign), isFalse);
+      expect(
+        policy.isBlocked(
+          '괜찮다',
+          helpOpen: true,
+          hasActiveAlert: false,
+          hasOtherIncident: false,
+        ),
+        isTrue,
+      );
+      expect(
+        policy.isBlocked(
+          sign,
+          helpOpen: true,
+          hasActiveAlert: true,
+          hasOtherIncident: false,
+        ),
+        isTrue,
+      );
+      expect(
+        policy.isBlocked(
+          sign,
+          helpOpen: true,
+          hasActiveAlert: false,
+          hasOtherIncident: true,
+        ),
+        isTrue,
+      );
+    }
+  });
+
+  test('help speech uses a clear request without asserting who fell', () {
+    final policy = SignSpeechPolicy();
+    expect(policy.phraseFor('구조'), '도움이 필요합니다.');
+    expect(policy.phraseFor('쓰러지다'), '쓰러짐을 알렸어요. 도움이 필요합니다.');
+  });
+
   group('수어 음성 문장 변환', () {
     final policy = SignSpeechPolicy();
 
     test('아프다를 도움 요청 문장으로 변환한다', () {
-      expect(
-        policy.phraseFor('아프다'),
-        '아파요. 도움이 필요합니다.',
-      );
+      expect(policy.phraseFor('아프다'), '아파요. 도움이 필요합니다.');
     });
 
     test('가전 수어를 자연스러운 문장으로 변환한다', () {
@@ -32,24 +86,15 @@ void main() {
       final policy = SignSpeechPolicy();
       final start = DateTime(2026, 9, 22, 12);
 
-      expect(
-        policy.shouldSpeak('아프다', now: start),
-        isTrue,
-      );
+      expect(policy.shouldSpeak('아프다', now: start), isTrue);
 
       expect(
-        policy.shouldSpeak(
-          '아프다',
-          now: start.add(const Duration(seconds: 2)),
-        ),
+        policy.shouldSpeak('아프다', now: start.add(const Duration(seconds: 2))),
         isFalse,
       );
 
       expect(
-        policy.shouldSpeak(
-          '아프다',
-          now: start.add(const Duration(seconds: 4)),
-        ),
+        policy.shouldSpeak('아프다', now: start.add(const Duration(seconds: 4))),
         isTrue,
       );
     });
@@ -58,16 +103,10 @@ void main() {
       final policy = SignSpeechPolicy();
       final start = DateTime(2026, 9, 22, 12);
 
-      expect(
-        policy.shouldSpeak('아프다', now: start),
-        isTrue,
-      );
+      expect(policy.shouldSpeak('아프다', now: start), isTrue);
 
       expect(
-        policy.shouldSpeak(
-          '괜찮다',
-          now: start.add(const Duration(seconds: 1)),
-        ),
+        policy.shouldSpeak('괜찮다', now: start.add(const Duration(seconds: 1))),
         isTrue,
       );
     });
