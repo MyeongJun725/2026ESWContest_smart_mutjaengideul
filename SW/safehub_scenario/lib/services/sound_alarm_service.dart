@@ -50,7 +50,10 @@ class SoundAlarmService {
             'Fire alarm',
             'Smoke detector, smoke alarm',
             'Civil defense siren',
-            'Siren'
+            'Siren',
+            'Police car (siren)',
+            'Ambulance (siren)',
+            'Fire engine, fire truck (siren)',
           }.contains(event['label']) &&
           event['score'] is num &&
           (event['score'] as num).isFinite &&
@@ -72,7 +75,16 @@ class SoundAlarmService {
               SoundAlarmEvent(event['id'] as String, event['label'] as String));
         }
       }
-      return const SoundAlarmState('경보음 감지 중 · YAMNet');
+      final top = data['top'];
+      final label = top is List && top.isNotEmpty && top.first is Map
+          ? (top.first as Map)['label'] : null;
+      final observed = switch (label) {
+        'Speech' || 'Conversation' || 'Narration, monologue' => '현재 음성으로 분류 중',
+        'Music' => '현재 음악으로 분류 중',
+        'Silence' => '마이크 소리 대기',
+        _ => '주변 소리 분석 중',
+      };
+      return SoundAlarmState('YAMNet · $observed');
     } catch (_) {
       return const SoundAlarmState('경보음 서버 연결 확인 필요 · 음성자막은 계속 작동');
     }

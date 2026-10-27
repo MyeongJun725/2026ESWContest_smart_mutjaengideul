@@ -48,9 +48,15 @@ SignRecognitionResult classifyWithActiveTargets(const RecordingFrames& frames,
  if(baseline.stage=="INCOMPLETE_TWO_HAND_TRACK"){
   diag.reason="INCOMPLETE_TWO_HAND_TRACK";return baseline;
  }
- // Existing successful one-hand routing keeps its exact C4/KNN result.
- if(baseline.valid && baseline.usage_type==UsageType::OneHand){diag.reason="KEEP_ONEHAND";return baseline;}
  const auto stats=analyzeRecordingFrames(frames);diag.paired_frames=stats.both_count;
+ // WORD1229 has a supporting hand that can remain almost stationary. The
+ // motion-ratio router may call this one-hand even when both hands were seen.
+ // Only reconsider that result with sustained real paired observations and
+ // an unambiguous WORD1229 reference match; never manufacture the missing hand.
+ const bool onehand_baseline=baseline.valid && baseline.usage_type==UsageType::OneHand;
+ if(onehand_baseline && (stats.both_count<20 || stats.both_ratio<.60)){
+  diag.reason="KEEP_ONEHAND_PAIR_COVERAGE";return baseline;
+ }
  if(stats.both_count<10 || stats.both_ratio<.35){diag.reason="PAIR_COVERAGE";return baseline;}
  HandSequence left,right;
  for(const auto& frame:frames)if(frame.has_left && frame.has_right){left.push_back(frame.left);right.push_back(frame.right);}
@@ -59,7 +65,7 @@ SignRecognitionResult classifyWithActiveTargets(const RecordingFrames& frames,
   opts.anchor_frame_count=5;opts.canonical_hand=CanonicalHand::Right;
   const auto raw=buildHandFeaturesV3(&left,&right,opts);
   diag.left_motion=raw.usage.left_score;diag.right_motion=raw.usage.right_score;
-  if(std::min(diag.left_motion,diag.right_motion)<.5){diag.reason="INSUFFICIENT_MOTION";return baseline;}
+  if(std::max(diag.left_motion,diag.right_motion)<.5){diag.reason="INSUFFICIENT_MOTION";return baseline;}
   const auto feature=temporalResample(raw.features,raw.frame_count,172,80);
   std::map<int,double> scores;for(int c:kClasses)scores[c]=std::numeric_limits<double>::infinity();
   for(const auto& ref:model.references){double sum=0;
@@ -72,7 +78,10 @@ SignRecognitionResult classifyWithActiveTargets(const RecordingFrames& frames,
   std::vector<std::pair<double,int>> ranking;for(const auto& s:scores)ranking.emplace_back(s.second,s.first);
   std::sort(ranking.begin(),ranking.end());
   diag.evaluated=true;diag.candidate=ranking[0].second;diag.distance=ranking[0].first;diag.runner_up=ranking[1].first;
+  if(onehand_baseline && diag.candidate!=15){diag.reason="KEEP_ONEHAND_OTHER_TARGET";return baseline;}
   if(diag.candidate!=5 && diag.candidate!=15){diag.reason="OTHER_CLASS_NEAREST";return baseline;}
+  if(diag.candidate==15 && stats.both_count<20){diag.reason="WORD1229_PAIR_COVERAGE";return baseline;}
+  if(diag.candidate!=15 && std::min(diag.left_motion,diag.right_motion)<.5){diag.reason="INSUFFICIENT_MOTION";return baseline;}
   if(diag.distance>.45 || diag.distance>.80*diag.runner_up){diag.reason="AMBIGUOUS_OR_DISTANT";return baseline;}
   diag.accepted=true;diag.reason="ACCEPTED";
   SignRecognitionResult result;result.status=SignRuntimeStatus::Success;result.valid=true;

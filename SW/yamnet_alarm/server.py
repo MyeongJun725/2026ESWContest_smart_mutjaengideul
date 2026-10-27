@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 import numpy as np
 from ai_edge_litert.interpreter import Interpreter
-from detection import AlarmPolicy
+from detection import AlarmPolicy, SPECIFIC, SIRENS
 from pcm_stream import HEADER, PcmWindows
 
 
@@ -23,7 +23,15 @@ def main():
     parser.add_argument("--labels", required=True)
     parser.add_argument("--socket", default="/run/safehub-yamnet/audio.sock")
     parser.add_argument("--port", type=int, default=9381)
+    parser.add_argument("--target-model")
+    parser.add_argument("--target-reference")
     args = parser.parse_args()
+    target = None
+    if args.target_model or args.target_reference:
+        if not (args.target_model and args.target_reference):
+            parser.error("Both target model and reference are required")
+        from target_siren import TargetSiren
+        target = TargetSiren(args.target_model, args.target_reference)
     labels = Path(args.labels).read_text().splitlines()
     model = Interpreter(model_path=args.model, num_threads=1)
     model.allocate_tensors()
@@ -39,6 +47,8 @@ def main():
     lock = threading.Lock()
     state = dict(
         engine="yamnet",
+        policy_version="siren-family-v2",
+        target_reference_enabled=target is not None,
         ready=True,
         audio_received_at=None,
         inference_ms=None,
@@ -101,6 +111,8 @@ def main():
             if generation != windows.generation:
                 generation = windows.generation
                 policy.reset()
+                if target:
+                    target.reset()
             if audio is None:
                 continue
             began = time.monotonic()
@@ -108,11 +120,15 @@ def main():
             model.set_tensor(input_id, waveform)
             model.invoke()
             scores = model.get_tensor(output_id)[0]
+            target_event, target_state = (target.observe(waveform, began)
+                                          if target else (None, None))
             duration = (time.monotonic() - began) * 1000
             top = np.argsort(scores)[-3:][::-1]
             detected = policy.update(dict(zip(labels, scores)), began)
+            detected = detected or target_event
             with lock:
                 state.update(
+                    target_reference=target_state,
                     audio_received_at=began,
                     inference_ms=round(duration, 2),
                     stream_resets=generation,
@@ -120,7 +136,7 @@ def main():
                     frames_processed=state['frames_processed'] + 1,
                     audio_rms=round(float(np.sqrt(np.mean(waveform * waveform))), 6),
                     alarm_scores={name: float(scores[labels.index(name)]) for name in
-                                  ('Fire alarm', 'Smoke detector, smoke alarm', 'Civil defense siren', 'Siren', 'Alarm')},
+                                  sorted(SPECIFIC | SIRENS | {'Alarm'})},
                 )
                 if detected:
                     number += 1

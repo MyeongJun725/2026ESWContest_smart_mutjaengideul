@@ -23,6 +23,23 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  testWidgets('TTS address and health button are separate from STT', (tester) async {
+    String? checked;
+    await tester.pumpWidget(MaterialApp(home: ConnectionSettingsPage(
+      checkTts: (url) async { checked = url; return true; },
+    )));
+    final field = find.byKey(const ValueKey('TTS_SERVER_URL'));
+    await tester.ensureVisible(field);
+    await tester.enterText(field, 'http://127.0.0.1:8000');
+    final button = find.byKey(const ValueKey('check_tts_connection'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(checked, 'http://127.0.0.1:8000');
+    expect(find.textContaining('TTS 서버 연결됨'), findsOneWidget);
+    expect(AppConfig.ttsServerUrl, isEmpty); // Probe never saves or restarts.
+  });
+
   test(
     'unconfigured real services wait without requiring placeholder addresses',
     () {

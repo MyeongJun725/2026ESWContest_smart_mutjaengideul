@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -93,6 +94,19 @@ void main() {
     await audio.playUrl('  ');
     expect(player.stops, 0);
     expect(player.sources, isEmpty);
+  });
+
+  test('ATLAS file playback avoids path_provider and cleans up on stop', () async {
+    await audio.dispose();
+    audio = AudioService(player: player, localFilePlayback: true);
+    await audio.playBytes(Uint8List.fromList([1, 2, 3]));
+    final source = player.sources.single as DeviceFileSource;
+    final file = File(source.path);
+    expect(await file.readAsBytes(), [1, 2, 3]);
+    await audio.stop();
+    expect(await file.exists(), isFalse);
+    await audio.dispose();
+    expect(await file.parent.exists(), isFalse);
   });
 
   test(

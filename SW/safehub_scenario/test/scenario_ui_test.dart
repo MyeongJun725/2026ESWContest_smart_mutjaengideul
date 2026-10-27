@@ -73,7 +73,7 @@ void main() {
       await tester.tap(
         find.byKey(
           ValueKey(
-            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-활동 상태',
+            AppConfig.developerTools ? 'navigation-신호 관리' : 'navigation-낙상 감지',
           ),
         ),
       );
@@ -83,7 +83,7 @@ void main() {
         AppConfig.developerTools ? findsOneWidget : findsNothing,
       );
       if (!AppConfig.developerTools)
-        expect(find.text('현재 모델의 행동 예측'), findsOneWidget);
+        expect(find.text('낙상 감지 상태'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await capture(tester, key, 'unified-signal');
       await tester.tap(find.byKey(const ValueKey('navigation-홈')));
@@ -157,6 +157,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
   });
 
   testWidgets('touch response screen fits an 800 by 480 display', (
@@ -193,5 +194,6 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
   });
 }

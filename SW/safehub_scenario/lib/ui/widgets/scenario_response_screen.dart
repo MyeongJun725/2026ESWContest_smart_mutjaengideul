@@ -57,9 +57,9 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
       draft.isNotEmpty
           ? '도움 요청 내용을 확인해 주세요'
           : helping
-          ? '도움이 필요하신가요?'
+          ? (incident?.origin == 'csi' ? '낙상 의심 신호가 감지됐어요' : '도움이 필요하신가요?')
           : incident?.kind == HouseScenario.broadcast
-          ? (incident?.origin == 'sound' ? '경보음이 의심돼요. 주변을 확인해 주세요.' : RegExp(r'화재|불이').hasMatch(incident?.evidence ?? '')
+          ? (incident?.origin == 'sound' ? '위급상황 확인 · 경보음이 감지됐어요' : RegExp(r'화재|불이').hasMatch(incident?.evidence ?? '')
               ? '화재 관련 안내방송'
               : '위험 관련 안내방송')
           : '${RegExp(r'지진|태풍|호우|산불|홍수|대설|폭염|한파').firstMatch(incident?.evidence ?? '')?.group(0) ?? '재난'} 알림이 도착했어요';
@@ -191,7 +191,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
               TextButton(
                 onPressed: widget.onSignal,
                 child: const Text(
-                  '빛·진동 다시 알림',
+                  '빛·진동·음성 다시 알림',
                   style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
                 ),
               ),

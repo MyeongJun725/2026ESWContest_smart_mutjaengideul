@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/wifi_sensing_service.dart';
+import '../../core/csi_fall_state.dart';
 
 /// The home screen observes the same recognition session as the collection UI.
 class WifiActionStatus extends StatefulWidget {
@@ -135,10 +136,9 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
     final fresh = state?['connected'] == true && state?['fresh'] == true;
     final running = state?['recognition']['running'] == true;
     final model = state?['model'];
-    final result = fresh && running ? state!['recognition']['result'] : null;
-    final label = result?['label'] as String?;
-    final scores = result?['scores'] as Map?;
-    final score = label == null ? null : scores?[label] as num?;
+    final fall = CsiFallState.fromState(state);
+    final label = fall.headline;
+    final score = fall.fallScore;
     final status = state == null
         ? '서비스 연결 대기'
         : fresh
@@ -148,15 +148,7 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
         ? _commandError
         : _error.isNotEmpty
             ? _error
-            : state == null
-                ? '연결되면 새 결과를 표시합니다.'
-                : !fresh
-                    ? '수신기 연결을 확인하세요. 이전 결과는 표시하지 않습니다.'
-                    : model == null
-                        ? '준비된 CSI 모델을 선택하세요. 모델 파일 준비는 개발 도구에서 진행합니다.'
-                        : !running
-                            ? '행동 인식을 시작하면 여기에 표시됩니다.'
-                            : state['recognition']['reason'] as String;
+            : fall.detail;
     const ink = Color(0xFFF1F3F6);
     const muted = Color(0xFFC5CAD1);
     const blue = Color(0xFFBBD5FC);
@@ -173,22 +165,22 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              '센싱 공간의 활동 상태',
+              '낙상 감지',
               style: TextStyle(color: ink, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(
-              label == null ? '현재 행동: 확인 불가' : '현재 모델 예측: $label',
+              label,
               key: const Key('alert-action-label'),
               style: const TextStyle(color: blue, fontSize: 22),
             ),
             Text(
-              label == null ? reason : status,
+              reason,
               style: const TextStyle(color: muted),
             ),
             const SizedBox(height: 6),
             const Text(
-              '정지는 부재를 뜻하지 않습니다. 대피 여부는 확인할 수 없습니다.',
+              '평소에는 대기하고 낙상 의심 신호에만 경고합니다.',
               style: TextStyle(color: muted, fontSize: 12),
             ),
           ],
@@ -200,7 +192,7 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          '재실 판단: 아직 미학습',
+          'CSI 낙상 감지',
           style: TextStyle(
             color: blue,
             fontSize: 17,
@@ -208,7 +200,7 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
           ),
         ),
         const Text(
-          '빈 공간과 사람이 있는 공간을 함께 학습해야 합니다.',
+          '낙상과 일상 동작으로 학습한 모델이 필요합니다.',
           style: TextStyle(color: muted, fontSize: 12),
         ),
         const SizedBox(height: 10),
@@ -237,11 +229,11 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    '현재 모델의 행동 예측',
+                    '낙상 감지 상태',
                     style: TextStyle(color: muted, fontSize: 13),
                   ),
                   Text(
-                    label ?? (model == null && fresh ? '모델 준비 필요' : '판단 대기'),
+                    label,
                     key: const Key('home-action-label'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
@@ -253,7 +245,7 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
                   const SizedBox(height: 8),
                   if (score != null)
                     Text(
-                      '모델 점수 ${(score * 100).toStringAsFixed(0)}%',
+                      '낙상 모델 점수 ${(score * 100).toStringAsFixed(0)}%',
                       style: const TextStyle(color: ink, fontSize: 18),
                     ),
                   const SizedBox(height: 8),
@@ -295,7 +287,7 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
         const SizedBox(height: 8),
         TextButton.icon(
           onPressed:
-              !_busy && state != null && model != null && (running || fresh)
+              !_busy && state != null && fall.modelReady && (running || fresh)
                   ? _toggleRecognition
                   : null,
           icon: Icon(running ? Icons.pause : Icons.play_arrow),
@@ -303,8 +295,8 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
             _busy
                 ? '적용 중…'
                 : running
-                    ? '행동 인식 중지'
-                    : '행동 인식 시작',
+                    ? '낙상 감지 중지'
+                    : '낙상 감지 시작',
           ),
           style: TextButton.styleFrom(
             foregroundColor: blue,
@@ -313,7 +305,7 @@ class _WifiActionStatusState extends State<WifiActionStatus> {
           ),
         ),
         const Text(
-          '연결된 수신기 기준 · 집 전체의 부재를 뜻하지 않습니다.',
+          '의식·부상 여부를 확정하지 않습니다. 감지 시 상태를 확인하세요.',
           textAlign: TextAlign.center,
           style: TextStyle(color: muted, fontSize: 12),
         ),

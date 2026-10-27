@@ -18,7 +18,7 @@ Map<String, dynamic> liveState() {
   state['models'] = [
     {
       'model_id': 'model',
-      'labels': ['정지', '걷기'],
+      'labels': ['일상', '낙상'],
       'window_seconds': 4,
     },
   ];
@@ -27,10 +27,11 @@ Map<String, dynamic> liveState() {
     'running': true,
     'reason': '실시간 인식 중',
     'result': {
-      'label': '걷기',
-      'scores': {'걷기': .8, '정지': .2},
+      'label': '일상',
+      'scores': {'일상': .8, '낙상': .2},
     },
   };
+  state['fall_detection'] = {'status': 'monitoring', 'event': null};
   return state;
 }
 
@@ -95,7 +96,7 @@ void main() {
       await t.tap(find.text('model').last);
       await t.pumpAndSettle();
       expect(actions, ['/command/select_model']);
-      expect(find.text('행동 인식 시작'), findsOneWidget);
+      expect(find.text('낙상 감지 시작'), findsOneWidget);
       expect(find.text('기록 · 학습'), findsNothing);
       expect(t.takeException(), isNull);
     },
@@ -112,13 +113,13 @@ void main() {
         return utf8Response(jsonEncode(state), 200);
       }),
     );
-    expect(find.text('걷기'), findsOneWidget);
-    expect(find.text('모델 점수 80%'), findsOneWidget);
+    expect(find.text('낙상 의심 신호 없음'), findsOneWidget);
+    expect(find.text('낙상 모델 점수 20%'), findsOneWidget);
     state['fresh'] = false;
     state['connected'] = false;
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
-    expect(find.text('걷기'), findsNothing);
+    expect(find.text('낙상 의심 신호 없음'), findsNothing);
     expect(find.text('수신기 신호 대기'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
@@ -137,15 +138,15 @@ void main() {
             : pending.future;
       }),
     );
-    expect(find.text('걷기'), findsOneWidget);
+    expect(find.text('낙상 의심 신호 없음'), findsOneWidget);
     for (var i = 0; i < 3; i++) {
       await tester.pump(const Duration(seconds: 1));
     }
-    expect(find.text('걷기'), findsNothing);
+    expect(find.text('낙상 의심 신호 없음'), findsNothing);
     expect(find.text('서비스 연결 대기'), findsOneWidget);
     pending.complete(utf8Response(jsonEncode(liveState()), 200));
     await tester.pump();
-    expect(find.text('걷기'), findsOneWidget);
+    expect(find.text('낙상 의심 신호 없음'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -168,10 +169,10 @@ void main() {
         return utf8Response(jsonEncode(state), 200);
       }),
     );
-    await tester.tap(find.text('행동 인식 중지'));
+    await tester.tap(find.text('낙상 감지 중지'));
     await tester.pump();
-    expect(find.text('걷기'), findsNothing);
-    expect(find.text('행동 인식 시작'), findsOneWidget);
+    expect(find.text('낙상 의심 신호 없음'), findsNothing);
+    expect(find.text('낙상 감지 시작'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -182,7 +183,7 @@ void main() {
       tester,
       MockClient((_) async => utf8Response(jsonEncode(state), 200)),
     );
-    expect(find.text('걷기'), findsNothing);
+    expect(find.text('낙상 의심 신호 없음'), findsNothing);
     expect(find.text('실제 수신 전용 CSI 서비스를 연결하세요.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
@@ -225,13 +226,13 @@ void main() {
           ),
         );
         await tester.pump();
-        expect(find.text('현재 모델 예측: 걷기'), findsOneWidget);
+        expect(find.text('낙상 의심 신호 없음'), findsOneWidget);
         state['fresh'] = false;
         state['connected'] = false;
         await tester.pump(const Duration(seconds: 1));
         await tester.pump();
-        expect(find.text('현재 모델 예측: 걷기'), findsNothing);
-        expect(find.text('현재 행동: 확인 불가'), findsOneWidget);
+        expect(find.text('낙상 의심 신호 없음'), findsNothing);
+        expect(find.text('CSI 신호 대기'), findsOneWidget);
         expect(find.textContaining('테스트용 재난 안내'), findsOneWidget);
         await tester.ensureVisible(find.text('알림 확인했어요'));
         await tester.tap(find.text('알림 확인했어요'));

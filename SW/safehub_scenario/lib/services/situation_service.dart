@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import '../core/csi_fall_state.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -255,7 +256,7 @@ class SituationService extends ChangeNotifier {
   }
 
   void observeFall(String id, String text) {
-    _newRealIncident(liveFlow.assistance(id, text));
+    _newRealIncident(liveFlow.assistance(id, text, origin: 'csi'));
   }
 
   bool startScenarioTest(
@@ -578,9 +579,7 @@ class SituationService extends ChangeNotifier {
         recognition['running'] == true &&
         result is Map;
     final previousStatus = sensorStatus;
-    sensorStatus = valid
-        ? 'CSI 분류: ${result['label'] ?? '판단 보류'}'
-        : 'CSI 판단 대기 · 재실 여부 미확인';
+    sensorStatus = CsiFallState.fromState(state).headline;
     sensorAt = valid ? DateTime.now() : null;
     if (previousStatus != sensorStatus) {
       _notify();

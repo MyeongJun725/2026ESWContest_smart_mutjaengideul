@@ -24,9 +24,9 @@ class HouseIncident {
           ? 2
           : 1;
   String get title => switch (kind) {
-        HouseScenario.broadcast => origin == 'sound' ? '경보음이 의심돼요. 주변 상황을 확인해 주세요.' : '위험을 알리는 말이 들렸어요. 방송을 확인해 주세요.',
+        HouseScenario.broadcast => origin == 'sound' ? '경보음 감지 · 위급상황인지 확인해 주세요.' : '위험을 알리는 말이 들렸어요. 방송을 확인해 주세요.',
         HouseScenario.disaster => '새 재난 알림이 도착했어요. 적용 지역을 확인해 주세요.',
-        HouseScenario.assistance => '도움이 필요한 상황인지 확인해 주세요.',
+        HouseScenario.assistance => origin == 'csi' ? '낙상 의심 신호가 감지됐어요. 상태를 확인해 주세요.' : '도움이 필요한 상황인지 확인해 주세요.',
       };
   String get nextAction => response.isEmpty
       ? '수어 또는 터치로 확인 여부를 알려주세요.'
@@ -87,8 +87,10 @@ class HouseScenarioFlow extends ChangeNotifier {
   }
 
   bool soundAlarm(String id, String label, {DateTime? now}) {
-    if (!{'Fire alarm', 'Smoke detector, smoke alarm', 'Civil defense siren', 'Siren'}.contains(label)) return false;
-    final kind = label == 'Siren' || label == 'Civil defense siren' ? '사이렌' : '화재경보음';
+    const sirens = {'Siren', 'Civil defense siren', 'Police car (siren)',
+      'Ambulance (siren)', 'Fire engine, fire truck (siren)'};
+    if (!{'Fire alarm', 'Smoke detector, smoke alarm', ...sirens}.contains(label)) return false;
+    final kind = sirens.contains(label) ? '사이렌' : '화재경보음';
     return _submit(HouseIncident('sound:$id', HouseScenario.broadcast,
         '$kind 소리가 의심됩니다. 주변 상황과 안내를 확인해 주세요.\nYAMNet 음향 분류 결과 · 실제 화재·재난이나 발생 장소를 확정하지 않습니다.',
         now ?? DateTime.now(), origin: 'sound', relevance: '음성자막 없이 경보음에서 감지 · 주변 확인 필요'));
@@ -132,12 +134,13 @@ class HouseScenarioFlow extends ChangeNotifier {
     );
   }
 
-  bool assistance(String id, String text, {DateTime? now}) => _submit(
+  bool assistance(String id, String text, {DateTime? now, String origin = 'text'}) => _submit(
         HouseIncident(
           'assistance:$id',
           HouseScenario.assistance,
           text,
           now ?? DateTime.now(),
+          origin: origin,
           relevance: '센서 의심 신호 또는 사용자 요청 · 낙상·의식불명 확정 아님',
         ),
       );

@@ -4,10 +4,12 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 import '../config/app_config.dart';
 import '../core/alert_coordinator.dart';
 import '../core/house_scenario.dart';
+import '../core/csi_fall_state.dart';
 import 'widgets/house_status_card.dart';
 import 'widgets/editable_dashboard.dart';
 import 'widgets/hardware_test_dialog.dart';
@@ -23,6 +25,7 @@ import '../services/sign_speech_policy.dart';
 import '../services/stt_service.dart';
 import '../services/sound_alarm_service.dart';
 import '../services/tts_service.dart';
+import '../services/emergency_speech_service.dart';
 import '../services/live_caption_service.dart';
 import '../services/wifi_sensing_service.dart';
 import 'connection_settings_page.dart';
@@ -102,11 +105,14 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   late final MqttReceiver _mqttReceiver;
   late final AnimationController _alertPulseController;
   late final TtsService _ttsService;
+  late final EmergencySpeechService _emergencySpeech;
+  String? _emergencySpeechKey;
   late final SttService _sttService;
   late final LiveCaptionService _captions;
   final _situation = SituationService();
   Timer? _situationTimer;
   bool _sensorPolling = false;
+  final Set<String> _csiFallEvents = {};
   bool _soundPolling = false;
   SoundAlarmService? _soundAlarm;
   Timer? _soundTimer;
@@ -161,17 +167,30 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     );
 
     _ttsService = TtsService(baseUrl: AppConfig.ttsServerUrl);
+    _emergencySpeech = EmergencySpeechService(
+      load: (voice) async {
+        final data = await rootBundle.load(EmergencySpeechService.assetFor(voice));
+        return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      },
+      play: _audioService.playBytes,
+      stop: _audioService.stop,
+      onError: (error) => debugPrint('[Emergency speech error] $error'),
+      onStatus: (status) {
+        debugPrint('[Emergency speech] $status');
+        if (mounted) setState(() => _ttsStatus = status);
+      },
+    );
+    _situation.addListener(_syncEmergencySpeech);
 
     _situation.onAnnouncement = () {
       if (!mounted) return;
       _closeHardwareTestForAlert();
-      _interruptNormalSpeech();
+      if (_situation.flow.active == null) _interruptNormalSpeech();
       _sendScenarioSignal();
     };
     _situation.onScenarioAlert = () {
       if (!mounted) return;
       _closeHardwareTestForAlert();
-      _interruptNormalSpeech();
       _sendScenarioSignal();
     };
     _situation.onScenarioTestChanged = () {
@@ -455,8 +474,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _situation.receiveSign(cleanText);
     _lastSignAt = DateTime.now();
     final ttsConfigured = AppConfig.ttsServerUrl.trim().isNotEmpty;
-    final alertActive =
-        _alertCoordinator.hasActiveAlert || _situation.needsAttention;
+    final alertActive = _normalSpeechBlocked;
     final shouldSpeak = ttsConfigured &&
         !alertActive &&
         _signSpeechPolicy.shouldSpeak(cleanText);
@@ -506,7 +524,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       return;
     }
 
-    if (_alertCoordinator.hasActiveAlert) {
+    if (_normalSpeechBlocked) {
       return;
     }
 
@@ -519,7 +537,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
       await _audioService.stop();
 
-      if (generation != _speechGeneration || _alertCoordinator.hasActiveAlert) {
+      if (generation != _speechGeneration || _normalSpeechBlocked) {
         return;
       }
 
@@ -527,7 +545,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
       if (!mounted ||
           generation != _speechGeneration ||
-          _alertCoordinator.hasActiveAlert) {
+          _normalSpeechBlocked) {
         return;
       }
 
@@ -539,7 +557,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
       if (mounted &&
           generation == _speechGeneration &&
-          !_alertCoordinator.hasActiveAlert) {
+          !_normalSpeechBlocked) {
         setState(() {
           _ttsStatus = '음성으로 전달됨';
         });
@@ -573,7 +591,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
     if (_isEmergencyEvent(eventData)) {
       _situation.observeFall(
-        '${eventData['id'] ?? eventData['timestamp'] ?? eventData['_receivedAt']}',
+        '${eventData['message_id'] ?? eventData['id'] ?? eventData['timestamp'] ?? eventData['_receivedAt']}',
         '${_getLocationName(eventData)} · 낙상 의심 신호 · ${_formatEventDateTime(eventData)}',
       );
     }
@@ -607,6 +625,24 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     }
   }
 
+  void _syncEmergencySpeech() {
+    final incident = _situation.flow.active;
+    final enabled = !AppConfig.localPreview &&
+        (!_situation.scenarioTestMode || _situation.scenarioActuators);
+    final key = enabled && incident != null
+        ? '${incident.kind.name}:${incident.origin}:${incident.id}:${incident.receivedAt.microsecondsSinceEpoch}' : null;
+    if (key != _emergencySpeechKey) {
+      _emergencySpeechKey = key;
+      // Invalidate any unfinished ordinary TTS before the alert takes the player.
+      _speechGeneration++;
+    }
+    _emergencySpeech.update(incident, enabled: enabled);
+  }
+
+  bool get _normalSpeechBlocked => _alertCoordinator.hasActiveAlert ||
+      _situation.flow.active != null || _situation.needsAttention ||
+      _situation.announcement != null;
+
   void _acknowledgeActiveAlert() {
     _alertCoordinator.acknowledgeCurrent();
 
@@ -621,7 +657,15 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _sensorPolling = true;
     try {
       final state = await _wifiSensingService.state({'view': 'summary'});
-      if (mounted) _situation.setSensor(state);
+      if (mounted) {
+        _situation.setSensor(state);
+        final event = CsiFallState.fromState(state).event;
+        if (event != null && _csiFallEvents.add(event['message_id'] as String)) {
+          if (_csiFallEvents.length > 128) _csiFallEvents.remove(_csiFallEvents.first);
+          debugPrint('[CSI fall] confirmed event=${event['message_id']}');
+          _handleEvent(event);
+        }
+      }
     } catch (_) {
       if (mounted) _situation.setSensor(null);
     } finally {
@@ -685,6 +729,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   void _restartAlertPulse() {
     _situation.beginIncident();
     _sendScenarioSignal();
+    final incident = _situation.flow.active;
+    if (incident != null) _emergencySpeech.repeat(incident);
     _alertPulseController
       ..stop()
       ..reset()
@@ -726,6 +772,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _previewSignTimer?.cancel();
     _situationTimer?.cancel();
     _stopScenarioSignal();
+    _situation.removeListener(_syncEmergencySpeech);
+    _emergencySpeech.dispose();
     _situation.dispose();
     _clockTimer?.cancel();
     _clock.dispose();
@@ -1028,6 +1076,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
                   camera: _cameraPlaceholder(),
                   onSignal: () {
                     _sendScenarioSignal();
+                    final incident = _situation.flow.active;
+                    if (incident != null) _emergencySpeech.repeat(incident);
                     setState(() {});
                   },
                   onAcknowledge: () {

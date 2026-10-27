@@ -48,6 +48,7 @@ class Controller:
         import teaching
         from stream import Stream
         from recognition import Recognition
+        from fall_detection import FallDetector
         from soom_processing import PROFILE
         from soom_engine import verify_runtime
         verify_runtime()
@@ -58,6 +59,7 @@ class Controller:
         if not allow_dummy:
             self.stream.error = 'ESP32 수신기를 연결하고 USB 포트를 선택하세요.'
         self.recognition = Recognition()
+        self.fall_detector = FallDetector()
         self.lock = threading.RLock()
         self.inference_only = inference_only
         self.allow_training = allow_training and not inference_only
@@ -73,6 +75,8 @@ class Controller:
         self.waveform_stats = {'computations': 0, 'cache_hits': 0}
         self.model = None
         self.bundle = None
+        settings = self.services.load_settings()
+        self.resume_model_id = settings.get('csi_fall_model') if settings.get('csi_fall_auto_start') is True else None
         self.pool = ThreadPoolExecutor(max_workers=2)
         self.predicting = False
         self.last_predict = 0
@@ -196,8 +200,17 @@ class Controller:
 
     def _advance(self):
         with self.lock:
+            if self.resume_model_id and self.stream.snapshot(include_frames=False)['fresh']:
+                mid, self.resume_model_id = self.resume_model_id, None
+                try:
+                    self.command('select_model', {'id': mid})
+                    self._recognize()
+                except (ValueError, OSError) as exc:
+                    self.recognition.stop(f'자동 낙상 감지 준비 실패: {exc}')
+                    self.fall_detector.unavailable()
             capturing = self.capture and self.capture.state in ('preparing', 'recording')
             if not capturing and not self.recognition.running:
+                self.fall_detector.unavailable()
                 return
             state = self.stream.snapshot(max_seconds=None if capturing else 4.025)
             now = self.stream.now()
@@ -218,9 +231,10 @@ class Controller:
             recog = self.recognition
             if not recog.observe(state['connected'], state['session'], state['epoch'],
                                  frames[-1]['t'] if frames else None, now):
+                self.fall_detector.unavailable()
                 return
             recent = [f for f in frames if f['t'] >= recog.start]
-            if (self.predicting or now - self.last_predict < 3
+            if (self.predicting or now - self.last_predict < .6
                     or not recent or recent[-1]['t'] - recent[0]['t'] < 3.975):
                 return
             self.predicting = True
@@ -246,12 +260,16 @@ class Controller:
                 result = self.teaching.predict_frames(model, frames, 'raw_iq_52')
                 result.pop('input_signal', None)
             with self.lock:
-                self.recognition.accept(generation, model['model_id'], result,
-                                        end, self.stream.now())
+                now = self.stream.now()
+                if self.recognition.accept(generation, model['model_id'], result, end, now):
+                    state = self.stream.snapshot(include_frames=False)
+                    self.fall_detector.observe(result, input_end=end, now=now,
+                        real=state['mode'] == 'live' and state['fresh'] and not self.allow_dummy)
         except Exception as exc:
             with self.lock:
                 if self.recognition.generation == generation:
                     self.recognition.clear(str(exc))
+                    self.fall_detector.unavailable()
         finally:
             with self.lock:
                 self.predicting = False
@@ -296,6 +314,7 @@ class Controller:
                 state = {k: v for k, v in latest.items() if k != 'frames'}
             if not state['fresh']:
                 self.recognition.clear('새 신호 대기 · 이전 결과를 지웠습니다.')
+                self.fall_detector.unavailable()
             capture = self.capture
             settings = self.services.load_settings()
             if not isinstance(settings, dict):
@@ -305,13 +324,14 @@ class Controller:
             if self.model and self.model.get('model_id') not in {m['model_id'] for m in models}:
                 self.recognition.stop('선택한 모델 파일을 확인한 뒤 다시 선택하세요.')
                 self.model = self.bundle = None
+                self.fall_detector.reset()
             warnings = [warning for items in self.catalog_warnings.values() for warning in items]
             if len(warnings) > 20:
                 warnings = warnings[:20] + [f'추가 {len(warnings) - 20}개 파일을 확인하세요.']
             return dict(
                 **state, profile=self.profile, waveform=waveform,
                 waveform_reason=reason, rate_hz=estimate_rate(frames) if frames else 0,
-                behaviors=list(self.services.DEFAULT_BEHAVIORS) + self.services.custom_behaviors(settings),
+                behaviors=list(dict.fromkeys([*self.services.DEFAULT_BEHAVIORS, '일상', *self.services.custom_behaviors(settings)])),
                 records=records, models=models, storage_warnings=warnings,
                 model=self.model_summary(self.model), training=self.training,
                 training_allowed=self.allow_training,
@@ -319,6 +339,7 @@ class Controller:
                 recognition={'running': self.recognition.running,
                              'result': self.recognition.result,
                              'reason': self.recognition.reason},
+                fall_detection=self.fall_detector.snapshot(),
                 capture=None if capture is None else {
                     'state': capture.state, 'label': capture.label,
                     'error': capture.error, 'saved': self.capture_saved,
@@ -333,6 +354,8 @@ class Controller:
             if self.inference_only and action not in {'connect', 'disconnect', 'select_model', 'recognize', 'stop_recognition'}:
                 raise ValueError('제품 모드는 상태·추론 전용입니다. 수집·학습은 개발 서비스에서 실행하세요.')
             if action == 'connect':
+                self.resume_model_id = None
+                self._remember_fall_model(False)
                 if payload['mode'] == 'dummy' and not self.allow_dummy:
                     raise ValueError('실제 장비 연결 모드에서는 모의 신호를 사용할 수 없습니다.')
                 self.recognition.stop()
@@ -340,6 +363,8 @@ class Controller:
                     self.capture.cancel()
                 self.stream.start(payload['mode'], payload.get('port', ''), int(payload.get('baud', 921600)))
             elif action == 'disconnect':
+                self.resume_model_id = None
+                self._remember_fall_model(False)
                 self.recognition.stop()
                 if self.capture:
                     self.capture.cancel()
@@ -377,10 +402,16 @@ class Controller:
                 bundle = load_bundle(bundle_path) if bundle_path.is_dir() else None
                 self.recognition.stop()
                 self.model, self.bundle = model, bundle
+                self.fall_detector.reset(model)
+                self.resume_model_id = None
+                self._remember_fall_model(False)
             elif action == 'recognize':
                 self._recognize()
             elif action == 'stop_recognition':
+                self.resume_model_id = None
+                self._remember_fall_model(False)
                 self.recognition.stop()
+                self.fall_detector.unavailable()
             elif action == 'import_records':
                 self.services.import_records(payload['paths'])
             elif action == 'export_records':
@@ -435,19 +466,25 @@ class Controller:
         records = self.records(ids)
         if len(records) != len(ids):
             raise ValueError('선택한 기록 목록이 변경되었습니다.')
+        fall_only = payload.get('fall_only', False)
+        if fall_only:
+            from fall_detection import fall_training_records
+            records = fall_training_records(records)
         ready, reason = self.services.selection_state(records, 4)
         if not ready:
             raise ValueError(reason)
         self.recognition.stop('학습 중')
+        self._remember_fall_model(False)
         self.training = {'state': 'running', 'count': len(records)}
-        self.pool.submit(self._fit, records)
+        self.pool.submit(self._fit, records, fall_only)
 
-    def _fit(self, records):
+    def _fit(self, records, fall_only=False):
         try:
-            model = self.services.train_selected(records, 4, 'SafeHub 행동 모델')
+            model = self.services.train_selected(records, 4, 'SafeHub 낙상·일상 모델' if fall_only else 'SafeHub 행동 모델')
             with self.lock:
                 self.recognition.stop('학습 완료 · 새 모델로 인식을 시작하세요.')
                 self.model, self.bundle = model, None
+                self.fall_detector.reset(model)
                 self.training = {'state': 'complete', 'model_id': model['model_id']}
         except Exception as exc:
             with self.lock:
@@ -464,6 +501,14 @@ class Controller:
         if (expected['mode'], expected['hardware']) != (state['mode'], state['hardware']):
             raise ValueError('모의/실측 또는 보드 구성이 모델과 다릅니다.')
         self.recognition.begin(state['session'], state['epoch'], self.model['model_id'], self.stream.now())
+        self.fall_detector.reset(self.model)
+        self._remember_fall_model(self.fall_detector.eligible and not self.allow_dummy)
+
+    def _remember_fall_model(self, enabled):
+        settings = self.services.load_settings()
+        self.services.save_settings(dict(settings,
+            csi_fall_model=None if self.model is None else self.model['model_id'],
+            csi_fall_auto_start=enabled))
 
     def _require_training_idle(self):
         if self.training['state'] == 'running':
@@ -484,6 +529,9 @@ class Controller:
         self.db.write_json(self.db.MODELS / f'{mid}.json', metadata)
         self.recognition.stop()
         self.model, self.bundle = metadata, bundle
+        self.fall_detector.reset(metadata)
+        self.resume_model_id = None
+        self._remember_fall_model(False)
 
 
 class Handler(BaseHTTPRequestHandler):

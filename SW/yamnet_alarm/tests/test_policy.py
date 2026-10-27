@@ -7,6 +7,25 @@ from detection import AlarmPolicy
 
 
 class PolicyTests(unittest.TestCase):
+    def test_emergency_vehicle_siren_subclasses_trigger_without_parent_score(self):
+        for label in ('Police car (siren)', 'Ambulance (siren)',
+                      'Fire engine, fire truck (siren)'):
+            with self.subTest(label=label):
+                policy = AlarmPolicy()
+                self.assertIsNone(policy.update({label: 0.8, 'Siren': 0.01}, 1))
+                self.assertEqual(policy.update({label: 0.8}, 1.5)['label'], label)
+
+    def test_weaker_specific_candidate_cannot_hide_a_stronger_siren(self):
+        policy = AlarmPolicy()
+        scores = {'Fire alarm': 0.36, 'Siren': 0.9, 'Alarm clock': 0.5}
+        self.assertIsNone(policy.update(scores, 1))
+        self.assertEqual(policy.update(scores, 1.5)['label'], 'Siren')
+
+    def test_vehicle_or_generic_alarm_alone_does_not_establish_a_siren(self):
+        policy = AlarmPolicy()
+        for t in (1, 1.5, 2):
+            self.assertIsNone(policy.update({'Emergency vehicle': 0.9, 'Alarm': 0.9}, t))
+
     def test_specific_alarm_requires_two_observed_windows(self):
         policy = AlarmPolicy()
         self.assertIsNone(policy.update({"Fire alarm": 0.8}, 1.0))

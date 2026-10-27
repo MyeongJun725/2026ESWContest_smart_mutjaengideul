@@ -1,0 +1,25 @@
+[Unit]
+Description=SafeHub TTS text-to-speech endpoint
+After=network.target
+RequiresMountsFor=/opt/safehub-tts
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/safehub-tts
+ExecStart=/opt/safehub-tts/venv/bin/python -m uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1 --no-access-log
+Environment=PYTHONDONTWRITEBYTECODE=1
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+Nice=10
+CPUWeight=50
+MemoryMax=192M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

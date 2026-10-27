@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:safehub_app/core/house_scenario.dart';
 import 'package:safehub_app/services/sound_alarm_service.dart';
 import 'package:safehub_app/services/situation_service.dart';
 
@@ -27,6 +26,26 @@ http.Response response(Map<String, dynamic>? alarm) => http.Response(
     200);
 
 void main() {
+  test('all siren subtypes reach the real alert route without captions', () async {
+    for (final label in ['Police car (siren)', 'Ambulance (siren)',
+      'Fire engine, fire truck (siren)']) {
+      final sound = SoundAlarmService(uri: Uri.parse('http://127.0.0.1:9381/state'),
+          client: MockClient((_) async => response(event(label: label))));
+      final situation = SituationService(settings: SituationSettings(enabled: false));
+      var calls = 0;
+      situation.onScenarioAlert = () => calls++;
+      final state = await sound.poll(listening: true);
+      expect(state.event, isNotNull);
+      situation.observeSoundAlarm(state.event!.id, state.event!.label);
+      expect(calls, 1);
+      expect(situation.liveFlow.active!.title, contains('위급상황'));
+      expect(situation.liveFlow.active!.evidence, contains('사이렌'));
+      expect(situation.finalCaptions, isEmpty);
+      sound.dispose();
+      situation.dispose();
+    }
+  });
+
   test('fresh alarm creates an independent alert without any caption or LLM',
       () async {
     final sound = SoundAlarmService(

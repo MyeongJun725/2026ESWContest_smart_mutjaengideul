@@ -38,6 +38,12 @@ class BootTests(unittest.TestCase):
         self.assertEqual(calls, [
             "daemon-reload",
             "--no-block start safehub-mqtt.service safehub-csi.service safehub-ui.service",
+            "show --property=LoadState --value safehub-audio-output.service",
+            "--no-block start safehub-audio-output.service",
+            "show --property=LoadState --value safehub-tts.service",
+            "--no-block start safehub-tts.service",
+            "show --property=LoadState --value safehub-yamnet.service",
+            "--no-block start safehub-yamnet.service",
             "show --property=LoadState --value safehub-stt.service",
             "--no-block start safehub-stt.service",
             "show --property=LoadState --value safehub-fasttext.service",
