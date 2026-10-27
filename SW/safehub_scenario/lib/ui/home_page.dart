@@ -445,8 +445,13 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _situation.receiveSign(cleanText);
     _lastSignAt = DateTime.now();
     final ttsConfigured = AppConfig.ttsServerUrl.trim().isNotEmpty;
-    final alertActive =
-        _alertCoordinator.hasActiveAlert || _situation.needsAttention;
+    final incident = _situation.flow.active;
+    final alertActive = _signSpeechPolicy.isBlocked(
+      cleanText,
+      helpOpen: _situation.needsAttention,
+      hasActiveAlert: _alertCoordinator.hasActiveAlert,
+      hasOtherIncident: incident != null && incident.kind != HouseScenario.assistance,
+    );
     final shouldSpeak = ttsConfigured &&
         !alertActive &&
         _signSpeechPolicy.shouldSpeak(cleanText);

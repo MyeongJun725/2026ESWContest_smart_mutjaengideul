@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../core/house_scenario.dart';
+import 'sign_speech_policy.dart';
 
 class SituationSettings {
   static const contextModel = 'fasttext-fire-screen';
@@ -592,17 +593,7 @@ class SituationService extends ChangeNotifier {
     }
     pendingSign = text.trim();
     final label = text.replaceAll(RegExp(r'[\s.!?,·]'), '');
-    final isHelp = const {
-      '구조',
-      '도움',
-      '도와주세요',
-      '도와줘',
-      '아프다',
-      '아파요',
-      '쓰러짐',
-      '쓰러지다',
-      '낙상',
-    }.contains(label);
+    final isHelp = SignSpeechPolicy.isHelpSign(text);
     if (isHelp) {
       final now = DateTime.now();
       if (_lastHelpLabel != label ||
