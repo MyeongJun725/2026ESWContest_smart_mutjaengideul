@@ -81,7 +81,8 @@ ATLAS용 runner·manifest·record_atlas는 `SW/safehub_scenario`에 있으며 �
 
 ## 검증과 제출 상태
 
-직접 실행한 최신 결과는 Flutter **255 pass / 0 fail / 1 실제 fastText opt-in skip**입니다.
+현재 FHD UI 검토 브랜치의 최신 결과는 Flutter **266 pass / 0 fail / 1 실제 fastText opt-in skip**입니다.
+현재 브랜치의 [화면·재난 API 변경 및 ZIP 안내](docs/ui/fhd-review-20261027.md)를 참고하세요.
 이전 272개에서 미사용 녹음 전용 검사 18개를 제거하고 카메라 회귀 1개를 추가했습니다. 현재 자막·마이크 검사는 유지했습니다.
 PR 밖 과거 브랜치의 필요한 TTS 서버와 최신 카메라 pending 처리를 추가 복구했습니다.
 TTS HTTP 검사 8개는 fake 합성기이며 실제 인터넷 음성 생성·스피커 검증과 다릅니다.
