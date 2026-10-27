@@ -47,7 +47,7 @@ class DisasterNoticeCard extends StatelessWidget {
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                   ),
                 ),
-                TextButton(onPressed: onEvents, child: const Text('전체 알림')),
+                TextButton(onPressed: onEvents, child: const Text('활동 기록')),
               ],
             ),
             Expanded(
