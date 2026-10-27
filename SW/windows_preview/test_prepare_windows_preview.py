@@ -15,7 +15,8 @@ class WindowsPreparationTests(unittest.TestCase):
             output = root / 'host'
             _, target, pubspec = preview.preflight(flutter, output)
             self.assertEqual(target, output)
-            self.assertIn('version: 1.4.0+1', pubspec)
+            source_version = next(line for line in (preview.SOURCE / 'pubspec.yaml').read_text(encoding='utf-8').splitlines() if line.startswith('version:'))
+            self.assertIn(source_version, pubspec)
             self.assertIn('mqtt_client: 10.5.1', pubspec)
             self.assertNotIn('audioplayers_atlas:', pubspec)
             self.assertNotIn('record_atlas:', pubspec)
