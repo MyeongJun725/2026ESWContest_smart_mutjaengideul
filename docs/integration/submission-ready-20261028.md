@@ -75,3 +75,15 @@ SDK·산출물·개인 설정·인증정보·백업을 커밋하지 않는다.
 
 보관본은 미확인/미확보로 유지하며 없다고 단정하지 않는다.
 장치 대조 명령·제출 절차는 [SUBMISSION](../SUBMISSION.md)을 따른다.
+
+## main 준비 중 발견한 web 실행 보완
+
+PR #15의 3개 CI job을 통과한 뒤 develop merge `e05d5e9`의 tree가 검증 후보와 같음을 확인했다.
+추가 실제 Chromium 실행에서는 #14의 AudioService 생성자가 브라우저에서 Platform을 읽어
+`Unsupported operation: Platform._operatingSystem`으로 화면이 열리지 않았다. 컴파일 성공을
+실행 성공으로 취급하지 않고 web에서는 native 파일/OS 경로를 건너뛰도록 수정했다.
+
+`tool/web_preview_smoke_test.dart`는 일회성 web host에서 Chrome으로 실제 앱 진입→홈→도움 요청→
+괜찮아요 복귀를 검사한다. 일반 호스트 289개와 별도 검사이며 실제 장치 연결 시험이 아니다.
+CI도 web 빌드 뒤 이 Chrome 검사를 실행한다. Linux/ATLAS 경로는 기존 조건을 유지하며 관련
+오디오/홈 18개 회귀와 분석을 추가 확인했다. 실제 Chrome smoke 1/1 통과를 확인했다.

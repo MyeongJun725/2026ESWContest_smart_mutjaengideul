@@ -122,3 +122,11 @@ jobs:
         run: |
           flutter pub get --enforce-lockfile
           flutter build web --release --no-pub --dart-define=APP_LOCAL_PREVIEW=true --dart-define=SAFEHUB_DEVELOPER_TOOLS=false --no-web-resources-cdn
+      - name: Run actual Chrome product preview smoke test
+        working-directory: ${{ runner.temp }}/safehub-web
+        env:
+          CHROME_EXECUTABLE: /usr/bin/google-chrome
+        run: |
+          mkdir -p test
+          cp "$GITHUB_WORKSPACE/SW/safehub_scenario/tool/web_preview_smoke_test.dart" test/web_preview_smoke_test.dart
+          flutter test --no-pub --platform chrome --dart-define=APP_LOCAL_PREVIEW=true --dart-define=SAFEHUB_DEVELOPER_TOOLS=false test/web_preview_smoke_test.dart
