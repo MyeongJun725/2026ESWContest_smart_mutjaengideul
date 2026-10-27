@@ -108,7 +108,7 @@ class SituationPanel extends StatelessWidget {
           const SizedBox(height: 12),
           Wrap(
             children: [
-              _button('도움 요청', service.openHelp, primary: true),
+              _button('도움이 필요해요', service.openHelp, primary: true),
               _button(
                 '지금 상황 다시 확인',
                 service.busy || !service.settings.enabled
@@ -438,7 +438,7 @@ class SituationResponse extends StatelessWidget {
                       Wrap(
                         children: [
                           _button(
-                            '도움 요청',
+                            '도움이 필요해요',
                             () => service.respond('도움이 필요합니다.'),
                             primary: true,
                           ),

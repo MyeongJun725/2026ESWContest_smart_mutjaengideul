@@ -81,9 +81,8 @@ ATLAS용 runner·manifest·record_atlas는 `SW/safehub_scenario`에 있으며 �
 
 ## 검증과 제출 상태
 
-현재 FHD UI 검토 브랜치의 최신 결과는 Flutter **266 pass / 0 fail / 1 실제 fastText opt-in skip**입니다.
-현재 브랜치의 [화면·재난 API 변경 및 ZIP 안내](docs/ui/fhd-review-20261027.md)를 참고하세요.
-이전 미사용 녹음 검사는 제거했고 현재 자막·마이크, 도움 수어 TTS, 카메라와 FHD/재난 회귀를 포함합니다.
+직접 실행한 최신 결과는 Flutter **255 pass / 0 fail / 1 실제 fastText opt-in skip**입니다.
+이전 272개에서 미사용 녹음 전용 검사 18개를 제거하고 카메라 회귀 1개를 추가했습니다. 현재 자막·마이크 검사는 유지했습니다.
 PR 밖 과거 브랜치의 필요한 TTS 서버와 최신 카메라 pending 처리를 추가 복구했습니다.
 TTS HTTP 검사 8개는 fake 합성기이며 실제 인터넷 음성 생성·스피커 검증과 다릅니다.
 문맥/HTTP 9개, Uno 계약 15개, 수어 프레임/진단 Python 22개와 기타 비장비 검사를 통과했습니다.
@@ -91,8 +90,8 @@ TTS HTTP 검사 8개는 fake 합성기이며 실제 인터넷 음성 생성·스
 정적 분석은 error 0 / warning 0 / info 102이며 기본 명령은 exit 1입니다.
 CI는 스타일 info를 출력하면서 error·warning을 실패로 처리합니다.
 
-기본 통합본 [PR #11](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11)은 사용자가 develop에 병합했습니다.
-현재 FHD 검토 브랜치에는 미병합 도움 TTS 보완과 화면/재난 API 수정이 포함되며, 이 브랜치의 main/develop 병합과 장치 적용은 별도 단계입니다. **제출 전에 제출 대상 브랜치와 PR 검토·병합 여부를 확인해야 합니다.**
+현재 작업은 [기존 Draft PR #11](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11)에 있습니다.
+main/develop에는 직접 반영하지 않았습니다. **제출 전에 제출 대상 브랜치와 PR 검토·병합 여부를 확인해야 합니다.**
 [제출 확인 안내](docs/SUBMISSION.md), [최신 소스 완전성 점검](docs/integration/final-source-audit-20261027.md)을 기준으로 확인하세요.
 `python3 tools/audit_product_sources.py`로 현재 Dart 연결·누락 import·선언 자산을 점검할 수 있습니다.
 

@@ -13,7 +13,6 @@ import 'widgets/editable_dashboard.dart';
 import 'widgets/hardware_test_dialog.dart';
 import 'widgets/scenario_event_overlay.dart';
 import 'widgets/sign_result_strip.dart';
-import 'widgets/disaster_notice_card.dart';
 import '../core/appliance_controls.dart';
 import '../core/event_manager.dart';
 import '../core/recent_activity.dart';
@@ -53,14 +52,12 @@ class SafeHubHomePage extends StatefulWidget {
     this.onSettingsSaved,
     this.cameraService,
     this.cameraDecoder,
-    this.disasterService,
     this.developerTools = AppConfig.developerTools,
   });
   final bool developerTools;
   final VoidCallback? onSettingsSaved;
   final CameraStreamService? cameraService;
   final CameraFrameDecoder? cameraDecoder;
-  final DisasterService? disasterService;
 
   @override
   State<SafeHubHomePage> createState() => _SafeHubHomePageState();
@@ -97,7 +94,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
   final EventManager _eventManager = EventManager();
   final ApplianceControls _appliances = ApplianceControls();
-  late final DisasterService _disasterService = widget.disasterService ?? DisasterService();
+  final DisasterService _disasterService = DisasterService();
   final AlertCoordinator _alertCoordinator = AlertCoordinator();
   final AudioService _audioService = AudioService();
   final SignSpeechPolicy _signSpeechPolicy = SignSpeechPolicy();
@@ -142,8 +139,6 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   bool _showSignOverlay = false;
 
   Map<String, dynamic>? _latestDisaster;
-  String _disasterStatus = AppConfig.disasterConfigured ? '조회 대기' : '연결 설정 필요';
-  bool _disasterFetching = false;
 
   String? _lastDisasterId;
   int _speechGeneration = 0;
@@ -341,27 +336,16 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   }
 
   Future<void> _fetchLatestDisaster() async {
-    if (!mounted || _disasterFetching) return;
-    _disasterFetching = true;
-    setState(() => _disasterStatus = '조회 중');
     try {
       final disaster = await _disasterService.fetchLatest();
-      if (!mounted) return;
-      setState(() => _disasterStatus = disaster == null ? '수신 기록 없음' : '최근 수신 기록');
-      if (disaster == null) {
+
+      if (disaster == null || !mounted) {
         return;
       }
 
       final disasterId = DisasterService.identifierOf(disaster);
 
-      if (disasterId == null) {
-        setState(() {
-          _latestDisaster = Map<String, dynamic>.from(disaster);
-          _disasterStatus = '수신 기록 · 식별번호 미확인';
-        });
-        return; // Show the record, but do not create an unidentified alarm.
-      }
-      if (_lastDisasterId == disasterId) {
+      if (disasterId == null || _lastDisasterId == disasterId) {
         return;
       }
 
@@ -401,12 +385,10 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
         _lastDisasterId = disasterId;
         _latestDisaster = disasterData;
       });
-    } catch (e) {
-      if (mounted) setState(() => _disasterStatus = '조회 실패 · 연결 설정 확인');
-      debugPrint('[재난 API 실패] ${e.runtimeType}');
+    } catch (e, st) {
+      debugPrint('[재난 API 실패] $e');
+      debugPrint('$st');
       // 재난 API 실패 시 다른 SafeHub 기능은 계속 동작한다.
-    } finally {
-      _disasterFetching = false;
     }
   }
 
@@ -731,7 +713,6 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     _clock.dispose();
     _wifiSensingService.close();
     _disasterTimer?.cancel();
-    if (widget.disasterService == null) _disasterService.close();
     _signOverlayTimer?.cancel();
     _speechGeneration++;
     _ttsService.dispose();
@@ -974,9 +955,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
             ),
           _buildSignOverlay(
             visible:
-                _showSignOverlay &&
-                _currentPage != _SafeHubPage.home &&
-                activeAlert == null && _detailTitle == null,
+                _showSignOverlay && activeAlert == null && _detailTitle == null,
           ),
           if (widget.developerTools && AppConfig.localPreview)
             Positioned(
@@ -1233,7 +1212,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       );
 
   String _conversationText(Map<String, dynamic> event) =>
-      '${_formatEventDateTime(event)}\n\n상황 설명 · 참고\n${event['reply']}';
+      '${_formatEventDateTime(event)}\n\nAI 상황 해석 (참고)\n${event['reply']}';
 
   void _showEventDetails() => _showDetails(
         '최근 이벤트',

@@ -55,9 +55,9 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
   };
   String get headline =>
       draft.isNotEmpty
-          ? '도움 요청 내용 확인'
+          ? '도움 요청 내용을 확인해 주세요'
           : helping
-          ? '도움 요청'
+          ? '도움이 필요하신가요?'
           : incident?.kind == HouseScenario.broadcast
           ? (RegExp(r'화재|불이').hasMatch(incident?.evidence ?? '')
               ? '화재 관련 안내방송'
@@ -129,7 +129,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
     final sign =
         service.helpSign.isNotEmpty ? service.helpSign : service.pendingSign;
     final person =
-        target == '다른 사람' ? '다른 사람에 대한 도움 요청입니다.' : '사용자가 도움을 요청합니다.';
+        target == '다른 사람' ? '다른 사람의 상태를 확인하고 도움이 필요합니다.' : '사용자가 도움을 요청합니다.';
     setState(
       () =>
           draft = [
@@ -166,10 +166,10 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
         ),
       ),
       const SizedBox(height: 20),
-      text('내용을 확인하고 응답을 선택하세요.', size: 24),
+      text('내용을 확인한 뒤 아래에서 응답해 주세요.', size: 24),
       if (service.deferredHelp) ...[
         const SizedBox(height: 12),
-        text('도움 요청 수어 수신 · 현재 알림 확인 후 도움 화면 표시', size: 22, color: accent),
+        text('도움 수어도 받았어요. 이 알림을 확인한 뒤 도움 화면이 열려요.', size: 22, color: accent),
       ],
       const SizedBox(height: 18),
       TextButton.icon(
@@ -187,7 +187,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
             children: [
               text(incident?.relevance ?? '수신 내용 확인 필요', size: 20),
               text(incident?.delivery ?? service.actuatorStatus, size: 20),
-              text('알림 확인은 위험 해제를 의미하지 않습니다.', size: 20),
+              text('확인은 알림을 읽었다는 뜻이며 위험 해제를 의미하지 않아요.', size: 20),
               TextButton(
                 onPressed: widget.onSignal,
                 child: const Text(
@@ -224,15 +224,15 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           text(
-            sign.isEmpty ? '수어 입력 또는 터치 선택' : '인식한 수어: $sign',
+            sign.isEmpty ? '수어 또는 터치로 선택해 주세요.' : '“$sign” 수어를 인식했어요.',
             size: 26,
             bold: true,
           ),
           const SizedBox(height: 18),
           SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: '본인', label: Text('본인')),
-              ButtonSegment(value: '다른 사람', label: Text('다른 사람')),
+              ButtonSegment(value: '본인', label: Text('내 도움이 필요해요')),
+              ButtonSegment(value: '다른 사람', label: Text('다른 사람이 아파요')),
             ],
             selected: {target},
             onSelectionChanged:
@@ -249,13 +249,13 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
           ),
           const SizedBox(height: 16),
           if (target == '다른 사람') ...[
-            text('불렀을 때 반응', size: 24),
+            text('불러도 반응이 있나요?', size: 24),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children:
-                  ['반응 있음', '반응 없음', '미확인']
+                  ['반응 있어요', '반응 없어요', '미확인']
                       .map(
                         (value) => ChoiceChip(
                           label: Text(
@@ -287,7 +287,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
             icon: Icons.description_outlined,
           ),
           const SizedBox(height: 16),
-          text('실제 신고·연락은 전송되지 않습니다.', size: 20, color: muted),
+          text('아직 실제 연락은 전송되지 않아요.', size: 20, color: muted),
         ],
       );
       if (bounds.maxWidth < 850)
@@ -329,7 +329,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
         await Clipboard.setData(ClipboardData(text: draft));
         if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('내용 복사 완료 · 전송되지 않음')),
+            const SnackBar(content: Text('내용을 복사했어요. 전송은 하지 않았어요.')),
           );
       }, icon: Icons.copy_outlined),
     ],
@@ -512,8 +512,8 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
                                         draft.isNotEmpty
                                             ? '다시 선택하기'
                                             : helping
-                                            ? '괜찮습니다'
-                                            : '도움이 필요합니다',
+                                            ? '괜찮아요'
+                                            : '도움이 필요해요',
                                         () {
                                           if (draft.isNotEmpty) {
                                             setState(() => draft = '');

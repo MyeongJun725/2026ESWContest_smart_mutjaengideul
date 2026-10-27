@@ -122,7 +122,7 @@ void main() {
       );
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text('재난·알림'), findsOneWidget);
+      expect(find.text('최근 알림'), findsOneWidget);
       expect(find.text('음성 자막'), findsOneWidget);
       final help = tester.getRect(find.text('도움 요청').hitTestable());
       expect(help.left, greaterThanOrEqualTo(0));

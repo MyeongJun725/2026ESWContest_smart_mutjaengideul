@@ -171,7 +171,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
               ),
             ),
             IconButton(
-              tooltip: '문맥·알림 설정',
+              tooltip: 'AI·알림 설정',
               onPressed: () => showSituationSettings(context, _situation),
               icon: const Icon(Icons.auto_awesome_outlined, color: _secondary),
             ),
@@ -277,27 +277,65 @@ extension _HomeDashboard on _SafeHubHomePageState {
 
   Widget _notificationSummary() {
     final event = _recentEvents.isEmpty ? null : _recentEvents.first;
-    final activity = event == null ? null : event['event'] == 'llm_conversation'
-        ? '${event['reply']}' : _getEventName(event);
-    return DisasterNoticeCard(
-      disaster: _latestDisaster,
-      status: _disasterStatus,
-      latestEvent: activity,
-      onDisaster: () {
-        if (_latestDisaster != null) {
-          _showDisasterDetails(_latestDisaster!);
-        } else if (AppConfig.disasterConfigured) {
-          unawaited(_fetchLatestDisaster());
-        } else {
-          _openConnectionSettings();
-        }
-      },
-      onEvents: _showEventDetails,
+    final summary = event != null
+        ? (event['event'] == 'llm_conversation'
+            ? '${event['reply']}'
+            : _getEventName(event))
+        : _latestDisaster != null
+            ? '${_latestDisaster!['MSG_CN'] ?? '재난 안내를 확인하세요.'}'
+            : '새로 받은 알림을 이곳에서 확인해요.';
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () {
+          if (event == null && _latestDisaster != null) {
+            _showDisasterDetails(_latestDisaster!);
+          } else {
+            _showEventDetails();
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: _line),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.notifications_none_rounded,
+                    color: _accent,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _label('최근 알림', size: 20, weight: FontWeight.w700),
+                  ),
+                  _label('모아보기', size: 16, color: _secondary),
+                  const SizedBox(width: 5),
+                  const Icon(Icons.chevron_right, color: _secondary),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _label(summary, size: 20, lines: 2),
+              if (event == null && _latestDisaster != null) ...[
+                const SizedBox(height: 5),
+                _label('참고 재난 안내 · 적용 지역을 확인하세요', size: 16, color: _secondary),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Widget _modernCamera() => _card(
-        title: '수어 인식',
+        title: '수어로 이야기해요',
         icon: Icons.sign_language_outlined,
         action: _pill(_cameraConnected ? '연결됨' : '연결 대기', ok: _cameraConnected),
         child: Column(
@@ -364,9 +402,9 @@ class _FinalCaptionBody extends StatelessWidget {
                           : captions.serverError
                               ? captions.status
                               : situation.busy
-                                  ? '음성 수신 중 · 문맥 확인 중'
+                                  ? '듣고 있어요 · 집 안 상황 분석 중'
                                   : captions.listening
-                                      ? '음성 수신 중'
+                                      ? '듣고 있어요'
                                       : '자막 일시정지',
                       style: const TextStyle(
                         fontFamily: 'Pretendard',
@@ -383,8 +421,8 @@ class _FinalCaptionBody extends StatelessWidget {
                     ? Center(
                         child: Text(
                           situation.busy
-                              ? '음성 인식 중'
-                              : '음성 자막 대기',
+                              ? '듣고 있어요\n인식한 문장을 바로 표시해요.'
+                              : '말씀하시면\n여기에 바로 표시돼요.',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontFamily: 'Pretendard',

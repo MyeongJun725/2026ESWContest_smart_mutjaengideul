@@ -39,7 +39,7 @@ class SignResultStrip extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  waiting ? '입력 대기' : sign.trim(),
+                  waiting ? '수어를 기다리고 있어요' : sign.trim(),
                   key: const ValueKey('sign-result-text'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
