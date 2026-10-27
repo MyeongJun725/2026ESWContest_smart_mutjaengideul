@@ -256,8 +256,9 @@ class SituationService extends ChangeNotifier {
     );
   }
 
-  void observeFall(String id, String text) {
-    _newRealIncident(liveFlow.assistance(id, text, origin: 'csi'));
+  void observeFall(String id, String text, {String origin = 'csi'}) {
+    if (origin == 'csi_demo' && liveFlow.active?.origin == 'csi_demo') return;
+    _newRealIncident(liveFlow.assistance(id, text, origin: origin));
   }
 
   bool startScenarioTest(
@@ -626,6 +627,8 @@ class SituationService extends ChangeNotifier {
       '아파요',
       '쓰러짐',
       '쓰러지다',
+      '쓰러졌다',
+      '쓰러졌어요',
       '낙상',
     }.contains(label);
     if (isHelp) {

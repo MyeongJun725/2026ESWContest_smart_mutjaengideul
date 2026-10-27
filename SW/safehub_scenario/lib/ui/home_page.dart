@@ -21,6 +21,7 @@ import '../mqtt/mqtt_receiver.dart';
 import '../services/audio_service.dart';
 import '../services/camera_stream_service.dart';
 import '../services/disaster_service.dart';
+import '../core/manual_fall_event.dart';
 import '../services/sign_speech_policy.dart';
 import '../services/stt_service.dart';
 import '../services/sound_alarm_service.dart';
@@ -594,8 +595,18 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
     final eventData = Map<String, dynamic>.from(event);
     eventData['_receivedAt'] ??= DateTime.now().toIso8601String();
+    final manual = eventData['device'] == 'safehub_manual_demo';
+    final manualAction = manualFallAction(eventData);
+    if (manual && manualAction == null) return;
+    if (manualAction == ManualFallAction.normal) {
+      // This button cannot dismiss a real sensor/broadcast/disaster incident.
+      if (_situation.liveFlow.active?.origin == 'csi_demo') {
+        _acknowledgeScenario();
+      }
+      return;
+    }
     _situation.addEvidence(
-      '센서 이벤트 (의심 신호)',
+      manual ? '연동 시연 이벤트 (실측 CSI 아님)' : '센서 이벤트 (의심 신호)',
       '${eventData['event']} · ${eventData['location'] ?? '위치 미확인'}',
     );
 
@@ -603,6 +614,7 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       _situation.observeFall(
         '${eventData['message_id'] ?? eventData['id'] ?? eventData['timestamp'] ?? eventData['_receivedAt']}',
         '${_getLocationName(eventData)} · 낙상 의심 신호 · ${_formatEventDateTime(eventData)}',
+        origin: manual ? 'csi_demo' : 'csi',
       );
     }
 
