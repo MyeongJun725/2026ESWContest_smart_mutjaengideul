@@ -171,7 +171,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
               ),
             ),
             IconButton(
-              tooltip: 'AI·알림 설정',
+              tooltip: '문맥·알림 설정',
               onPressed: () => showSituationSettings(context, _situation),
               icon: const Icon(Icons.auto_awesome_outlined, color: _secondary),
             ),
@@ -222,13 +222,13 @@ extension _HomeDashboard on _SafeHubHomePageState {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _label(
-                        '도움이 필요해요',
+                        '도움 요청',
                         size: 24,
                         color: Colors.white,
                         weight: FontWeight.w700,
                       ),
                       _label(
-                        '수어 또는 터치로 알려주세요',
+                        '수어·터치로 선택',
                         size: 18,
                         color: const Color(0xFFF7E9ED),
                       ),
@@ -277,93 +277,35 @@ extension _HomeDashboard on _SafeHubHomePageState {
 
   Widget _notificationSummary() {
     final event = _recentEvents.isEmpty ? null : _recentEvents.first;
-    final summary = event != null
-        ? (event['event'] == 'llm_conversation'
-            ? '${event['reply']}'
-            : _getEventName(event))
-        : _latestDisaster != null
-            ? '${_latestDisaster!['MSG_CN'] ?? '재난 안내를 확인하세요.'}'
-            : '새로 받은 알림을 이곳에서 확인해요.';
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: () {
-          if (event == null && _latestDisaster != null) {
-            _showDisasterDetails(_latestDisaster!);
-          } else {
-            _showEventDetails();
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: _line),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.notifications_none_rounded,
-                    color: _accent,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _label('최근 알림', size: 20, weight: FontWeight.w700),
-                  ),
-                  _label('모아보기', size: 16, color: _secondary),
-                  const SizedBox(width: 5),
-                  const Icon(Icons.chevron_right, color: _secondary),
-                ],
-              ),
-              const SizedBox(height: 10),
-              _label(summary, size: 20, lines: 2),
-              if (event == null && _latestDisaster != null) ...[
-                const SizedBox(height: 5),
-                _label('참고 재난 안내 · 적용 지역을 확인하세요', size: 16, color: _secondary),
-              ],
-            ],
-          ),
-        ),
-      ),
+    final activity = event == null ? null : event['event'] == 'llm_conversation'
+        ? '${event['reply']}' : _getEventName(event);
+    return DisasterNoticeCard(
+      disaster: _latestDisaster,
+      status: _disasterStatus,
+      latestEvent: activity,
+      onDisaster: () {
+        if (_latestDisaster != null) {
+          _showDisasterDetails(_latestDisaster!);
+        } else if (AppConfig.disasterConfigured) {
+          unawaited(_fetchLatestDisaster());
+        } else {
+          _openConnectionSettings();
+        }
+      },
+      onEvents: _showEventDetails,
     );
   }
 
   Widget _modernCamera() => _card(
-        title: '수어로 이야기해요',
+        title: '수어 인식',
         icon: Icons.sign_language_outlined,
         action: _pill(_cameraConnected ? '연결됨' : '연결 대기', ok: _cameraConnected),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: _cameraPlaceholder()),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _label(
-                    _signText == '수어 인식 대기 중'
-                        ? '수어를 기다리고 있어요'
-                        : '인식한 수어  $_signText',
-                    size: 26,
-                    weight: FontWeight.w700,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _openSignTranslation,
-                  icon: const Icon(Icons.chat_bubble_outline, size: 21),
-                  label: const Text(
-                    '수어 대화',
-                    style: TextStyle(fontFamily: 'Pretendard', fontSize: 20),
-                  ),
-                ),
-              ],
-            ),
+            SignResultStrip(sign: _signText, connected: _cameraConnected,
+              onConversation: _openSignTranslation),
           ],
         ),
       );
@@ -422,9 +364,9 @@ class _FinalCaptionBody extends StatelessWidget {
                           : captions.serverError
                               ? captions.status
                               : situation.busy
-                                  ? '듣고 있어요 · 집 안 상황 분석 중'
+                                  ? '음성 수신 중 · 문맥 확인 중'
                                   : captions.listening
-                                      ? '듣고 있어요'
+                                      ? '음성 수신 중'
                                       : '자막 일시정지',
                       style: const TextStyle(
                         fontFamily: 'Pretendard',
@@ -441,8 +383,8 @@ class _FinalCaptionBody extends StatelessWidget {
                     ? Center(
                         child: Text(
                           situation.busy
-                              ? '듣고 있어요\n인식한 문장을 바로 표시해요.'
-                              : '말씀하시면\n여기에 바로 표시돼요.',
+                              ? '음성 인식 중'
+                              : '음성 자막 대기',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontFamily: 'Pretendard',

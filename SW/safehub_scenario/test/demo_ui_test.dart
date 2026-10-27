@@ -69,12 +69,12 @@ void main() {
       s.receiveSign('아프다');
       await t.pumpWidget(host(s));
       await t.pumpAndSettle();
-      expect(find.text('도움이 필요하신가요?'), findsOneWidget);
+      expect(find.text('도움 요청'), findsOneWidget);
       expect(find.text('불러도 반응이 있나요?'), findsNothing);
       expect(find.text('카메라'), findsOneWidget);
       await t.tap(find.text('119 신고 내용 확인'));
       await t.pumpAndSettle();
-      expect(find.text('도움 요청 내용을 확인해 주세요'), findsOneWidget);
+      expect(find.text('도움 요청 내용 확인'), findsOneWidget);
       expect(find.textContaining('사용자가 도움을 요청합니다.'), findsOneWidget);
       expect(find.textContaining('보호자가 쓰러'), findsNothing);
       expect(find.byType(AlertDialog), findsNothing);
@@ -92,7 +92,7 @@ void main() {
     await t.pumpWidget(host(s, scale: 1.35));
     await t.pumpAndSettle();
     expect(find.text('알림 확인했어요').hitTestable(), findsOneWidget);
-    expect(find.text('도움이 필요해요').hitTestable(), findsOneWidget);
+    expect(find.text('도움이 필요합니다').hitTestable(), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 }

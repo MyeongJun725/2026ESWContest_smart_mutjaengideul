@@ -25,12 +25,12 @@ class HouseStatusCard extends StatelessWidget {
                 : '새 알림이 도착했어요')
           : previous != null
           ? '알림을 확인했어요'
-          : '새로운 알림이 없어요';
+          : '새 알림 없음';
       final detail =
           incident?.evidence ??
           (previous != null
               ? '필요하면 내용을 다시 볼 수 있어요.'
-              : '필요하면 수어 또는 터치로 도움을 요청하세요.');
+              : '수어 인식 · 음성 자막 · 재난 알림');
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         decoration: BoxDecoration(

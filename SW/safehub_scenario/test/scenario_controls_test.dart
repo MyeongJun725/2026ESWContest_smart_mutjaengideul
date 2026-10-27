@@ -76,7 +76,7 @@ void main() {
       expect(incident.delivery, contains('실제 명령 없음'));
       expect(find.text('화면 테스트 · 실제 장치와 신고는 작동하지 않아요.'), findsOneWidget);
       if (kind != HouseScenario.assistance) {
-        await t.tap(find.text('도움이 필요해요'));
+        await t.tap(find.text('도움이 필요합니다'));
         await t.pumpAndSettle();
       }
       service.receiveSign('아프다', simulated: true);

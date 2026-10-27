@@ -69,7 +69,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.byTooltip('연결 설정'), findsOneWidget);
-      expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
+      expect(find.text('입력 대기'), findsOneWidget);
       expect(
         find.byKey(
           ValueKey(
@@ -197,7 +197,7 @@ void main() {
       expect(AppConfig.cameraConfigured, isFalse);
       expect(AppConfig.disasterConfigured, isFalse);
       expect(AppConfig.csiServiceUrl, 'http://127.0.0.1:8765');
-      expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
+      expect(find.text('입력 대기'), findsOneWidget);
       expect(find.text('연결 중'), findsNothing);
       expect(
         find.textContaining(AppConfig.localPreview ? '미리보기' : '홈 연결 확인'),

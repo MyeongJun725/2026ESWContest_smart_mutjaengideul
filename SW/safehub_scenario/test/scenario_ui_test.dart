@@ -50,6 +50,7 @@ void main() {
         RepaintBoundary(
           key: key,
           child: MaterialApp(
+            debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
             home: const SafeHubHomePage(),
           ),
@@ -113,6 +114,7 @@ void main() {
       RepaintBoundary(
         key: key,
         child: MaterialApp(
+            debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
           home: const SafeHubHomePage(),
         ),
@@ -130,22 +132,22 @@ void main() {
     ]) {
       expect(find.byKey(ValueKey('tile-$id')), findsOneWidget);
     }
-    expect(find.byTooltip('AI·알림 설정'), findsOneWidget);
-    expect(find.text('수어로 이야기해요').hitTestable(), findsOneWidget);
-    expect(find.text('도움이 필요해요').hitTestable(), findsOneWidget);
-    expect(find.text('최근 알림'), findsOneWidget);
-    expect(find.text('수어를 기다리고 있어요'), findsOneWidget);
+    expect(find.byTooltip('문맥·알림 설정'), findsOneWidget);
+    expect(find.text('수어 인식').hitTestable(), findsOneWidget);
+    expect(find.text('도움 요청').hitTestable(), findsOneWidget);
+    expect(find.text('재난·알림'), findsOneWidget);
+    expect(find.text('입력 대기'), findsOneWidget);
     await capture(tester, key, 'scenario-home');
-    await tester.tap(find.text('도움이 필요해요'));
+    await tester.tap(find.text('도움 요청'));
     await tester.pump();
     expect(find.byType(ScenarioEventOverlay), findsOneWidget);
-    await tester.tap(find.text('다른 사람이 아파요'));
+    await tester.tap(find.text('다른 사람'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('반응 없어요'));
+    await tester.tap(find.text('반응 없음'));
     await tester.pump();
     await tester.tap(find.text('119 신고 내용 확인'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('불러도 반응이 있는지: 반응 없어요'), findsOneWidget);
+    expect(find.textContaining('불러도 반응이 있는지: 반응 없음'), findsOneWidget);
     expect(
       find.textContaining('미전송 · 실제 신고·연락 기능은 연결되어 있지 않아요.'),
       findsOneWidget,
@@ -173,6 +175,7 @@ void main() {
     addTearDown(situation.dispose);
     await tester.pumpWidget(
       MaterialApp(
+            debugShowCheckedModeBanner: false,
         home: Scaffold(
           body: ScenarioEventOverlay(
             service: situation,
@@ -184,7 +187,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('괜찮아요').hitTestable(), findsOneWidget);
+    expect(find.text('괜찮습니다').hitTestable(), findsOneWidget);
     await tester.ensureVisible(find.text('119 신고 내용 확인'));
     await tester.tap(find.text('119 신고 내용 확인'));
     await tester.pumpAndSettle();

@@ -38,8 +38,8 @@ void main() {
       ),
     );
     await t.pump(const Duration(milliseconds: 150));
-    expect(find.text('도움이 필요해요').hitTestable(), findsOneWidget);
-    expect(find.text('새로운 알림이 없어요'), findsOneWidget);
+    expect(find.text('도움 요청').hitTestable(), findsOneWidget);
+    expect(find.text('새 알림 없음'), findsOneWidget);
     expect(find.text('판단 근거'), findsNothing);
     expect(find.text('최근 이벤트'), findsNothing);
     expect(t.takeException(), isNull);
