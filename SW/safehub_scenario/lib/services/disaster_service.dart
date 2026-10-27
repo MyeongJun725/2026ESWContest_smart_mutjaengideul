@@ -5,71 +5,46 @@ import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 
 class DisasterService {
-  static const int _rowsPerPage = 100;
-  static const int _edgeValidationInterval = 8;
+  DisasterService({
+    http.Client? client,
+    DateTime Function()? now,
+    this.timeout = const Duration(seconds: 10),
+  }) : _client = client ?? http.Client(),
+       _ownsClient = client == null,
+       _now = now ?? DateTime.now;
 
-  int _lastKnownPage = 1;
-  int _requestCycle = 0;
-  String? _activeStartDate;
+  static const int _rowsPerPage = 100;
+  final http.Client _client;
+  final bool _ownsClient;
+  final DateTime Function() _now;
+  final Duration timeout;
+
+  void close() {
+    if (_ownsClient) _client.close();
+  }
 
   Future<Map<String, dynamic>?> fetchLatest() async {
-    final startDate = _formatDate(
-      DateTime.now().subtract(
-        const Duration(days: 2),
-      ),
-    );
+    final startDate = _formatDate(_now().subtract(const Duration(days: 2)));
 
-    if (_activeStartDate != startDate) {
-      _activeStartDate = startDate;
-      _lastKnownPage = 1;
-      _requestCycle = 0;
-    }
+    final primaryResponse = await _request(pageNo: 1, startDate: startDate);
 
-    final requestedPage = _lastKnownPage;
-    final primaryResponse = await _request(
-      pageNo: requestedPage,
-    );
+    final candidates = <dynamic>[..._extractBody(primaryResponse)];
 
-    final candidates = <dynamic>[
-      ..._extractBody(primaryResponse),
-    ];
+    final totalCount = _parseNumber(primaryResponse['totalCount']);
 
-    final totalCount = _parseNumber(
-      primaryResponse['totalCount'],
-    );
+    final actualLastPage = totalCount <= 0
+        ? 1
+        : (totalCount / _rowsPerPage).ceil();
 
-    final actualLastPage =
-        totalCount <= 0 ? 1 : (totalCount / _rowsPerPage).ceil();
-
-    _lastKnownPage = actualLastPage;
-    _requestCycle += 1;
-
-    // 데이터 증가로 새 마지막 페이지가 만들어졌다면 즉시 조회한다.
-    if (actualLastPage != requestedPage) {
+    // The API may return newest-first or oldest-first. Inspect both edges on
+    // every poll; caching only the last page can hide new first-page alerts.
+    if (actualLastPage > 1) {
       final latestPageResponse = await _request(
         pageNo: actualLastPage,
+        startDate: startDate,
       );
 
-      candidates.addAll(
-        _extractBody(latestPageResponse),
-      );
-    }
-
-    // API 정렬 방향이 바뀌는 상황에 대비해 주기적으로
-    // 반대쪽 첫 페이지도 검증한다.
-    final shouldValidateFirstPage =
-        _requestCycle % _edgeValidationInterval == 0 &&
-            requestedPage != 1 &&
-            actualLastPage != 1;
-
-    if (shouldValidateFirstPage) {
-      final firstPageResponse = await _request(
-        pageNo: 1,
-      );
-
-      candidates.addAll(
-        _extractBody(firstPageResponse),
-      );
+      candidates.addAll(_extractBody(latestPageResponse));
     }
 
     return selectLatest(candidates);
@@ -133,8 +108,9 @@ class DisasterService {
     Map<String, dynamic> left,
     Map<String, dynamic> right,
   ) {
-    final dateComparison =
-        _dateKey(left['CRT_DT']).compareTo(_dateKey(right['CRT_DT']));
+    final dateComparison = _dateKey(
+      left['CRT_DT'],
+    ).compareTo(_dateKey(right['CRT_DT']));
 
     if (dateComparison != 0) {
       return dateComparison;
@@ -157,32 +133,24 @@ class DisasterService {
 
   Future<Map<String, dynamic>> _request({
     required int pageNo,
+    required String startDate,
   }) async {
-    final uri = Uri.parse(
-      AppConfig.disasterApiUrl,
-    ).replace(
+    final endpoint = Uri.parse(AppConfig.disasterApiUrl);
+    final uri = endpoint.replace(
       queryParameters: {
+        ...endpoint.queryParameters,
         'serviceKey': AppConfig.disasterApiKey,
         'returnType': 'json',
         'pageNo': pageNo.toString(),
         'numOfRows': _rowsPerPage.toString(),
-        'crtDt': _activeStartDate ??
-            _formatDate(
-              DateTime.now().subtract(
-                const Duration(days: 2),
-              ),
-            ),
+        'crtDt': startDate,
       },
     );
 
-    final response = await http.get(uri).timeout(
-          const Duration(seconds: 10),
-        );
+    final response = await _client.get(uri).timeout(timeout);
 
     if (response.statusCode != 200) {
-      throw Exception(
-        '재난 API HTTP 오류: ${response.statusCode}',
-      );
+      throw Exception('재난 API HTTP 오류: ${response.statusCode}');
     }
 
     final responseText = utf8.decode(response.bodyBytes);
@@ -202,9 +170,7 @@ class DisasterService {
       final resultCode = header['resultCode']?.toString();
 
       if (resultCode != '00') {
-        throw Exception(
-          '재난 API 오류: ${header['resultMsg']}',
-        );
+        throw Exception('재난 API 응답 오류: $resultCode');
       }
     }
 
