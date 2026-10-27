@@ -16,8 +16,11 @@ class FireTextClassifier:
         self.model = model
 
     def classify(self, text):
-        text = " ".join(str(text).split())[:1000]
-        labels, scores = self.model.predict(text, k=1)
+        # Preserve clause boundaries for rules; fastText's native predict API
+        # expects a single line, so flatten only its separate input.
+        text = str(text).replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"[^\S\n]+", " ", text).strip()[:1000]
+        labels, scores = self.model.predict(" ".join(text.split()), k=1)
         label = labels[0].replace("__label__", "")
         score = float(scores[0])
         # This model was observed to score a negated fire sentence as FIRE.
