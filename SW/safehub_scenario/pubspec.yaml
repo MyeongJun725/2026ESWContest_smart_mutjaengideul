@@ -30,7 +30,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/safehub_living_room.png
     - assets/fonts/OFL.txt
   fonts:
     - family: Pretendard
