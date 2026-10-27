@@ -73,7 +73,7 @@ ATLAS용 runner·manifest·record_atlas는 `SW/safehub_scenario`에 있으며 �
 | `SW/safehub_scenario` | 현재 UI·runner·플러그인·자산·검사·호스트 도구 |
 | `SW/rpi4_sign_cpp`, `SW/rpi4_vision_atlas` | 현재 수어·비전 소스 후보와 회귀 검사 |
 | `SW/rpi5_hub`, [SW/uno_bridge](SW/uno_bridge/README.md) | 수어 단축키·MQTT·Uno 명령 경로 |
-| `SW/local_stt`, [SW/fasttext_context](SW/fasttext_context/README.md) | 음성자막·fastText 문맥 서비스 |
+| `SW/local_stt`, [SW/tts_server](SW/tts_server/README.md), [SW/fasttext_context](SW/fasttext_context/README.md) | 음성자막·수어 음성 출력·fastText 문맥 서비스 |
 | `SW/wifi_sensing` | 제품 상태·기존 모델 선택·추론; 별도 개발용 수집·학습 |
 | `SW/atlas_boot` | 검토용 제품 부팅 구성; 장치에 적용하지 않음 |
 | `HW/esp32_csi` | C6 송수신 소스·라이선스; 빌드/플래시 미실행 |
@@ -81,8 +81,10 @@ ATLAS용 runner·manifest·record_atlas는 `SW/safehub_scenario`에 있으며 �
 
 ## 검증과 제출 상태
 
-직접 실행한 최신 결과는 Flutter **254 pass / 0 fail / 1 실제 fastText opt-in skip**입니다.
-미사용 녹음 서비스와 전용 검사 18개를 제거해 이전 272개보다 줄었으며 현재 자막·마이크 검사는 유지했습니다.
+직접 실행한 최신 결과는 Flutter **255 pass / 0 fail / 1 실제 fastText opt-in skip**입니다.
+이전 272개에서 미사용 녹음 전용 검사 18개를 제거하고 카메라 회귀 1개를 추가했습니다. 현재 자막·마이크 검사는 유지했습니다.
+PR 밖 과거 브랜치의 필요한 TTS 서버와 최신 카메라 pending 처리를 추가 복구했습니다.
+TTS HTTP 검사 8개는 fake 합성기이며 실제 인터넷 음성 생성·스피커 검증과 다릅니다.
 문맥/HTTP 9개, Uno 계약 15개, 수어 프레임/진단 Python 22개와 기타 비장비 검사를 통과했습니다.
 허브는 unittest 개수와 구별해 **14개 assertion 스크립트**를 실행했습니다. C++ 호스트 회귀는 19개입니다.
 정적 분석은 error 0 / warning 0 / info 102이며 기본 명령은 exit 1입니다.

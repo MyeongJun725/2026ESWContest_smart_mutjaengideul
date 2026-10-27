@@ -63,8 +63,9 @@ runner의 버전 번호를 맞춘 것만으로 설치본 재현을 선언하지 
 ## 검증
 
 [현재 소스·누락 의존성 점검](../../docs/integration/final-source-audit-20261027.md)을 기준으로 합니다.
-최신 전체 Flutter 254 pass / 0 fail / 1 opt-in 실제 fastText skip입니다.
-이전 272개에서 미사용 파일 녹음 서비스 전용 검사 18개를 제거했으며 현행 마이크/자막 검사는 유지했습니다.
+최신 전체 Flutter 255 pass / 0 fail / 1 opt-in 실제 fastText skip입니다.
+이전 272개에서 미사용 파일 녹음 전용 검사 18개를 제거하고 카메라 pending 회귀 1개를 추가했습니다.
+현행 마이크/자막 검사와 별도 TTS 서버 HTTP 계약 검사 8개도 유지합니다.
 정적 분석은 error 0 / warning 0 / info 102, 기본 명령 exit 1입니다.
 Preview web release 빌드는 통과했으나 ATLAS 패키지 빌드·재부팅·실제 모델·마이크부터
 물리 장치까지의 동작은 미검증입니다. 모델·비공개 SDK·인증정보·개인 설정은 포함하지 않습니다.

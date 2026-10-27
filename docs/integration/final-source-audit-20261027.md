@@ -32,6 +32,22 @@ GitHub PR 목록과 원격 브랜치 전체를 다시 조회해 별도 audit rem
 옛 프로토타입을 추가 병합하지 않았다. `feature/HW`의 과거 ESP32 실험 UI/다른 펌웨어도
 현재 C6 소스에 무조건 합치지 않았다.
 
+### PR 밖 브랜치에서 추가로 발견해 보완한 것
+
+전체 브랜치의 고유 커밋까지 비교해 두 가지 차이를 더 확인했다.
+
+- `feature/voice-server-port`의 `25be72e`에는 현재 앱 `POST /tts`에 대응하는 서버가 있었다.
+  처음에는 외부 서버 의존성으로만 분류했으나, 필요한 소스를 확보했으므로 TTS 경로를
+  `SW/tts_server`로 복구했다(`fea4f16`). 기존 Whisper/파일 STT는 현재 local_stt와 중복돼
+  가져오지 않았다. FastAPI/uvicorn/edge-tts pin은 원래 기록과 동일하며, 실제 합성은 인터넷이 필요하다.
+- `feature/safehub-site-ui`의 `013dc00`은 느린 decode 동안 최신 프레임을 보관한다.
+  현재 UI에는 busy 중 프레임을 버리는 경로가 있어 최신 pending 1개를 이관했다(`9f92acc`).
+  generation 변경/disconnect/dispose 시 폐기하고 오래된 callback이 새 연결 화면을 되살리지 않게 했다.
+  옛 가변 List parser는 가져오지 않고 현재 고정 크기/부분 패킷/timeout parser를 유지했다.
+
+TTS 서버는 수어 음성 출력용이며 fastText/생성형 문맥 서비스와 다르다. 장치 자동 시작·설정
+변경은 하지 않았다. 누락 자료를 임의 모델로 대신하거나 옛 음성 서비스 전체를 되살리지 않았다.
+
 ## 미사용으로 확인해 제거한 것
 
 `lib/main.dart`부터 explicit import/export/part를 순회했다. 정리 전 Dart 45개 중
@@ -63,6 +79,7 @@ CSI disconnect 중 재난 응답 검사는 옛 DisasterOverlay 대신 실제 Sce
 | 현재 scenario UI 36개 | 홈·자막·카메라·경보/도움·팬/커튼·단축키·CSI·설정·문맥 서비스 |
 | `record_atlas` | 실제 PCM 마이크 경로. 옛 VoiceRecorderService 삭제와 별개 |
 | `SW/local_stt` | 로컬 한국어 자막 서버·모델 다운로드 규격 |
+| `SW/tts_server` | 현재 수어 음성 출력 API. 과거 브랜치에서 필요한 TTS만 복구, 인터넷 필요 |
 | `SW/fasttext_context` | 현재 문맥 API. 실제 모델은 별도 준비 |
 | `SW/uno_bridge`, `SW/rpi5_hub` | USB 명령·단축키 저장·MQTT 라우팅 |
 | 수어 C++/live ONNX 소스 | #9 추적·복구·비동기 MQTT·추가 참조 경로 |
@@ -95,7 +112,7 @@ CSI disconnect 중 재난 응답 검사는 옛 DisasterOverlay 대신 실제 Sce
 | fastText 실제 모델 | service의 `fire_screen_model.bin` | native runtime 검사와 fake 모델 규칙 검사는 있음. 실제 분류 모델 미확보/미검증 |
 | CSI 기존 학습 모델 | 장치 data-dir의 모델 metadata/weights | 제품에서 선택·추론하려면 필요. 개인 모델/데이터를 Git에 넣지 않음 |
 | 로컬 서비스 배치 | Mosquitto/Python 환경/receiver.env/USB·IP·shortcut 설정 | 소스/unit은 있으나 자동 설치 완료 아님. staging 도구는 Uno/fastText/hub 소스 부분만 다룸 |
-| TTS/재난 API | 앱 설정의 서버 URL·필요 인증정보 | client 구현은 있음. TTS 서버 구현은 이 제품 트리에 없고 외부 서비스가 필요 |
+| TTS/재난 API | 앱 설정의 서버 URL·필요 인증정보 | TTS 서버 소스는 이번에 복구. 실행 환경/실제 인터넷 합성·재생·외부 재난 API 접속은 별도 준비/검증 필요 |
 
 ### 버전·연결 주의점
 
@@ -110,13 +127,16 @@ CSI disconnect 중 재난 응답 검사는 옛 DisasterOverlay 대신 실제 Sce
 
 ## 검사와 근거
 
-- 전체 Flutter **254 pass / 0 fail / 1 skip**. 이전 272에서 미사용 녹음 서비스 전용
-  18개를 제거한 결과다. 현행 자막/마이크 테스트는 유지. 이후 미사용 helper 제거는 관련
-  재난/경보/CSI 검사 **21개 통과**로 추가 확인했다. 최종 원격 CI는 해당 head에서 별도 확인한다.
+- 미사용 정리 단계 Flutter **254 pass / 0 fail / 1 skip**는 이전 272에서 미사용 녹음
+  전용 18개를 제거한 결과다. 현행 자막/마이크 검사는 유지했다. 이후 재난/경보/CSI 21개,
+  최신 pending 카메라 회귀 포함 카메라 10개가 통과했다. pending 회귀 1개를 추가한 최종
+  전체 Flutter는 **255 pass / 0 fail / 1 skip**다. 최종 원격 CI는 해당 head에서 별도 확인한다.
 - Flutter 분석 **0 error / 0 warning / 102 info**, `--no-fatal-infos` exit 0.
 - 기존 source/host 패키징 **6/6**, Windows 도구 **14/14**, 도구 검사 **5/5**
   (기존 socket 차단 1 + 새 source audit 4).
-- 추적 Python 124개 AST parse 성공(새 도구 2개 추가 전). 수어/비전 C++ 계열 99개
+- 복구 TTS **8/8**: fake 합성기를 주입한 실제 ASGI 요청 검증. edge-tts 7.2.8,
+  FastAPI 0.141.1, uvicorn 0.53.0, httpx 0.28.1 설치 확인. 외부 합성 요청/서버 실행은 하지 않았다.
+- 추적 Python 128개 AST parse 성공(새 도구/TTS 포함). 수어/비전 C++ 계열 99개
   quoted include 확인에서 미해결은 명시적 외부 MediaPipe 헤더 5개뿐이었다.
 - C6 provenance **9/9**, CSI upstream manifest **6/6** 해시 일치.
 - 개인키/GitHub token/AWS key marker의 제한적 정적 검색에서 일치 0개. 완전한 비밀정보

@@ -32,6 +32,7 @@ CSI 학습 스택과 실제 fastText 모델을 이 검사 때문에 설치할 �
 python3 tools/audit_product_sources.py
 python3 -m venv /tmp/safehub-checks
 /tmp/safehub-checks/bin/python -m pip install -r tools/requirements-checks.txt
+/tmp/safehub-checks/bin/python -m unittest discover -s SW/tts_server/tests -p 'test_*.py' -v
 /tmp/safehub-checks/bin/python -m unittest discover -s SW/safehub_scenario/tool -p 'test_*.py' -v
 /tmp/safehub-checks/bin/python -m unittest discover -s SW/fasttext_context/tests -p 'test_*.py' -v
 /tmp/safehub-checks/bin/python -m unittest discover -s SW/uno_bridge/tests -p 'test_*.py' -v
