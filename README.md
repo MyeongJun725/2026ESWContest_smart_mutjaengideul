@@ -72,8 +72,8 @@ ATLAS용 runner·manifest·record_atlas는 `SW/safehub_scenario`에 있으며 �
 |---|---|
 | `SW/safehub_scenario` | 현재 UI·runner·플러그인·자산·검사·호스트 도구 |
 | `SW/rpi4_sign_cpp`, `SW/rpi4_vision_atlas` | 현재 수어·비전 소스 후보와 회귀 검사 |
-| `SW/rpi5_hub`, `SW/uno_bridge` | 수어 단축키·MQTT·Uno 명령 경로 |
-| `SW/local_stt`, `SW/fasttext_context` | 음성자막·fastText 문맥 서비스 |
+| `SW/rpi5_hub`, [SW/uno_bridge](SW/uno_bridge/README.md) | 수어 단축키·MQTT·Uno 명령 경로 |
+| `SW/local_stt`, [SW/fasttext_context](SW/fasttext_context/README.md) | 음성자막·fastText 문맥 서비스 |
 | `SW/wifi_sensing` | 제품 상태·기존 모델 선택·추론; 별도 개발용 수집·학습 |
 | `SW/atlas_boot` | 검토용 제품 부팅 구성; 장치에 적용하지 않음 |
 | `HW/esp32_csi` | C6 송수신 소스·라이선스; 빌드/플래시 미실행 |

@@ -77,7 +77,9 @@ Set-Location $previewHost
 
 스크립트의 원본 보존·해시 검사·재실행·사용자 수정 거부 검사는 `python SW/windows_preview/test_patch_windows_audio.py`로 실행한다. GUI의 반복 열기/닫기와 음성 재생 검증은 별도로 필요하다.
 
-### Flutter 3.29.3과 VS 2026을 함께 쓰는 경우
+### 과거 Flutter 3.29.3 / VS 2026 기록 (현재 host lock과 구별)
+
+현재 고정 host lock은 Flutter 3.35.7 / Dart 3.9.2에서 검사했으며 최소 Flutter 3.35.6 / Dart 3.9.0을 요구합니다. 아래 절차는 과거 환경 기록이며 현재 Windows 빌드 검증을 뜻하지 않습니다.
 
 이 노트북에서 확인한 조합은 Flutter 3.29.3 / VS 2026 / Windows SDK 10.0.26100.0입니다. 이 Flutter 버전은 VS 2026 CMake generator를 직접 선택하지 못하므로 일반 빌드가 generator 선택 오류로 끝났습니다. 최신 Flutter에서 정상 빌드되면 아래 수동 절차는 필요하지 않습니다.
 

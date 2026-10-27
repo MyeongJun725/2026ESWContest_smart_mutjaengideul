@@ -15,6 +15,8 @@
 - 현재 제품 원본은 `SW/safehub_scenario` 하나다. [README](../../README.md)를 제품 기능·화면 실행·
   검사·소스 위치 순서로 다시 정리했고 [제출 확인 안내](../SUBMISSION.md)를 추가했다.
   main이 제출 대상으로 지정돼 있다면 PR 브랜치 push와 최종 병합은 별도 단계다.
+  fastText/Uno 모듈의 현재 검사·모델 의존성·staging 안내도 보완했다. 이전 Windows SDK 조합과
+  #10의 핀/설치 보고는 현재 코드·직접 장치 확인과 구별하도록 표시했다.
 
 ## 실제 수정
 
