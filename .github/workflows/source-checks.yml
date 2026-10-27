@@ -36,6 +36,7 @@ jobs:
       - name: Test context and actuator contracts without hardware
         run: |
           python -m unittest discover -s SW/fasttext_context/tests -p 'test_*.py' -v
+          python -m unittest discover -s SW/tts_server/tests -p 'test_*.py' -v
           python -m unittest discover -s SW/uno_bridge/tests -p 'test_*.py' -v
           python -m unittest discover -s SW/rpi4_vision_atlas/tests -p 'test_*.py' -v
       - name: Run approved hub scripts with Python network calls disabled

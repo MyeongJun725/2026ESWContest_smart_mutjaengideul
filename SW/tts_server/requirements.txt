@@ -1,0 +1,4 @@
+# Same runtime pins as the team's voice-server-port; Whisper is not required.
+fastapi==0.141.1
+uvicorn==0.53.0
+edge-tts==7.2.8
