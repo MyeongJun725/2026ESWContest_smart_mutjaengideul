@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'atlas_audio_output.dart';
 
 class AudioService {
@@ -10,7 +11,7 @@ class AudioService {
     this.operationTimeout = const Duration(seconds: 5),
     bool? localFilePlayback,
   }) : assert(operationTimeout > Duration.zero),
-       _localFilePlayback = localFilePlayback ?? (Platform.isLinux || Platform.operatingSystem == 'atlas'),
+       _localFilePlayback = localFilePlayback ?? (!kIsWeb && (Platform.isLinux || Platform.operatingSystem == 'atlas')),
        _player = player;
 
   AudioPlayer? _player;
@@ -20,7 +21,7 @@ class AudioService {
   Directory? _audioDirectory;
   File? _audioFile;
   AtlasAudioOutput? _atlasOutput;
-  bool get _useAtlasOutput => _player == null &&
+  bool get _useAtlasOutput => !kIsWeb && _player == null &&
       File('/data/share/safehub-tools/parecord').existsSync() &&
       File('/usr/bin/gst-launch-1.0').existsSync();
 
