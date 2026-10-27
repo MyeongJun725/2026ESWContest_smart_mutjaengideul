@@ -85,3 +85,84 @@ std::vector<Hand> run_hands(const cv::Mat& image,
     }
     return results;
 }
+
+struct FrameHandObservation {
+    std::vector<Hand> hands;
+    bool attempted_tracking = false;
+    bool tracking_fallback = false;
+    bool used_palm_detector = false;
+    bool any_failure = false;
+};
+
+// Remember search regions, not detections, during the existing timed recovery.
+// Select the previous ROI least associated with the surviving current wrist.
+std::vector<Hand> strongest_hand_per_side(const std::vector<Hand>& hands) {
+    std::vector<Hand> selected;
+    for (const auto& hand:hands) {
+        auto found=std::find_if(selected.begin(),selected.end(),[&](const Hand& kept) {
+            return (kept.handedness>.5)==(hand.handedness>.5);
+        });
+        if (found==selected.end()) selected.push_back(hand);
+        else if (hand.confidence>found->confidence) *found=hand;
+    }
+    return selected;
+}
+
+std::vector<Palm> missing_track_regions(const std::vector<Palm>& previous,
+                                       const std::vector<Hand>& current) {
+    const auto slots=strongest_hand_per_side(current);
+    if (previous.size()!=2 || slots.size()>=2) return {};
+    if (slots.empty()) return previous;
+    const auto wrist=cv::Point2d(slots[0].xy[0]);
+    const auto score=[&](const Palm& p) {
+        const double span=std::max({p.box[2]-p.box[0],p.box[3]-p.box[1],1.0});
+        return cv::norm(p.points[0]-wrist)/span;
+    };
+    return {score(previous[0])>score(previous[1]) ? previous[0] : previous[1]};
+}
+
+std::vector<Palm> recovery_track_inputs(const std::vector<Palm>& tracked,
+                                        const std::vector<Palm>& missing) {
+    auto inputs=tracked;
+    for (const auto& p:missing) {
+        if (inputs.size()>=2) break;
+        const double span=std::max({p.box[2]-p.box[0],p.box[3]-p.box[1],1.0});
+        const bool duplicate=std::any_of(inputs.begin(),inputs.end(),[&](const Palm& q) {
+            return cv::norm(p.points[0]-q.points[0])<.25*span;
+        });
+        if (!duplicate) inputs.push_back(p);
+    }
+    return inputs;
+}
+
+// Scheduled/recovery scans supplement current-frame tracking. They must not
+// replace a successful track with an empty/partial detector result. Old palm
+// regions are only inference inputs; old landmark observations are never used.
+template<class ScanPalms>
+FrameHandObservation observe_frame_hands(
+        const cv::Mat& image, const std::vector<Palm>& tracked, Model& model,
+        bool scan_requested, bool allow_tracking, ScanPalms scan_palms,
+        vision_runtime::TrackingRoiRetryDiagnostics& retry,
+        vision_runtime::InferenceBudget& budget) {
+    FrameHandObservation result;
+    result.attempted_tracking = allow_tracking && !tracked.empty();
+    if (result.attempted_tracking) {
+        result.hands = run_hands(image, tracked, model, result.any_failure,
+                                true, retry, &budget);
+    }
+    const bool need_scan = !result.attempted_tracking || scan_requested ||
+                           result.any_failure || result.hands.empty();
+    if (need_scan && result.hands.size() < 2 &&
+            budget.hand_calls < vision_runtime::InferenceBudget::max_hand_calls) {
+        auto inputs = scan_palms(result.hands);
+        result.used_palm_detector = true;
+        result.tracking_fallback = result.attempted_tracking &&
+                                   (result.any_failure || result.hands.empty());
+        bool fresh_failure = false;
+        auto fresh = run_hands(image, inputs, model, fresh_failure,
+                               false, retry, &budget);
+        vision_runtime::mergeFreshHands(result.hands, fresh, hand_geometry);
+        result.any_failure = result.any_failure || fresh_failure;
+    }
+    return result;
+}

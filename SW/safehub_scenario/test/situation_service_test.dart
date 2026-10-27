@@ -207,7 +207,7 @@ void main() {
       },
     });
     expect(service.sensorAt, isNull);
-    expect(service.sensorStatus, contains('미확인'));
+    expect(service.sensorStatus, '실측 신호 연결 필요');
   });
 
   test('stale CSI classification is explicitly invalidated', () {

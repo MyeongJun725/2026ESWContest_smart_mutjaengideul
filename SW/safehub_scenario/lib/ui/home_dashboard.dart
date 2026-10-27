@@ -135,7 +135,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
               selected: _currentPage == _SafeHubPage.signTranslation,
             ),
             _nav(
-              widget.developerTools ? '신호 관리' : '활동 상태',
+              widget.developerTools ? '신호 관리' : '낙상 감지',
               Icons.sensors,
               () => _navigate(_SafeHubPage.wifiSensing),
               selected: _currentPage == _SafeHubPage.wifiSensing,
@@ -261,8 +261,7 @@ extension _HomeDashboard on _SafeHubHomePageState {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _label(
-                      _situation.sensorStatus
-                          .replaceFirst('CSI 분류:', 'CSI 활동:'),
+                      _situation.sensorStatus,
                       size: 22,
                       weight: FontWeight.w600,
                     ),
@@ -435,6 +434,10 @@ class _FinalCaptionBody extends StatelessWidget {
                   ),
                 ],
               ),
+              if (available) ...[
+                const SizedBox(height: 8),
+                Text(situation.soundStatus, style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16, color: _secondary)),
+              ],
               const SizedBox(height: 16),
               Expanded(
                 child: lines.isEmpty

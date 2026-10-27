@@ -57,6 +57,8 @@ def summarize_context(payload, classifier):
         workflow = {}
     scenario = workflow.get("scenario")
     if scenario == "broadcast":
+        if workflow.get('origin') == 'sound':
+            return '경보음이 의심돼요. 실제 화재·재난은 미확인이니 주변과 화면을 확인하고 수어·터치로 응답해 주세요.'
         return "위험 안내방송이 감지됐어요. 화면의 원문과 대피 안내를 확인하고 수어·터치로 응답해 주세요."
     if scenario == "disaster":
         return "새 재난 안내가 있어요. 발행 지역·시각과 원문을 확인하고 수어·터치로 응답해 주세요."

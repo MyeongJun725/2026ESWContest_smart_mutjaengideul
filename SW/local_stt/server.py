@@ -10,6 +10,11 @@ import unicodedata
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import numpy as np
 
+try:
+    from safehub_audio_tap import AudioTap
+except ImportError:
+    AudioTap = None
+
 PROTOCOL = "safehub.pcm.v1"
 MAX_FRAME_BYTES = 6400  # 200 ms, signed little-endian PCM, mono, 16 kHz.
 
@@ -102,7 +107,13 @@ def create_app(factory=None):
             await socket.close(code=1013, reason="Microphone session already active")
             return
         app.state.active = True
+        tap = None
         try:
+            if AudioTap is not None:
+                try:
+                    tap = AudioTap()
+                except OSError:
+                    pass
             session = app.state.recognizer.session()
             await socket.send_json({"type": "ready", "protocol": PROTOCOL})
             while True:
@@ -114,6 +125,8 @@ def create_app(factory=None):
                     if not pcm or len(pcm) % 2 or len(pcm) > MAX_FRAME_BYTES:
                         await socket.close(code=1008, reason="Invalid PCM frame")
                         break
+                    if tap is not None:
+                        tap.offer(pcm, session.epoch)
                     result = await asyncio.to_thread(session.accept, pcm)
                     await socket.send_json(result)
                 else:
@@ -130,6 +143,8 @@ def create_app(factory=None):
         except (ValueError, TypeError, AttributeError):
             await socket.close(code=1008, reason="Invalid message")
         finally:
+            if tap is not None:
+                tap.close()
             app.state.active = False
 
     return app

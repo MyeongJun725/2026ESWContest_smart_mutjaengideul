@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
+import '../services/tts_service.dart';
 
 class ConnectionSettingsPage extends StatefulWidget {
-  const ConnectionSettingsPage({super.key, this.saveSettings});
+  const ConnectionSettingsPage({super.key, this.saveSettings, this.checkTts});
 
   final Future<void> Function(Map<String, Object?>)? saveSettings;
+  final Future<bool> Function(String url)? checkTts;
 
   @override
   State<ConnectionSettingsPage> createState() => _ConnectionSettingsPageState();
@@ -18,6 +20,29 @@ class _ConnectionSettingsPageState extends State<ConnectionSettingsPage> {
   final _controllers = <String, TextEditingController>{};
   bool _saving = false;
   String? _saveError;
+  bool _checkingTts = false;
+  String? _ttsCheckStatus;
+  Future<void> _checkTts() async {
+    if (_checkingTts) return;
+    final url = _controllers['TTS_SERVER_URL']!.text.trim();
+    if (url.isEmpty || AppConfig.validateValues(_values).containsKey('TTS_SERVER_URL')) {
+      setState(() => _ttsCheckStatus = '올바른 TTS 서버 주소를 먼저 입력해 주세요.');
+      return;
+    }
+    setState(() { _checkingTts = true; _ttsCheckStatus = '서버 확인 중…'; });
+    final service = TtsService(baseUrl: url);
+    try {
+      final ok = await (widget.checkTts?.call(url) ?? service.checkHealth());
+      if (mounted) setState(() => _ttsCheckStatus = ok
+          ? 'TTS 서버 연결됨 · 실제 합성과 스피커 출력은 별도 확인이 필요해요.'
+          : 'TTS 서버 응답을 확인하지 못했어요. 서버 실행과 포트를 확인하세요.');
+    } catch (_) {
+      if (mounted) setState(() => _ttsCheckStatus = '연결되지 않았어요. 서버 실행·주소·같은 네트워크인지 확인하세요.');
+    } finally {
+      service.dispose();
+      if (mounted) setState(() => _checkingTts = false);
+    }
+  }
 
   @override
   void initState() {
@@ -176,8 +201,20 @@ class _ConnectionSettingsPageState extends State<ConnectionSettingsPage> {
                       ),
                     ],
                   ),
-                  _section('음성', '음성 합성과 음성 인식 서버는 선택 기능입니다.', [
-                    _field('TTS_SERVER_URL', '음성 합성 서버 URL'),
+                  _section('스피커 음성 출력 · TTS', '수어와 문장을 스피커로 읽어주는 서버입니다. 위험 안내 음성은 앱에 내장되어 이 주소 없이도 재생됩니다.', [
+                    _field('TTS_SERVER_URL', 'TTS 서버 주소',
+                      helper: 'Pi5에서 서버 실행: http://127.0.0.1:8000\n다른 기기: http://서버IP:포트 · /tts는 붙이지 마세요.'),
+                    OutlinedButton.icon(
+                      key: const ValueKey('check_tts_connection'),
+                      onPressed: _checkingTts || _saving ? null : _checkTts,
+                      icon: const Icon(Icons.network_check),
+                      label: Text(_checkingTts ? '확인 중…' : 'TTS 서버 연결 확인'),
+                    ),
+                    if (_ttsCheckStatus != null) Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10), child: Text(_ttsCheckStatus!)),
+                    const Text('서버가 실행되는 기기의 IP와 실행 포트를 확인하세요. 같은 Pi5의 127.0.0.1 주소는 Wi-Fi IP가 바뀌어도 같습니다. 주소만 입력하면 서버가 설치되거나 시작되는 것은 아닙니다.'),
+                  ]),
+                  _section('음성 자막 · STT', '말소리를 글자로 바꾸는 서버입니다. TTS와 별도 주소입니다.', [
                     _field('STT_SERVER_URL', '음성 인식 서버 URL'),
                   ]),
                   _section('재난 정보', 'API 주소와 인증키를 모두 설정한 경우에만 정보를 조회합니다.', [

@@ -6,6 +6,15 @@ import 'package:http/testing.dart';
 import 'package:safehub_app/services/tts_service.dart';
 
 void main() {
+  test('health check validates TTS identity without generating speech', () async {
+    final service = TtsService(baseUrl: 'http://localhost:8000/', client: MockClient((request) async {
+      expect(request.method, 'GET');
+      expect(request.url.path, '/health');
+      return http.Response(jsonEncode({'status': 'ok', 'voice': 'ko-KR-SunHiNeural'}), 200);
+    }));
+    expect(await service.checkHealth(), isTrue);
+    service.dispose();
+  });
   test('정상 요청은 앞뒤 공백을 제거하고 음성 bytes를 반환한다', () async {
     final client = MockClient((request) async {
       expect(request.method, 'POST');

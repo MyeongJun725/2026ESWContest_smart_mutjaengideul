@@ -1,0 +1,13 @@
+[Unit]
+Description=SafeHub USB headset playback routing
+After=pulseaudio.service
+RequiresMountsFor=/opt/safehub-system
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /opt/safehub-system/route-headset.sh
+RemainAfterExit=yes
+TimeoutStartSec=10
+
+[Install]
+WantedBy=multi-user.target
