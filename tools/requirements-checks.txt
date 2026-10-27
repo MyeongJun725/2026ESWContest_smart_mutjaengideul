@@ -1,0 +1,5 @@
+# Lightweight source/contract CI. No CSI training stack or real fastText model.
+-r ../SW/uno_bridge/requirements.txt
+numpy==1.26.4
+
+packaging==25.0

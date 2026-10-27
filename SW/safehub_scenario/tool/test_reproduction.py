@@ -1,6 +1,7 @@
 """Exercise source packaging without Flutter, ATLAS services or hardware."""
 
 import json
+import hashlib
 from pathlib import Path
 import re
 import shutil
@@ -25,6 +26,14 @@ class ReproductionTests(unittest.TestCase):
         for name in ("start-ui.sh", "install-bootstrap.sh"):
             self.assertIn(app_id, (REPO / "SW/atlas_boot" / name).read_text())
 
+    def test_distributed_assets_keep_reviewed_license_notices(self):
+        sources = json.loads((SOURCE / "THIRD_PARTY_SOURCES.json").read_text())
+        for item in sources:
+            path = SOURCE / item['file']
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), item['sha256'])
+        self.assertIn('assets/fonts/OFL.txt', (SOURCE / 'pubspec.yaml').read_text())
+        self.assertIn('flutter-embedded-linux-LICENSE.txt', (SOURCE / 'atlas/CMakeLists.txt').read_text())
+
     def test_new_dart_and_plugin_sources_are_not_ignored(self):
         for relative in ("lib/new_feature.dart", "third_party/record_atlas/lib/new_feature.dart"):
             result = subprocess.run(["git", "check-ignore", "-q", str(SOURCE / relative)],
@@ -44,6 +53,8 @@ class ReproductionTests(unittest.TestCase):
             self.assertNotIn("audioplayers_atlas:", pubspec)
             self.assertNotIn("record_atlas:", pubspec)
             self.assertIn("name: safehub_app", pubspec)
+            self.assertEqual((output / "pubspec.lock").read_bytes(),
+                             (SOURCE / "tool/host_pubspec.lock").read_bytes())
             marker = output / "user-file"
             marker.write_text("preserve me")
             again = subprocess.run(["python3", str(SOURCE / "tool/prepare_host_tests.py"), str(output)],

@@ -75,6 +75,7 @@ def prepare(source: Path, target: Path) -> int:
         if not path.is_file() or not path.resolve().is_relative_to(source):
             raise ValueError(f'Invalid source file: {relative}')
 
+    lock_bytes = (source / 'tool/host_pubspec.lock').read_bytes()
     target.mkdir(parents=True, exist_ok=True)
     for relative in files:
         destination = target / relative
@@ -88,4 +89,8 @@ def prepare(source: Path, target: Path) -> int:
         shutil.copystat(source / relative, destination)
     with (target / 'pubspec.yaml').open('x', encoding='utf-8', newline='\n') as output:
         output.write(pubspec)
-    return len(files)
+    # A reviewed host lock makes fresh CI/PC resolution match the tested SDK.
+    # The canonical ATLAS lock remains separate and unchanged.
+    with (target / 'pubspec.lock').open('xb') as output:
+        output.write(lock_bytes)
+    return len(files) + 1

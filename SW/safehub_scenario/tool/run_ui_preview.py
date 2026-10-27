@@ -31,7 +31,7 @@ def prepare_host(output):
         shutil.copytree(SOURCE / name, output / name)
     pubspec = host_pubspec((SOURCE / "pubspec.yaml").read_text(encoding="utf-8"))
     (output / "pubspec.yaml").write_text(pubspec, encoding="utf-8")
-    shutil.copyfile(SOURCE / "pubspec.lock", output / "pubspec.lock")
+    shutil.copyfile(SOURCE / "tool/host_pubspec.lock", output / "pubspec.lock")
 
     config = output / "lib/config/app_config.dart"
     text = "import 'package:flutter/foundation.dart';\n" + config.read_text(
@@ -91,7 +91,7 @@ def main():
         if args.check_only:
             print(f"Preview host preparation passed; mode={'developer' if args.developer_tools else 'product'}; source files unchanged.")
             return
-        subprocess.run([flutter, "pub", "get"], cwd=host, check=True)
+        subprocess.run([flutter, "pub", "get", "--enforce-lockfile"], cwd=host, check=True)
         subprocess.run(
             [flutter, "build", "web", "--dart-define=APP_LOCAL_PREVIEW=true",
              f"--dart-define=SAFEHUB_DEVELOPER_TOOLS={str(args.developer_tools).lower()}",

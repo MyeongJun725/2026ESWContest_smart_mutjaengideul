@@ -23,7 +23,7 @@ def preflight(flutter_path, output_dir):
     if output_dir.exists():
         raise ValueError("--output-dir must be a new directory; existing files are never replaced.")
     validate_target(output_dir, SOURCE)
-    for name in ("lib", "assets", "pubspec.yaml"):
+    for name in ("lib", "assets", "pubspec.yaml", "tool/host_pubspec.lock"):
         if not (SOURCE / name).exists():
             raise ValueError(f"Missing source input: {name}")
     pubspec = host_pubspec((SOURCE / "pubspec.yaml").read_text(encoding="utf-8"))
@@ -40,6 +40,7 @@ def prepare(flutter_path, output_dir, pubspec, build=False, real=False, develope
     for name in ("lib", "assets"):
         shutil.copytree(SOURCE / name, output_dir / name, dirs_exist_ok=True)
     (output_dir / "pubspec.yaml").write_text(pubspec, encoding="utf-8")
+    shutil.copyfile(SOURCE / "tool/host_pubspec.lock", output_dir / "pubspec.lock")
 
     # This change is limited to the newly generated host runner.
     runner = output_dir / "windows" / "runner" / "main.cpp"
