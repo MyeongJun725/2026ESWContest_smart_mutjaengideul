@@ -208,6 +208,7 @@ class SituationService extends ChangeNotifier {
   bool scenarioActuators = false;
   HouseScenarioFlow get flow => scenarioTestMode ? testFlow : liveFlow;
   VoidCallback? onScenarioAlert;
+  VoidCallback? onSignAcknowledge;
   VoidCallback? onScenarioTestChanged;
   String soundStatus = '경보음 연결 확인 중';
 
@@ -340,6 +341,7 @@ class SituationService extends ChangeNotifier {
   bool helpOpen = false;
   String helpSign = '';
   String? _lastHelpLabel;
+  int _helpIncidentSequence = 0;
   DateTime _lastHelpAt = DateTime(0);
   bool deferredHelp = false;
   DateTime _analysisStarted = DateTime(0);
@@ -595,7 +597,7 @@ class SituationService extends ChangeNotifier {
   }
 
   void receiveSign(String text, {bool simulated = false}) {
-    if (_closed || scenarioTestMode != simulated) return;
+    if (_closed || (simulated && !scenarioTestMode)) return;
     if (pendingSign != text.trim()) {
       _signVersion++;
       signQuestion = '';
@@ -603,12 +605,16 @@ class SituationService extends ChangeNotifier {
     pendingSign = text.trim();
     final label = text.replaceAll(RegExp(r'[\s.!?,·]'), '');
     final isOkay = const {'괜찮다', '괜찮아', '괜찮아요', '괜찮습니다'}.contains(label);
-    if (isOkay && (helpOpen || flow.active?.kind == HouseScenario.assistance)) {
+    if (isOkay && (helpOpen || flow.active != null)) {
       _lastHelpLabel = null;
-      if (flow.active?.kind == HouseScenario.assistance) {
-        flow.respond('수어 응답: $label · 도움 요청 취소');
+      if (flow.active != null) {
+        flow.respond('수어 응답: $label · 알림 확인 (위험 해제 아님)');
       }
-      cancelHelp();
+      if (onSignAcknowledge != null) {
+        onSignAcknowledge!();
+      } else {
+        acknowledge();
+      }
       return;
     }
     final isHelp = const {
@@ -628,13 +634,17 @@ class SituationService extends ChangeNotifier {
           now.difference(_lastHelpAt) >= const Duration(seconds: 8)) {
         _lastHelpLabel = label;
         _lastHelpAt = now;
-        if (flow.active != null &&
-            flow.active!.kind != HouseScenario.assistance) {
-          deferredHelp = true;
-        } else {
-          openHelp();
-        }
+        // Preserve any hazard incident, but let the user request help now.
+        openHelp();
         helpSign = text.trim();
+        // A recognized help sign must also reach the existing alarm delivery
+        // callback; opening the help screen alone only changes UI state.
+        if (!scenarioTestMode && !simulated &&
+            liveFlow.active?.kind == HouseScenario.assistance &&
+            _presentedIncident != liveFlow.active!.id) {
+          _presentedIncident = liveFlow.active!.id;
+          onScenarioAlert?.call();
+        }
       }
     } else {
       _lastHelpLabel = null;
@@ -670,7 +680,7 @@ class SituationService extends ChangeNotifier {
     if (flow.active == null) {
       beginIncident();
       flow.assistance(
-        'manual:${DateTime.now().microsecondsSinceEpoch}',
+        'manual:${DateTime.now().microsecondsSinceEpoch}:${++_helpIncidentSequence}',
         '사용자가 도움 요청 화면을 열었습니다.',
       );
     }
