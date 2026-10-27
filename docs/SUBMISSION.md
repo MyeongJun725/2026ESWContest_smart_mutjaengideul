@@ -4,6 +4,8 @@
 [#11](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11)입니다.
 PR #10(#8/#7 포함), #9 소스 후보와 #6의 필요한 안정화를 통합했습니다.
 최신 UI는 `SW/safehub_scenario`이며 옛 UI를 함께 실행하지 않습니다.
+최신 [소스 포함 관계·미사용 정리·외부 준비 목록](integration/final-source-audit-20261027.md)을
+먼저 확인하세요. 공개 PR 통합 완료와 실제 장치 전체 재현 완료는 다릅니다.
 
 ## 제출 직전 확인할 것
 
@@ -27,6 +29,7 @@ Python 3.12의 저장소 밖 가상 환경에서 필요한 가벼운 검사 의�
 CSI 학습 스택과 실제 fastText 모델을 이 검사 때문에 설치할 필요는 없습니다.
 
 ```sh
+python3 tools/audit_product_sources.py
 python3 -m venv /tmp/safehub-checks
 /tmp/safehub-checks/bin/python -m pip install -r tools/requirements-checks.txt
 /tmp/safehub-checks/bin/python -m unittest discover -s SW/safehub_scenario/tool -p 'test_*.py' -v

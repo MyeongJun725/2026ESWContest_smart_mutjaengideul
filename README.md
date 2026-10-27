@@ -81,19 +81,23 @@ ATLAS용 runner·manifest·record_atlas는 `SW/safehub_scenario`에 있으며 �
 
 ## 검증과 제출 상태
 
-직접 실행한 최신 결과는 Flutter **272 pass / 0 fail / 1 실제 fastText opt-in skip**입니다.
+직접 실행한 최신 결과는 Flutter **254 pass / 0 fail / 1 실제 fastText opt-in skip**입니다.
+미사용 녹음 서비스와 전용 검사 18개를 제거해 이전 272개보다 줄었으며 현재 자막·마이크 검사는 유지했습니다.
 문맥/HTTP 9개, Uno 계약 15개, 수어 프레임/진단 Python 22개와 기타 비장비 검사를 통과했습니다.
 허브는 unittest 개수와 구별해 **14개 assertion 스크립트**를 실행했습니다. C++ 호스트 회귀는 19개입니다.
-정적 분석은 error 0 / warning 0 / info 103이며 기본 명령은 exit 1입니다.
+정적 분석은 error 0 / warning 0 / info 102이며 기본 명령은 exit 1입니다.
 CI는 스타일 info를 출력하면서 error·warning을 실패로 처리합니다.
 
 현재 작업은 [기존 Draft PR #11](https://github.com/minbeom77/2026ESWContest_smart_mutjaengideul/pull/11)에 있습니다.
 main/develop에는 직접 반영하지 않았습니다. **제출 전에 제출 대상 브랜치와 PR 검토·병합 여부를 확인해야 합니다.**
-[제출 확인 안내](docs/SUBMISSION.md), [최신 점검 기록](docs/integration/submission-audit-20261027.md)을 기준으로 확인하세요.
+[제출 확인 안내](docs/SUBMISSION.md), [최신 소스 완전성 점검](docs/integration/final-source-audit-20261027.md)을 기준으로 확인하세요.
+`python3 tools/audit_product_sources.py`로 현재 Dart 연결·누락 import·선언 자산을 점검할 수 있습니다.
 
 앱 ID는 `com.atlas.app.safehub_scenario_pr7`, Dart package/binary는 `safehub_app`, 후보는 1.4.0+1입니다.
 1.2.0은 과거 사용자 확인, 1.4.0 설치는 #10 작성자 보고입니다. 현재 장치 실행본·설정·IPK·실제 모델·보관본은
-클라우드에서 **미확인/미확보**입니다. ATLAS 빌드·재부팅·마이크→장치·모터·모델 정확도는 검증하지 않았습니다.
+클라우드에서 직접 **미확인/미확보**입니다. 마지막 Pi4 운영/후보 해시와 후보 별도 시험·복귀는
+[사용자 전달 보고](docs/integration/user-device-observation-20261027.md)로 확보했습니다.
+이번 클라우드에서 ATLAS 빌드·재부팅·마이크→장치·모터·모델 정확도는 검증하지 않았습니다.
 
 ## 계약·출처·복원
 

@@ -3,7 +3,7 @@
 이 폴더가 PR #11 통합 후보의 UI·빌드 진입점입니다. #10의 새 UI·장치 제어와
 #6 안정화, #9 수어 후보 소스를 함께 검토합니다. #10에 #8/#7이 포함돼 있습니다.
 옛 `SW/safehub_app`을 복사하거나 함께 실행할 필요는 없습니다.
-필수 runner·manifest·record_atlas·이미지·폰트는 이 폴더에 있습니다.
+필수 runner·manifest·record_atlas·폰트는 이 폴더에 있습니다. 현재 UI가 사용하지 않는 옛 배경 이미지는 제거했습니다.
 
 ## 준비와 실행 경로
 
@@ -22,7 +22,7 @@ python3 SW/safehub_scenario/tool/run_ui_preview.py
 python3 SW/safehub_scenario/tool/prepare_host_tests.py /tmp/safehub-scenario-host
 ```
 
-생성한 호스트에서 `flutter pub get`, `flutter test`를 실행합니다.
+생성한 호스트에서 `flutter pub get --enforce-lockfile`, `flutter test`를 실행합니다.
 검증에 사용한 호스트 SDK는 Flutter 3.35.7 / Dart 3.9.2입니다.
 [Windows 준비](../windows_preview/README.md)도 이 폴더를 원본으로 사용합니다.
 호스트 준비 도구는 CSI 서비스나 옛 UI 도우미를 import하지 않습니다.
@@ -62,9 +62,10 @@ runner의 버전 번호를 맞춘 것만으로 설치본 재현을 선언하지 
 
 ## 검증
 
-[현재 검토·수치·장치 확인 목록](../../docs/integration/pr10-addendum-review.md)을 기준으로 합니다.
-최종 전체 Flutter 271 pass / 0 fail / 1 opt-in 실제 fastText skip; 개발 플래그 true 경로 6개도 통과했습니다.
-정적 분석은 error 0 / warning 0 / info 103, exit 1입니다.
+[현재 소스·누락 의존성 점검](../../docs/integration/final-source-audit-20261027.md)을 기준으로 합니다.
+최신 전체 Flutter 254 pass / 0 fail / 1 opt-in 실제 fastText skip입니다.
+이전 272개에서 미사용 파일 녹음 서비스 전용 검사 18개를 제거했으며 현행 마이크/자막 검사는 유지했습니다.
+정적 분석은 error 0 / warning 0 / info 102, 기본 명령 exit 1입니다.
 Preview web release 빌드는 통과했으나 ATLAS 패키지 빌드·재부팅·실제 모델·마이크부터
 물리 장치까지의 동작은 미검증입니다. 모델·비공개 SDK·인증정보·개인 설정은 포함하지 않습니다.
 
