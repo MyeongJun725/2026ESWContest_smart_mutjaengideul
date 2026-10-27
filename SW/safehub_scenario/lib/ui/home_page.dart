@@ -21,6 +21,7 @@ import '../services/camera_stream_service.dart';
 import '../services/disaster_service.dart';
 import '../services/sign_speech_policy.dart';
 import '../services/stt_service.dart';
+import '../services/sound_alarm_service.dart';
 import '../services/tts_service.dart';
 import '../services/live_caption_service.dart';
 import '../services/wifi_sensing_service.dart';
@@ -106,6 +107,9 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
   final _situation = SituationService();
   Timer? _situationTimer;
   bool _sensorPolling = false;
+  bool _soundPolling = false;
+  SoundAlarmService? _soundAlarm;
+  Timer? _soundTimer;
   String? _activeLedOff;
   bool _shakerSent = false;
   late final CameraStreamService _cameraStreamService =
@@ -216,6 +220,12 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
       },
       onConnectionChanged: _handleConnectionChanged,
     );
+
+    final sttUri = Uri.tryParse(AppConfig.sttServerUrl);
+    if (!AppConfig.localPreview && sttUri != null && sttUri.host.isNotEmpty) {
+      _soundAlarm = SoundAlarmService(uri: sttUri.replace(port: 9381, path: '/state', query: '', fragment: ''));
+      _soundTimer = Timer.periodic(const Duration(seconds: 1), (_) => unawaited(_pollSoundAlarm()));
+    }
 
     if (AppConfig.localPreview) {
       final demoSign = Uri.base.queryParameters['signDemo'];
@@ -619,6 +629,18 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
     }
   }
 
+  Future<void> _pollSoundAlarm() async {
+    final sound = _soundAlarm;
+    if (_soundPolling || sound == null || !mounted) return;
+    _soundPolling = true;
+    try {
+      final state = await sound.poll(listening: _captions.listening && !_captions.serverError);
+      if (!mounted) return;
+      _situation.setSoundStatus(state.status);
+      if (state.event != null) _situation.observeSoundAlarm(state.event!.id, state.event!.label);
+    } finally { _soundPolling = false; }
+  }
+
   void _sendScenarioSignal() {
     final settings = _situation.settings;
     if (_situation.scenarioTestMode && !_situation.scenarioActuators) {
@@ -699,6 +721,8 @@ class _SafeHubHomePageState extends State<SafeHubHomePage>
 
   @override
   void dispose() {
+    _soundTimer?.cancel();
+    _soundAlarm?.dispose();
     _previewSignTimer?.cancel();
     _situationTimer?.cancel();
     _stopScenarioSignal();

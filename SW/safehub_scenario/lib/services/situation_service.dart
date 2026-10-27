@@ -208,6 +208,17 @@ class SituationService extends ChangeNotifier {
   HouseScenarioFlow get flow => scenarioTestMode ? testFlow : liveFlow;
   VoidCallback? onScenarioAlert;
   VoidCallback? onScenarioTestChanged;
+  String soundStatus = '경보음 연결 확인 중';
+
+  void setSoundStatus(String status) {
+    if (soundStatus == status) return;
+    soundStatus = status;
+    _notify();
+  }
+
+  void observeSoundAlarm(String id, String label) {
+    _newRealIncident(liveFlow.soundAlarm(id, label));
+  }
   String? _presentedIncident;
 
   void _newRealIncident(bool created) {
@@ -592,6 +603,15 @@ class SituationService extends ChangeNotifier {
     }
     pendingSign = text.trim();
     final label = text.replaceAll(RegExp(r'[\s.!?,·]'), '');
+    final isOkay = const {'괜찮다', '괜찮아', '괜찮아요', '괜찮습니다'}.contains(label);
+    if (isOkay && (helpOpen || flow.active?.kind == HouseScenario.assistance)) {
+      _lastHelpLabel = null;
+      if (flow.active?.kind == HouseScenario.assistance) {
+        flow.respond('수어 응답: $label · 도움 요청 취소');
+      }
+      cancelHelp();
+      return;
+    }
     final isHelp = const {
       '구조',
       '도움',

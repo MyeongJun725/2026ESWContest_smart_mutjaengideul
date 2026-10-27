@@ -1,0 +1,22 @@
+[Unit]
+Description=SafeHub YAMNet alarm sound classifier
+After=local-fs.target
+RequiresMountsFor=/data/safehub-yamnet /opt/safehub-csi
+
+[Service]
+Type=simple
+ExecStart=/data/safehub-yamnet/venv/bin/python -u /data/safehub-yamnet/app/server.py --model /data/safehub-yamnet/models/yamnet.tflite --labels /data/safehub-yamnet/models/yamnet_labels.txt
+RuntimeDirectory=safehub-yamnet
+RuntimeDirectoryMode=0700
+Restart=on-failure
+RestartSec=3
+Nice=10
+CPUWeight=50
+CPUQuota=50%
+MemoryMax=192M
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+[Install]
+WantedBy=multi-user.target

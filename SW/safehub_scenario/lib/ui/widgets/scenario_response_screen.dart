@@ -49,7 +49,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
       incident?.kind == HouseScenario.assistance || service.helpOpen;
   bool get simulated => service.scenarioTestMode;
   String get kindName => switch (incident?.kind) {
-    HouseScenario.broadcast => '아파트 안내방송',
+    HouseScenario.broadcast => incident?.origin == 'sound' ? '경보음 감지' : '아파트 안내방송',
     HouseScenario.disaster => '재난 알림',
     _ => '도움 확인',
   };
@@ -59,7 +59,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
           : helping
           ? '도움이 필요하신가요?'
           : incident?.kind == HouseScenario.broadcast
-          ? (RegExp(r'화재|불이').hasMatch(incident?.evidence ?? '')
+          ? (incident?.origin == 'sound' ? '경보음이 의심돼요. 주변을 확인해 주세요.' : RegExp(r'화재|불이').hasMatch(incident?.evidence ?? '')
               ? '화재 관련 안내방송'
               : '위험 관련 안내방송')
           : '${RegExp(r'지진|태풍|호우|산불|홍수|대설|폭염|한파').firstMatch(incident?.evidence ?? '')?.group(0) ?? '재난'} 알림이 도착했어요';
@@ -151,7 +151,7 @@ class _ScenarioEventOverlayState extends State<ScenarioEventOverlay> {
   Widget notice() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      text('방송·재난 원문', size: 18, color: muted),
+      text(incident?.origin == 'sound' ? '감지 근거 · 음향 분류' : '방송·재난 원문', size: 18, color: muted),
       const SizedBox(height: 12),
       box(
         SelectableText(

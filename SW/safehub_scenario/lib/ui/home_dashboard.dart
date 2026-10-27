@@ -435,6 +435,10 @@ class _FinalCaptionBody extends StatelessWidget {
                   ),
                 ],
               ),
+              if (available) ...[
+                const SizedBox(height: 8),
+                Text(situation.soundStatus, style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16, color: _secondary)),
+              ],
               const SizedBox(height: 16),
               Expanded(
                 child: lines.isEmpty
